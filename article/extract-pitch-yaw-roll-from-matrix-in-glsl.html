@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extract Pitch, Yaw, Roll from Matrix in GLSL - glsl</title>
+    <meta name="description" content="This article provides the mathematical foundation and shader code to extract pitch, yaw, and roll Euler angles from a 3D rotation matrix in GLSL. It details the trigonometric decomposition under the standard Tait-Bryan convention, outlines how to handle">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/extract-pitch-yaw-roll-from-matrix-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Extract Pitch, Yaw, Roll from Matrix in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/extract-pitch-yaw-roll-from-matrix-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides the mathematical foundation and shader code to extract pitch, yaw, and roll Euler angles from a 3D rotation matrix in GLSL. It details the trigonometric decomposition under the standard Tait-Bryan convention, outlines how to handle" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="extract-pitch-yaw-roll-from-matrix-in-glsl">Extract Pitch, Yaw,
+Roll from Matrix in GLSL</h1>
+<p>This article provides the mathematical foundation and shader code to
+extract pitch, yaw, and roll Euler angles from a 3D rotation matrix in
+GLSL. It details the trigonometric decomposition under the standard
+Tait-Bryan convention, outlines how to handle the column-major layout
+native to GLSL, provides solutions for gimbal lock singularities, and
+supplies a performant GLSL function ready for graphics applications.</p>
+<h3 id="understanding-matrix-conventions-in-glsl">Understanding Matrix
+Conventions in GLSL</h3>
+<p>In GLSL, matrices are stored in column-major order. When accessing a
+matrix variable <code>mat3 m</code>, <code>m[c][r]</code> references the
+element at column <code>c</code> and row <code>r</code>.</p>
+<p>The extraction algorithm depends on the rotation order. A common
+convention in computer graphics is the Tait-Bryan <span
+class="math inline">\(ZYX\)</span> sequence (Roll around <span
+class="math inline">\(Z\)</span>, Yaw around <span
+class="math inline">\(Y\)</span>, and Pitch around <span
+class="math inline">\(X\)</span>), which corresponds to:</p>
+<p><span class="math display">\[R = R_z(\text{roll}) \cdot
+R_y(\text{yaw}) \cdot R_x(\text{pitch})\]</span></p>
+<p>Multiplying these matrices produces the following combined rotation
+matrix:</p>
+<p><span class="math display">\[R = \begin{bmatrix}
+\cos\psi\cos\theta &amp; \cos\psi\sin\theta\sin\phi - \sin\psi\cos\phi
+&amp; \cos\psi\sin\theta\cos\phi + \sin\psi\sin\phi \\
+\sin\psi\cos\theta &amp; \sin\psi\sin\theta\sin\phi + \cos\psi\cos\phi
+&amp; \sin\psi\sin\theta\cos\phi - \cos\psi\sin\phi \\
+-\sin\theta &amp; \cos\theta\sin\phi &amp; \cos\theta\cos\phi
+\end{bmatrix}\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(\phi\)</span> represents
+<strong>Pitch</strong> (rotation around the <span
+class="math inline">\(X\)</span>-axis)</li>
+<li><span class="math inline">\(\theta\)</span> represents
+<strong>Yaw</strong> (rotation around the <span
+class="math inline">\(Y\)</span>-axis)</li>
+<li><span class="math inline">\(\psi\)</span> represents
+<strong>Roll</strong> (rotation around the <span
+class="math inline">\(Z\)</span>-axis)</li>
+</ul>
+<h3 id="extraction-algorithm">Extraction Algorithm</h3>
+<ol type="1">
+<li><p><strong>Yaw (<span
+class="math inline">\(\theta\)</span>):</strong> The element at row 2,
+column 0 (<span class="math inline">\(m_{20}\)</span>, accessed as
+<code>m[0][2]</code> in GLSL) corresponds to <span
+class="math inline">\(-\sin\theta\)</span>. Yaw is calculated using the
+inverse sine: <span class="math display">\[\theta =
+\arcsin(-\text{clamp}(m_{20}, -1.0, 1.0))\]</span> Clamping prevents
+floating-point inaccuracies from causing <code>NaN</code> values in
+<code>asin</code>.</p></li>
+<li><p><strong>Gimbal Lock Check:</strong> When <span
+class="math inline">\(\theta \approx \pm\frac{\pi}{2}\)</span> radians
+(<span class="math inline">\(\pm 90^\circ\)</span>), <span
+class="math inline">\(\cos\theta = 0\)</span>, causing a singularity
+known as gimbal lock. In this state, pitch and roll become
+collinear.</p>
+<ul>
+<li>If <span class="math inline">\(m_{20} \approx -1.0\)</span> or <span
+class="math inline">\(m_{20} \approx 1.0\)</span>, set Roll to <span
+class="math inline">\(0\)</span> and resolve Pitch using the remaining
+non-zero terms: <span class="math display">\[\phi =
+\text{atan2}(-m_{12}, m_{11}) = \text{atan2}(-m[2][1],
+m[1][1])\]</span></li>
+</ul></li>
+<li><p><strong>Standard Pitch (<span
+class="math inline">\(\phi\)</span>) and Roll (<span
+class="math inline">\(\psi\)</span>):</strong> Away from gimbal lock,
+the remaining angles are derived using two-argument arctangent
+(<code>atan(y, x)</code> in GLSL): <span class="math display">\[\phi =
+\text{atan2}(m_{21}, m_{22}) = \text{atan2}(m[1][2], m[2][2])\]</span>
+<span class="math display">\[\psi = \text{atan2}(m_{10}, m_{00}) =
+\text{atan2}(m[0][1], m[0][0])\]</span></p></li>
+</ol>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Extracts Euler angles (Pitch, Yaw, Roll) in radians from a 3x3 rotation matrix.</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">// Rotation order: ZYX (Roll * Yaw * Pitch)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Output: vec3(pitch, yaw, roll)</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">extractEulerAnglesZYX</span><span class="op">(</span><span class="dt">mat3</span> m<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> angles<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Clamp value to safe domain for asin to prevent NaN</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sinYaw <span class="op">=</span> <span class="bu">clamp</span><span class="op">(-</span>m<span class="op">[</span><span class="dv">0</span><span class="op">][</span><span class="dv">2</span><span class="op">],</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    angles<span class="op">.</span><span class="fu">y</span> <span class="op">=</span> <span class="bu">asin</span><span class="op">(</span>sinYaw<span class="op">);</span> <span class="co">// Yaw</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Check for Gimbal Lock (cos(yaw) near 0)</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">abs</span><span class="op">(</span>sinYaw<span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0.99999</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Gimbal lock case: set roll to 0 and calculate pitch</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        angles<span class="op">.</span><span class="fu">z</span> <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        angles<span class="op">.</span><span class="fu">x</span> <span class="op">=</span> <span class="bu">atan</span><span class="op">(-</span>m<span class="op">[</span><span class="dv">2</span><span class="op">][</span><span class="dv">1</span><span class="op">],</span> m<span class="op">[</span><span class="dv">1</span><span class="op">][</span><span class="dv">1</span><span class="op">]);</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>        <span class="co">// General non-degenerate case</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        angles<span class="op">.</span><span class="fu">x</span> <span class="op">=</span> <span class="bu">atan</span><span class="op">(</span>m<span class="op">[</span><span class="dv">1</span><span class="op">][</span><span class="dv">2</span><span class="op">],</span> m<span class="op">[</span><span class="dv">2</span><span class="op">][</span><span class="dv">2</span><span class="op">]);</span> <span class="co">// Pitch</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        angles<span class="op">.</span><span class="fu">z</span> <span class="op">=</span> <span class="bu">atan</span><span class="op">(</span>m<span class="op">[</span><span class="dv">0</span><span class="op">][</span><span class="dv">1</span><span class="op">],</span> m<span class="op">[</span><span class="dv">0</span><span class="op">][</span><span class="dv">0</span><span class="op">]);</span> <span class="co">// Roll</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> angles<span class="op">;</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="considerations">Considerations</h3>
+<ul>
+<li><strong>Unit Output:</strong> The computed angles are returned in
+radians. Use the built-in <code>degrees()</code> function if degree
+values are needed.</li>
+<li><strong>Matrix Normalization:</strong> The input matrix must be
+orthonormal (pure rotation without non-uniform scaling or skewing). If
+the matrix contains scale factors, normalize each column vector of the
+matrix before decomposition.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

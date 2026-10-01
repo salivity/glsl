@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding Warp Divergence in GLSL Shaders - glsl</title>
+    <meta name="description" content="This article explores the mechanics of warp divergence in GLSL, explaining how modern GPU architectures process conditional logic within SIMD execution units. You will learn how GPUs group threads into warps or wavefronts, the hardware mechanism behind l">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-warp-divergence-in-glsl-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding Warp Divergence in GLSL Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-warp-divergence-in-glsl-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores the mechanics of warp divergence in GLSL, explaining how modern GPU architectures process conditional logic within SIMD execution units. You will learn how GPUs group threads into warps or wavefronts, the hardware mechanism behind l" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-warp-divergence-in-glsl-shaders">Understanding
+Warp Divergence in GLSL Shaders</h1>
+<p>This article explores the mechanics of warp divergence in GLSL,
+explaining how modern GPU architectures process conditional logic within
+SIMD execution units. You will learn how GPUs group threads into warps
+or wavefronts, the hardware mechanism behind lockstep instruction
+execution, why branching creates serialization penalties, and how to
+identify and minimize these bottlenecks in shader programming.</p>
+<h3 id="simd-architecture-and-lockstep-execution">SIMD Architecture and
+Lockstep Execution</h3>
+<p>Graphics Processing Units (GPUs) achieve massive parallelism by
+executing thousands of threads simultaneously. Instead of providing an
+independent instruction pointer for every thread, the GPU bundles
+threads into fixed-size units known as <strong>warps</strong> (NVIDIA,
+typically 32 threads) or <strong>wavefronts</strong> (AMD, typically 32
+or 64 threads). This design follows the Single Instruction, Multiple
+Threads (SIMT) model, an evolution of SIMD (Single Instruction, Multiple
+Data).</p>
+<p>Within a warp, all threads share a single instruction unit and a
+single program counter. Consequently, all threads in that group advance
+through the instruction stream in lockstep, executing the exact same
+assembly instruction at the exact same clock cycle, but operating on
+distinct data elements (such as different pixels or vertices).</p>
+<h3 id="how-divergence-occurs-in-glsl">How Divergence Occurs in
+GLSL</h3>
+<p>In GLSL, conditional statements such as <code>if-else</code>,
+<code>switch</code>, or dynamic loops introduce multiple potential
+execution paths:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>color<span class="op">.</span><span class="fu">r</span> <span class="op">&gt;</span> <span class="fl">0.5</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Path A</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    result <span class="op">=</span> <span class="fu">complexCalculationA</span><span class="op">();</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Path B</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    result <span class="op">=</span> <span class="fu">complexCalculationB</span><span class="op">();</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Warp divergence occurs when threads within the same warp evaluate the
+conditional expression differently based on their local runtime data. If
+some fragment invocations in a warp evaluate
+<code>color.r &gt; 0.5</code> as <code>true</code> while others in the
+same warp evaluate it as <code>false</code>, the warp can no longer
+execute a single instruction path for all of its threads.</p>
+<h3 id="the-serialization-mechanism-and-execution-masks">The
+Serialization Mechanism and Execution Masks</h3>
+<p>Because the warp possesses only one program counter, it cannot
+physically split into two autonomous groups running in parallel.
+Instead, the hardware resolves the conflict through
+<strong>serialization</strong> using <strong>execution masks</strong>
+(active masks):</p>
+<ol type="1">
+<li><strong>Path A Evaluation:</strong> The GPU sets an internal bitmask
+enabling only the threads that evaluated the condition as
+<code>true</code>. The warp executes the instructions for Path A. The
+threads taking Path B are disabled (masked out), meaning their hardware
+execution units sit idle, burning clock cycles without performing useful
+work.</li>
+<li><strong>Path B Evaluation:</strong> Once Path A completes, the GPU
+inverts the execution mask to enable the threads that evaluated
+<code>false</code>. The warp then steps through the instructions for
+Path B, while the threads that executed Path A sit idle.</li>
+<li><strong>Re-convergence:</strong> After both branches have executed,
+the warp restores the original execution mask and re-converges,
+continuing linear execution down the shared path.</li>
+</ol>
+<p>As a result, the total execution time for that warp becomes the sum
+of the time required for Path A plus the time required for Path B (<span
+class="math inline">\(Time_{total} = Time_A + Time_B\)</span>), negating
+the performance benefits of conditional skipping.</p>
+<h3 id="quad-divergence-and-texture-sampling">Quad Divergence and
+Texture Sampling</h3>
+<p>In fragment shaders, thread allocation is tightly coupled with
+screen-space pixel layout. GPUs schedule fragments in <span
+class="math inline">\(2 \times 2\)</span> pixel groups called
+<strong>quads</strong> to compute screen-space derivatives
+(<code>dFdx</code>, <code>dFdy</code>), which are necessary for
+calculating texture level of detail (mipmapping).</p>
+<p>If a branch diverges across a <span class="math inline">\(2 \times
+2\)</span> quad, executing implicit derivative operations—such as
+standard <code>texture()</code> calls—inside the conditional block leads
+to undefined behavior or driver-level workarounds that enforce full-quad
+execution. Calling texture samples inside divergent flow control can
+lead to rendering artifacts or additional performance degradation.</p>
+<h3 id="minimizing-warp-divergence">Minimizing Warp Divergence</h3>
+<p>Warp divergence does not occur if every thread in a warp takes the
+same branch; this is known as <strong>coherent branching</strong>.
+Divergence only degrades performance when control flow diverges
+<em>within</em> a single warp.</p>
+<p>To mitigate divergence in GLSL:</p>
+<ul>
+<li><strong>Favor Spatial Coherence:</strong> Design shaders so that
+branch conditions depend on properties that vary smoothly across screen
+space or geometry, ensuring adjacent fragments evaluate conditions
+identically.</li>
+<li><strong>Use Arithmetic Selection:</strong> Replace small conditional
+branches with built-in GLSL functions like <code>mix()</code>,
+<code>step()</code>, <code>clamp()</code>, and
+<code>smoothstep()</code>, which rely on instructions like conditional
+moves (<code>CMOV</code>) or fused select operations rather than branch
+instructions.</li>
+<li><strong>Uniform Conditionals:</strong> Base branches on
+<code>uniform</code> variables when possible. Because uniform values are
+constant across the entire draw call, all threads in every warp evaluate
+uniform branches identically, completely eliminating divergence.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

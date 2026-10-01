@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reinhard and ACES Tone Mapping in GLSL - glsl</title>
+    <meta name="description" content="Tone mapping is the process of compressing High Dynamic Range (HDR) color values into the standard [0.0, 1.0] Low Dynamic Range (LDR) required by standard displays. In modern real-time graphics pipelines using GLSL, operators such as Reinhard and the Aca">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/reinhard-and-aces-tone-mapping-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Reinhard and ACES Tone Mapping in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/reinhard-and-aces-tone-mapping-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Tone mapping is the process of compressing High Dynamic Range (HDR) color values into the standard [0.0, 1.0] Low Dynamic Range (LDR) required by standard displays. In modern real-time graphics pipelines using GLSL, operators such as Reinhard and the Aca" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="reinhard-and-aces-tone-mapping-in-glsl">Reinhard and ACES Tone
+Mapping in GLSL</h1>
+<p>Tone mapping is the process of compressing High Dynamic Range (HDR)
+color values into the standard [0.0, 1.0] Low Dynamic Range (LDR)
+required by standard displays. In modern real-time graphics pipelines
+using GLSL, operators such as Reinhard and the Academy Color Encoding
+System (ACES) filmic curve apply mathematical functions to fragment
+colors to gracefully roll off highlights, prevent harsh clamping, and
+maintain visual fidelity across varying exposure levels. This article
+explains how Reinhard and ACES curve operators compress dynamic range
+and how they are implemented directly in GLSL shaders.</p>
+<h2 id="the-dynamic-range-problem">The Dynamic Range Problem</h2>
+<p>In physically based rendering, scene luminance values often exceed
+<code>1.0</code>. Without tone mapping, any color component greater than
+<code>1.0</code> is clamped by the display buffer to pure white,
+eliminating detail in highlights such as skies, reflections, and direct
+light sources. Dynamic range compression maps an infinite range <span
+class="math inline">\([0, \infty)\)</span> down to <span
+class="math inline">\([0, 1]\)</span> smoothly.</p>
+<h2 id="reinhard-tone-mapping">Reinhard Tone Mapping</h2>
+<p>The Reinhard operator is an asymptotic compression function based on
+photographic techniques. Its simplest formulation divides the input
+color by itself plus one:</p>
+<p><span class="math display">\[\text{Color}_{\text{out}} =
+\frac{\text{Color}_{\text{in}}}{1.0 +
+\text{Color}_{\text{in}}}\]</span></p>
+<h3 id="mechanism-of-compression">Mechanism of Compression</h3>
+<p>As <span class="math inline">\(\text{Color}_{\text{in}}\)</span>
+approaches zero, the denominator is dominated by <span
+class="math inline">\(1.0\)</span>, leaving values near linear scaling.
+As <span class="math inline">\(\text{Color}_{\text{in}}\)</span> grows
+toward infinity, the <span class="math inline">\(+1.0\)</span> term
+becomes negligible, and the fraction asymptotically approaches <span
+class="math inline">\(1.0\)</span>. This prevents clipping regardless of
+how bright the incoming light is.</p>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">toneMapReinhard</span><span class="op">(</span><span class="dt">vec3</span> color<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> color <span class="op">/</span> <span class="op">(</span>color <span class="op">+</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">));</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>An extended version incorporates a maximum luminance parameter (<span
+class="math inline">\(L_{\text{white}}\)</span>) to allow very bright
+areas to burn out to true white:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">toneMapReinhardExtended</span><span class="op">(</span><span class="dt">vec3</span> color<span class="op">,</span> <span class="dt">float</span> maxWhite<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> numerator <span class="op">=</span> color <span class="op">*</span> <span class="op">(</span><span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span>color <span class="op">/</span> <span class="op">(</span>maxWhite <span class="op">*</span> maxWhite<span class="op">)));</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> numerator <span class="op">/</span> <span class="op">(</span><span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">)</span> <span class="op">+</span> color<span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="limitations">Limitations</h3>
+<p>While computationally cheap, basic Reinhard mapping compresses
+dynamic range uniformly. This often desaturates bright colors and washes
+out contrast in mid-tones, giving the final image a flat, muddy
+appearance.</p>
+<h2 id="aces-tone-mapping">ACES Tone Mapping</h2>
+<p>The Academy Color Encoding System (ACES) uses an S-shaped curve
+(composed of a "toe", "linear section", and "shoulder") designed for
+film and television production. Unlike Reinhard, ACES enhances contrast
+in the mid-tones and darkens the shadows while preserving color
+saturation in high-exposure regions.</p>
+<h3 id="mechanism-of-compression-1">Mechanism of Compression</h3>
+<p>The ACES curve manages dynamic range through three distinct
+regions:</p>
+<ol type="1">
+<li><strong>The Toe:</strong> Curves upward from zero, lifting dark
+values non-linearly to retain shadow detail while adding contrast.</li>
+<li><strong>The Mid-tones:</strong> Acts largely linearly, preserving
+the natural color relationships and perceived contrast of standard
+exposures.</li>
+<li><strong>The Shoulder:</strong> Rolls off bright highlights smoothly
+as they approach <span class="math inline">\(1.0\)</span>, preventing
+saturation loss and color shifting (e.g., preventing intensely bright
+reds from skewing abruptly to yellow before turning white).</li>
+</ol>
+<p>For real-time applications, Krzysztof Narkowicz's fitted
+approximation of the ACES curve is widely used due to its balance of
+fidelity and performance.</p>
+<h3 id="glsl-implementation-1">GLSL Implementation</h3>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">toneMapACES</span><span class="op">(</span><span class="dt">vec3</span> x<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> a <span class="op">=</span> <span class="fl">2.51</span><span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> b <span class="op">=</span> <span class="fl">0.03</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> c <span class="op">=</span> <span class="fl">2.43</span><span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> d <span class="op">=</span> <span class="fl">0.59</span><span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> e <span class="op">=</span> <span class="fl">0.14</span><span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">clamp</span><span class="op">((</span>x <span class="op">*</span> <span class="op">(</span>a <span class="op">*</span> x <span class="op">+</span> b<span class="op">))</span> <span class="op">/</span> <span class="op">(</span>x <span class="op">*</span> <span class="op">(</span>c <span class="op">*</span> x <span class="op">+</span> d<span class="op">)</span> <span class="op">+</span> e<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>In this rational polynomial fit:</p>
+<ul>
+<li>The numerator quadratic <span class="math inline">\((a \cdot x +
+b)\)</span> scales the intensity.</li>
+<li>The denominator quadratic <span class="math inline">\((c \cdot x +
+d) + e\)</span> dictates the rate of compression for high values.</li>
+<li><code>clamp</code> ensures that rounding inaccuracies near the
+boundaries do not spill outside the displayable <span
+class="math inline">\([0.0, 1.0]\)</span> bounds.</li>
+</ul>
+<h2 id="comparison-in-glsl-execution">Comparison in GLSL Execution</h2>
+<p>When choosing between Reinhard and ACES in a GLSL pipeline:</p>
+<ul>
+<li><strong>Mathematical Complexity:</strong> Reinhard requires a single
+vector addition and division. ACES requires several fused multiply-adds
+and a vector division, slightly increasing instruction count, though
+this difference is negligible on modern hardware.</li>
+<li><strong>Visual Output:</strong> Reinhard flattens dynamic range
+evenly, causing bright regions to appear gray or desaturated. ACES
+mimics photographic film, providing an automatic boost to perceived
+contrast and maintaining vivid colors within blown-out specular
+highlights.</li>
+</ul>
+<p>Both operators must be applied at the end of the post-processing
+chain, after all linear-space lighting and effects (like bloom) have
+been calculated, and immediately prior to converting the color to sRGB
+gamma space.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

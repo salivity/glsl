@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hierarchical Z Raymarching Algorithm in GLSL - glsl</title>
+    <meta name="description" content="Hierarchical Z-buffer (Hi-Z) raymarching is an acceleration technique for Screen-Space Reflections (SSR) that traverses a depth map pyramid to skip vast regions of empty screen space. By storing conservative depth bounds in lower-resolution mip levels, t">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/hierarchical-z-raymarching-algorithm-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Hierarchical Z Raymarching Algorithm in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/hierarchical-z-raymarching-algorithm-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Hierarchical Z-buffer (Hi-Z) raymarching is an acceleration technique for Screen-Space Reflections (SSR) that traverses a depth map pyramid to skip vast regions of empty screen space. By storing conservative depth bounds in lower-resolution mip levels, t" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="hierarchical-z-raymarching-algorithm-in-glsl">Hierarchical Z
+Raymarching Algorithm in GLSL</h1>
+<p>Hierarchical Z-buffer (Hi-Z) raymarching is an acceleration technique
+for Screen-Space Reflections (SSR) that traverses a depth map pyramid to
+skip vast regions of empty screen space. By storing conservative depth
+bounds in lower-resolution mip levels, the algorithm enables rays to
+take large geometric steps when no geometry is near, progressively
+refining to full-resolution checks only when an intersection is
+imminent. This article details the cell traversal algorithm, its
+mathematical foundation, and its implementation in GLSL.</p>
+<h2 id="core-concepts-of-hi-z-traversal">Core Concepts of Hi-Z
+Traversal</h2>
+<p>The standard depth buffer is downsampled into a mip chain where each
+texel at mip level <span class="math inline">\(L\)</span> represents the
+maximum depth (or minimum depth, depending on whether reverse-Z is used)
+of the corresponding <span class="math inline">\(2 \times 2\)</span>
+texels at level <span class="math inline">\(L-1\)</span>. In a standard
+OpenGL depth buffer (where near is 0.0 and far is 1.0), each mip cell
+stores the maximum depth value within its bounds.</p>
+<p>The traversal algorithm models the depth pyramid as an adaptive
+bounding volume hierarchy in screen space (UV coordinates <span
+class="math inline">\([0, 1]^2\)</span> and depth <span
+class="math inline">\([0, 1]\)</span>). The ray advances through grid
+cells using two primary actions:</p>
+<ol type="1">
+<li><strong>Step Up (Coarsen):</strong> If the ray passes completely
+through a cell without intersecting its stored depth, the ray advances
+to the boundary of that cell, and the algorithm increases the mip level
+(<code>mipLevel++</code>) to cover larger spatial distances on the next
+iteration.</li>
+<li><strong>Step Down (Refine):</strong> If the ray dips behind the
+depth stored in the current cell, a potential intersection exists. The
+ray does not advance across the cell boundary; instead, the mip level is
+decremented (<code>mipLevel--</code>) to check finer geometric
+boundaries.</li>
+</ol>
+<p>An intersection is confirmed when a collision occurs at
+<code>mipLevel == 0</code> within an acceptable thickness threshold.</p>
+<h2 id="cell-boundary-intersection-math">Cell Boundary Intersection
+Math</h2>
+<p>To move along the ray through the grid, the algorithm determines the
+parametric distance <span class="math inline">\(t\)</span> along the ray
+to the nearest X or Y boundary of the current cell at the active mip
+level.</p>
+<p>Given a ray with origin <span
+class="math inline">\(\mathbf{P}\)</span> and direction <span
+class="math inline">\(\mathbf{D}\)</span>:</p>
+<p><span class="math display">\[\mathbf{R}(t) = \mathbf{P} + t \cdot
+\mathbf{D}\]</span></p>
+<ol type="1">
+<li><p>Determine the integer cell index and boundary at the current mip
+level resolution: <span class="math display">\[\text{cellSize} = 1.0 /
+\text{mipResolution}\]</span> <span
+class="math display">\[\text{cellIndex} = \lfloor \mathbf{P}_{xy} /
+\text{cellSize} \rfloor\]</span> <span
+class="math display">\[\text{boundary}_{xy} = (\text{cellIndex} +
+\text{max}(\text{sign}(\mathbf{D}_{xy}), 0.0)) \cdot
+\text{cellSize}\]</span></p></li>
+<li><p>Calculate the distance along the ray to cross the boundaries:
+<span class="math display">\[t_{xy} = \frac{\text{boundary}_{xy} -
+\mathbf{P}_{xy}}{\mathbf{D}_{xy}}\]</span></p></li>
+<li><p>The distance to the exit of the 2D cell is: <span
+class="math display">\[t_{\text{exit}} = \min(t_x,
+t_y)\]</span></p></li>
+</ol>
+<p>A small epsilon offset is applied when advancing to <span
+class="math inline">\(t_{\text{exit}}\)</span> to push the ray into the
+neighboring cell and prevent self-intersection loops.</p>
+<h2 id="glsl-traversal-implementation">GLSL Traversal
+Implementation</h2>
+<p>Below is a complete GLSL function implementing cell traversal for a
+standard Z-buffer configuration:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Assumes depth is 0.0 (near) to 1.0 (far)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">// hiZBuffer is a sampler2D with MAX reduction filter mips</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">intersectCellBoundary</span><span class="op">(</span><span class="dt">vec3</span> pos<span class="op">,</span> <span class="dt">vec3</span> dir<span class="op">,</span> <span class="dt">vec2</span> cellIndex<span class="op">,</span> <span class="dt">vec2</span> numCells<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> cellBound <span class="op">=</span> <span class="op">(</span>cellIndex <span class="op">+</span> <span class="bu">max</span><span class="op">(</span><span class="bu">sign</span><span class="op">(</span>dir<span class="op">.</span><span class="fu">xy</span><span class="op">),</span> <span class="fl">0.0</span><span class="op">))</span> <span class="op">/</span> numCells<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> t <span class="op">=</span> <span class="op">(</span>cellBound <span class="op">-</span> pos<span class="op">.</span><span class="fu">xy</span><span class="op">)</span> <span class="op">/</span> dir<span class="op">.</span><span class="fu">xy</span><span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> tMin <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>t<span class="op">.</span><span class="fu">x</span><span class="op">,</span> t<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> pos <span class="op">+</span> dir <span class="op">*</span> tMin<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> <span class="fu">hiZTrace</span><span class="op">(</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> rayOrigin<span class="op">,</span> </span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> rayDir<span class="op">,</span> </span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">sampler2D</span> hiZBuffer<span class="op">,</span> </span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> screenDim<span class="op">,</span> </span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> maxIterations<span class="op">,</span> </span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> maxLevel<span class="op">,</span> </span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">out</span> <span class="dt">vec3</span> hitPixel</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> currentLevel <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> currentPos <span class="op">=</span> rayOrigin<span class="op">;</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Slight offset along direction to enter adjacent space</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> eps <span class="op">=</span> <span class="fl">0.0001</span><span class="op">;</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> maxIterations<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Break if ray leaves screen bounds [0, 1]</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span><span class="bu">any</span><span class="op">(</span><span class="bu">lessThan</span><span class="op">(</span>currentPos<span class="op">.</span><span class="fu">xy</span><span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">)))</span> <span class="op">||</span> <span class="bu">any</span><span class="op">(</span><span class="bu">greaterThan</span><span class="op">(</span>currentPos<span class="op">.</span><span class="fu">xy</span><span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">1.0</span><span class="op">))))</span> <span class="op">{</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>            <span class="kw">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span> mipResolution <span class="op">=</span> screenDim <span class="op">/</span> <span class="bu">exp2</span><span class="op">(</span>currentLevel<span class="op">);</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span> cellIndex <span class="op">=</span> <span class="bu">floor</span><span class="op">(</span>currentPos<span class="op">.</span><span class="fu">xy</span> <span class="op">*</span> mipResolution<span class="op">);</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Sample the maximum depth at the current cell and mip level</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> cellDepth <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>hiZBuffer<span class="op">,</span> currentPos<span class="op">.</span><span class="fu">xy</span><span class="op">,</span> currentLevel<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Find ray position at the boundary of the current 2D cell</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> boundaryPos <span class="op">=</span> <span class="fu">intersectCellBoundary</span><span class="op">(</span>currentPos<span class="op">,</span> rayDir<span class="op">,</span> cellIndex<span class="op">,</span> mipResolution<span class="op">);</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Intersect ray with the cell&#39;s depth plane</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> tDepth <span class="op">=</span> <span class="op">(</span>cellDepth <span class="op">-</span> currentPos<span class="op">.</span><span class="fu">z</span><span class="op">)</span> <span class="op">/</span> rayDir<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> depthIntersectPos <span class="op">=</span> currentPos <span class="op">+</span> rayDir <span class="op">*</span> tDepth<span class="op">;</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Check if the ray penetrates the geometry before leaving the 2D cell boundary</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>        <span class="dt">bool</span> intersectsZ <span class="op">=</span> <span class="op">(</span>rayDir<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;</span> <span class="fl">0.0</span><span class="op">)</span> </span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>            <span class="op">?</span> <span class="op">(</span>currentPos<span class="op">.</span><span class="fu">z</span> <span class="op">&lt;=</span> cellDepth <span class="op">&amp;&amp;</span> depthIntersectPos<span class="op">.</span><span class="fu">z</span> <span class="op">&lt;=</span> boundaryPos<span class="op">.</span><span class="fu">z</span><span class="op">)</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>            <span class="op">:</span> <span class="op">(</span>depthIntersectPos<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;=</span> boundaryPos<span class="op">.</span><span class="fu">z</span><span class="op">);</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>intersectsZ <span class="op">&amp;&amp;</span> depthIntersectPos<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;=</span> currentPos<span class="op">.</span><span class="fu">z</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Potential intersection: descend to higher detail</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>            <span class="kw">if</span> <span class="op">(</span>currentLevel <span class="op">==</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>                <span class="co">// Confirm intersection thickness to avoid false positives behind objects</span></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>                <span class="dt">float</span> thickness <span class="op">=</span> <span class="fl">0.005</span><span class="op">;</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>                <span class="kw">if</span> <span class="op">(</span>depthIntersectPos<span class="op">.</span><span class="fu">z</span> <span class="op">-</span> cellDepth <span class="op">&lt;=</span> thickness<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>                    hitPixel <span class="op">=</span> depthIntersectPos<span class="op">;</span></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a>                    <span class="kw">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>                <span class="op">}</span></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>                <span class="co">// Step past if it exceeds thickness</span></span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a>                currentPos <span class="op">=</span> boundaryPos <span class="op">+</span> rayDir <span class="op">*</span> eps<span class="op">;</span></span>
+<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a>                currentLevel <span class="op">-=</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a>            <span class="co">// No collision in this cell: advance ray to boundary and step up</span></span>
+<span id="cb1-66"><a href="#cb1-66" aria-hidden="true" tabindex="-1"></a>            currentPos <span class="op">=</span> boundaryPos <span class="op">+</span> rayDir <span class="op">*</span> eps<span class="op">;</span></span>
+<span id="cb1-67"><a href="#cb1-67" aria-hidden="true" tabindex="-1"></a>            currentLevel <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>currentLevel <span class="op">+</span> <span class="fl">1.0</span><span class="op">,</span> <span class="dt">float</span><span class="op">(</span>maxLevel<span class="op">));</span></span>
+<span id="cb1-68"><a href="#cb1-68" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-69"><a href="#cb1-69" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-70"><a href="#cb1-70" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-71"><a href="#cb1-71" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb1-72"><a href="#cb1-72" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="handling-boundary-artifacts-and-performance">Handling Boundary
+Artifacts and Performance</h2>
+<ul>
+<li><strong>Cross-Cell Leakage:</strong> Advancing precisely to <span
+class="math inline">\(t_{\text{exit}}\)</span> can cause numeric
+stagnation where floating-point inaccuracies cause the sample coordinate
+to remain inside the current cell. Multiplying the direction by a small
+scalar offset (<span class="math inline">\(\epsilon\)</span>) pushes the
+origin definitively across the cell boundary into the adjacent
+texel.</li>
+<li><strong>Skipping Consecutive Level Increments:</strong> After
+stepping down to resolve an occlusion, stepping immediately back up on a
+failure can trigger an infinite step-down/step-up cycle. Many
+implementations mandate at least one cell advancement before allowing
+<code>currentLevel</code> to increase again.</li>
+<li><strong>Reverse-Z Adaptations:</strong> If using Reverse-Z (<span
+class="math inline">\(1.0 = \text{near}, 0.0 = \text{far}\)</span>), the
+Hi-Z pyramid must store the <em>minimum</em> depth value of child texels
+rather than the maximum, and inequality comparisons in the intersection
+stage must be inverted.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

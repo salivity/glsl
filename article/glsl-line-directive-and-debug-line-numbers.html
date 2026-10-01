@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL #line Directive and Debug Line Numbers - glsl</title>
+    <meta name="description" content="The #line preprocessor directive in the OpenGL Shading Language (GLSL) overrides the compiler's internal tracking of line numbers and source file identifiers. In shader development, programs are frequently constructed by concatenating multiple source str">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-line-directive-and-debug-line-numbers">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL #line Directive and Debug Line Numbers - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-line-directive-and-debug-line-numbers" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The #line preprocessor directive in the OpenGL Shading Language (GLSL) overrides the compiler's internal tracking of line numbers and source file identifiers. In shader development, programs are frequently constructed by concatenating multiple source str" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-line-directive-and-debug-line-numbers">GLSL #line Directive
+and Debug Line Numbers</h1>
+<p>The <code>#line</code> preprocessor directive in the OpenGL Shading
+Language (GLSL) overrides the compiler's internal tracking of line
+numbers and source file identifiers. In shader development, programs are
+frequently constructed by concatenating multiple source strings,
+injecting defines, or preprocessing code dynamically at runtime. When
+compilation errors or warnings occur, the compiler reports locations
+based on its current internal counters; using <code>#line</code> allows
+developers to remap these diagnostics back to original source files,
+preventing misaligned line numbers in debug output.</p>
+<h3 id="syntax-and-parameters">Syntax and Parameters</h3>
+<p>In GLSL, the <code>#line</code> directive accepts two forms:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#line line_number</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#line line_number source_string_number</span></span></code></pre></div>
+<ul>
+<li><strong><code>line_number</code></strong>: An integer constant
+expression that specifies the line number of the line immediately
+following the directive.</li>
+<li><strong><code>source_string_number</code></strong>: An optional
+integer constant expression representing the index of the source string
+(analogous to a file identifier).</li>
+</ul>
+<p>Once the preprocessor encounters <code>#line</code>, it resets its
+internal counters. The line immediately following the directive is
+assigned the specified <code>line_number</code>, and subsequent lines
+increment from that value until another <code>#line</code> directive is
+encountered or the file ends.</p>
+<h3 id="impact-on-diagnostic-messages">Impact on Diagnostic
+Messages</h3>
+<p>GLSL compiler diagnostics typically follow standard reporting formats
+to locate syntax errors, semantic errors, and warnings. A common format
+implemented by GPU drivers is:</p>
+<p><code>source_string_number:line_number: error: message</code></p>
+<p>Under default behavior, a single consolidated shader file starts at
+line 1 and source string 0. If a host application injects 50 lines of
+configuration headers before the user's shader code, a syntax error on
+line 10 of the original file will be reported as line 60.</p>
+<p>By placing <code>#line 1 0</code> immediately after injected headers,
+the compiler resets the counter:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Dynamically injected preamble</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#define QUALITY_HIGH</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#define MAX_LIGHTS 4</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Directive resetting location tracking</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="pp">#line 1 0</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co">// User source code begins here</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> x <span class="op">=</span> <span class="op">;</span> <span class="co">// Compiler reports error at 0:1, matching user source</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The error report identifies the problem at line 1 of source 0,
+precisely aligning the diagnostic output with the original authoring
+file rather than the concatenated runtime buffer.</p>
+<h3 id="managing-multiple-source-buffers">Managing Multiple Source
+Buffers</h3>
+<p>The OpenGL API function <code>glShaderSource</code> accepts an array
+of strings to build a single shader module. By default, the driver
+assigns each array element an increasing source string index (0, 1, 2,
+etc.).</p>
+<p>When using third-party preprocessors or custom virtual file systems
+that merge external files (such as simulated <code>#include</code>
+statements), you can assign a unique integer to represent each distinct
+file. Setting the <code>source_string_number</code> in the
+<code>#line</code> directive ensures that diagnostics point to both the
+correct virtual file ID and the corresponding line number within that
+file.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Main shader code</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#line 1 1 // Switch context to &quot;included_utility.glsl&quot; represented by ID 1</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">computeNormal</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="pp">#line 25 0 // Switch context back to original &quot;main.glsl&quot; (ID 0) at line 25</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3
+id="behavioral-variations-and-implementation-considerations">Behavioral
+Variations and Implementation Considerations</h3>
+<p>The GLSL specification defines that <code>#line</code> applies to the
+line <em>following</em> the directive itself. While modern conformant
+drivers strictly adhere to this rule, minor discrepancies have
+historically existed across vendor implementations (e.g., whether the
+line number applies to the directive itself or the next line). In
+cross-platform rendering pipelines, diagnostic parsers must account for
+vendor-specific log formatting differences (such as NVIDIA versus AMD
+versus Mesa syntax) while relying on <code>#line</code> to ensure
+numerical accuracy across all target platforms.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

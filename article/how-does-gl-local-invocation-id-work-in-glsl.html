@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does gl_LocalInvocationID Work in GLSL? - glsl</title>
+    <meta name="description" content="In GLSL compute shaders, glLocalInvocationID is a built-in input variable that uniquely identifies the position of an executing thread relative to its immediate local workgroup. Because compute workloads are divided hierarchically into workgroups and ind">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-gl-local-invocation-id-work-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does gl_LocalInvocationID Work in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-gl-local-invocation-id-work-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL compute shaders, glLocalInvocationID is a built-in input variable that uniquely identifies the position of an executing thread relative to its immediate local workgroup. Because compute workloads are divided hierarchically into workgroups and ind" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-gl_localinvocationid-work-in-glsl">How Does
+gl_LocalInvocationID Work in GLSL?</h1>
+<p>In GLSL compute shaders, <code>gl_LocalInvocationID</code> is a
+built-in input variable that uniquely identifies the position of an
+executing thread relative to its immediate local workgroup. Because
+compute workloads are divided hierarchically into workgroups and
+individual invocations, each invocation requires a distinct coordinate
+within its group to compute data offsets, index into shared memory, and
+coordinate execution with neighbor threads.</p>
+<h2 id="the-structure-of-local-invocations">The Structure of Local
+Invocations</h2>
+<p>Compute shaders organize threads into three-dimensional grids called
+local workgroups. When writing a compute shader, the layout qualifier
+defines the local dimensions:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">16</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">16</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span></code></pre></div>
+<p>Inside this defined grid, <code>gl_LocalInvocationID</code> is
+declared as a three-component unsigned integer vector
+(<code>uvec3</code>). Its components correspond to the spatial
+coordinates of the current thread:</p>
+<ul>
+<li><strong><code>gl_LocalInvocationID.x</code></strong>: Spans from
+<code>0</code> to <code>gl_WorkGroupSize.x - 1</code>.</li>
+<li><strong><code>gl_LocalInvocationID.y</code></strong>: Spans from
+<code>0</code> to <code>gl_WorkGroupSize.y - 1</code>.</li>
+<li><strong><code>gl_LocalInvocationID.z</code></strong>: Spans from
+<code>0</code> to <code>gl_WorkGroupSize.z - 1</code>.</li>
+</ul>
+<p>Even if a compute shader operates on 1D or 2D data, the variable
+remains a <code>uvec3</code>, with unused dimensions defaulting to an
+index of <code>0</code> and a size of <code>1</code>.</p>
+<h2 id="local-coordinates-vs-global-indexing">Local Coordinates vs.
+Global Indexing</h2>
+<p>Understanding how <code>gl_LocalInvocationID</code> locates a thread
+requires looking at the compute shader execution hierarchy. A dispatch
+call distributes work across multiple workgroups, creating three levels
+of identification:</p>
+<ul>
+<li><strong><code>gl_WorkGroupID</code></strong>: Identifies the
+position of the entire workgroup in the global dispatch grid.</li>
+<li><strong><code>gl_LocalInvocationID</code></strong>: Identifies the
+thread's local position within its specific workgroup.</li>
+<li><strong><code>gl_GlobalInvocationID</code></strong>: Identifies the
+thread across the entire global dispatch.</li>
+</ul>
+<p>The relationship between local and global positioning is calculated
+by the hardware using the following formula:</p>
+<p><span class="math display">\[\text{gl\_GlobalInvocationID} =
+\text{gl\_WorkGroupID} \times \text{gl\_WorkGroupSize} +
+\text{gl\_LocalInvocationID}\]</span></p>
+<p>While <code>gl_GlobalInvocationID</code> determines which absolute
+data element in a storage buffer or texture to process,
+<code>gl_LocalInvocationID</code> isolates actions that are scoped
+strictly to the local group.</p>
+<h2 id="1d-flattening-with-gl_localinvocationindex">1D Flattening with
+gl_LocalInvocationIndex</h2>
+<p>For operations requiring a flat one-dimensional array index rather
+than 3D coordinates—such as indexing into linear <code>shared</code>
+memory arrays—GLSL provides <code>gl_LocalInvocationIndex</code>. This
+is the flattened scalar equivalent of <code>gl_LocalInvocationID</code>,
+derived as follows:</p>
+<p><span class="math display">\[\text{index} = \text{ID.z} \cdot
+(\text{Size.x} \cdot \text{Size.y}) + \text{ID.y} \cdot \text{Size.x} +
+\text{ID.x}\]</span></p>
+<h2 id="primary-use-cases-in-shader-programming">Primary Use Cases in
+Shader Programming</h2>
+<p><code>gl_LocalInvocationID</code> is essential for tasks that involve
+intra-workgroup cooperation:</p>
+<ul>
+<li><strong>Shared Memory Access</strong>: Threads in the same workgroup
+share high-speed on-chip memory (<code>shared</code>).
+<code>gl_LocalInvocationID</code> maps each thread to its assigned slot
+in shared data structures.</li>
+<li><strong>Local Reductions</strong>: Parallel reduction algorithms
+(such as finding minimums, maximums, or sums) rely on local IDs to
+determine which threads stay active during each step of the reduction
+tree.</li>
+<li><strong>Tiled Computations</strong>: Image processing filters, such
+as blurs or convolutions, use local coordinates to load pixel
+neighborhoods into local cache before evaluating convolution
+kernels.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

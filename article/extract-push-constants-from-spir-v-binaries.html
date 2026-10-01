@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extract Push Constants from SPIR-V Binaries - glsl</title>
+    <meta name="description" content="When configuring graphics pipelines in modern APIs like Vulkan, applications must match pipeline layout definitions precisely to the push constant ranges and shader stage flags declared in shader code. This article explains the primary tools used to insp">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/extract-push-constants-from-spir-v-binaries">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Extract Push Constants from SPIR-V Binaries - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/extract-push-constants-from-spir-v-binaries" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="When configuring graphics pipelines in modern APIs like Vulkan, applications must match pipeline layout definitions precisely to the push constant ranges and shader stage flags declared in shader code. This article explains the primary tools used to insp" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="extract-push-constants-from-spir-v-binaries">Extract Push
+Constants from SPIR-V Binaries</h1>
+<p>When configuring graphics pipelines in modern APIs like Vulkan,
+applications must match pipeline layout definitions precisely to the
+push constant ranges and shader stage flags declared in shader code.
+This article explains the primary tools used to inspect compiled GLSL
+SPIR-V binaries to extract push constant offsets, byte sizes, and
+execution stage flags, focusing on the industry standard,
+<strong>SPIRV-Reflect</strong>, alongside alternatives like
+<strong>SPIRV-Cross</strong>.</p>
+<h3 id="the-primary-tool-spirv-reflect">The Primary Tool:
+SPIRV-Reflect</h3>
+<p>The most direct and lightweight tool for extracting push constant
+data and stage flags from SPIR-V bytecode is
+<strong>SPIRV-Reflect</strong>, an open-source C/C++ library maintained
+by Khronos Group. Designed specifically for runtime reflection, it
+parses SPIR-V modules without requiring a full compiler
+infrastructure.</p>
+<p>When inspecting a compiled SPIR-V binary, SPIRV-Reflect populates
+internal structures representing shader resources. For push constants,
+it identifies:</p>
+<ul>
+<li><strong>Byte Offsets and Sizes:</strong> Extracted via
+<code>SpvReflectBlockVariable</code>, detailing the relative byte offset
+and total size of each push constant member or block.</li>
+<li><strong>Stage Flags:</strong> Extracted via the module's execution
+model, which directly translates to Vulkan
+<code>VkShaderStageFlagBits</code> (such as vertex, fragment, or
+compute).</li>
+</ul>
+<p>Using its C API, developers can call
+<code>spvReflectEnumeratePushConstantBlocks()</code> on an initialized
+<code>SpvReflectShaderModule</code> to retrieve an array of push
+constant blocks. Each block reports its <code>offset</code>,
+<code>size</code>, <code>padded_size</code>, and the associated shader
+stage, allowing automated generation of <code>VkPushConstantRange</code>
+structs at runtime.</p>
+<h3 id="alternative-option-spirv-cross">Alternative Option:
+SPIRV-Cross</h3>
+<p>While primarily an intermediate language transpiler,
+<strong>SPIRV-Cross</strong> is another widely used tool capable of
+static shader reflection.</p>
+<p>Through its <code>Compiler</code> API, calling
+<code>get_shader_resources().push_constant_buffers</code> returns all
+push constant declarations in the module. Developers can inspect
+individual struct members using <code>get_active_buffer_ranges()</code>
+to resolve explicit byte ranges, offsets, and member types, while
+checking the active <code>spv::ExecutionModel</code> to determine the
+target stage flag.</p>
+<h3 id="command-line-inspection-spirv-dis">Command-Line Inspection:
+spirv-dis</h3>
+<p>For manual debugging without programmatic integration, the
+<strong>spirv-dis</strong> disassembler from the official
+<strong>SPIRV-Tools</strong> suite can be used. Running
+<code>spirv-dis</code> converts the binary into human-readable SPIR-V
+assembly text:</p>
+<ul>
+<li>Push constants appear under the
+<code>OpTypePointer PushConstant</code> declaration.</li>
+<li>Byte layouts appear as <code>OpMemberDecorate</code> instructions
+specifying the <code>Offset</code> decoration for each struct
+field.</li>
+<li>Pipeline stages are specified at the top of the file via
+<code>OpEntryPoint</code> directives.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

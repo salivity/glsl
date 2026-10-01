@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Improving GLSL Pixel Fill Rate with Early Fragment Tests - glsl</title>
+    <meta name="description" content="In fill-rate bound GLSL rendering pipelines, performance degrades when the GPU spends valuable compute cycles and memory bandwidth processing pixels that are ultimately hidden by other geometry. Early fragment testing optimizes this pipeline by moving de">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/improving-glsl-pixel-fill-rate-with-early-fragment-tests">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Improving GLSL Pixel Fill Rate with Early Fragment Tests - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/improving-glsl-pixel-fill-rate-with-early-fragment-tests" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In fill-rate bound GLSL rendering pipelines, performance degrades when the GPU spends valuable compute cycles and memory bandwidth processing pixels that are ultimately hidden by other geometry. Early fragment testing optimizes this pipeline by moving de" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="improving-glsl-pixel-fill-rate-with-early-fragment-tests">Improving
+GLSL Pixel Fill Rate with Early Fragment Tests</h1>
+<p>In fill-rate bound GLSL rendering pipelines, performance degrades
+when the GPU spends valuable compute cycles and memory bandwidth
+processing pixels that are ultimately hidden by other geometry. Early
+fragment testing optimizes this pipeline by moving depth and stencil
+operations ahead of fragment shader execution. This article explains how
+early fragment test failures discard occluded fragments before costly
+shading occurs, dramatically reducing redundant computations, conserving
+bandwidth, and maximizing effective pixel fill rate.</p>
+<h3 id="the-fill-rate-bottleneck">The Fill-Rate Bottleneck</h3>
+<p>A render pass becomes fill-rate bound when the GPU cannot write
+fragments to the framebuffer fast enough to match the target frame rate.
+This bottleneck typically arises from high screen resolutions, complex
+fragment shaders (heavy texture sampling, dynamic branching, or
+multi-light evaluations), and excessive overdraw. Overdraw occurs when a
+single pixel on the screen is shaded multiple times per frame by
+different overlapping primitives, with only the closest primitive
+surviving to the final image.</p>
+<h3 id="traditional-vs-early-fragment-testing">Traditional vs. Early
+Fragment Testing</h3>
+<p>In the standard OpenGL/GLSL pipeline, fragment operations follow this
+sequence:</p>
+<ol type="1">
+<li>Primitive rasterization generates fragment candidates.</li>
+<li>The fragment shader executes, computing color, material properties,
+and potentially a custom depth value.</li>
+<li>Per-fragment operations (depth and stencil tests) evaluate whether
+the fragment is visible.</li>
+<li>Surviving fragments are written to the framebuffer; failing
+fragments are discarded.</li>
+</ol>
+<p>When testing occurs <em>after</em> shading, the GPU executes the
+entire fragment shader even if the fragment is immediately discarded by
+a failed depth test.</p>
+<p>Early fragment testing reorders this sequence, executing the depth
+and stencil tests <em>before</em> the fragment shader runs. If a
+fragment fails the depth comparison against the existing depth buffer
+(for example, if an object sits behind already-drawn opaque geometry),
+the pipeline drops the fragment immediately.</p>
+<h3 id="how-test-failures-boost-pixel-fill-rate">How Test Failures Boost
+Pixel Fill Rate</h3>
+<p>When an early fragment test fails, it provides three direct
+performance benefits that relieve fill-rate bottlenecks:</p>
+<ul>
+<li><strong>Elimination of Shader ALU Overhead:</strong> The fragment
+shader is completely bypassed for failed fragments. Complex mathematical
+instructions, procedural noise generation, and lighting loops are
+skipped, freeing shader cores to process visible pixels.</li>
+<li><strong>Texture Bandwidth Conservation:</strong> Bypassing the
+shader prevents texture fetches. This prevents texture cache thrashing
+and preserves memory bandwidth, which is often the primary limiter in
+fill-rate constrained applications.</li>
+<li><strong>Avoided Framebuffer Contention:</strong> Because rejected
+fragments do not proceed to write operations, the pipeline reduces write
+traffic and atomic blend contention at the memory controller level.</li>
+</ul>
+<p>While the GPU's theoretical maximum pixel throughput (the raw
+hardware fill rate) remains unchanged, the <em>effective</em> fill rate
+increases substantially. Processing power is dedicated exclusively to
+visible surfaces rather than wasted on discarded work.</p>
+<h3 id="maximizing-early-test-failures">Maximizing Early Test
+Failures</h3>
+<p>To leverage early fragment tests effectively in GLSL passes,
+developers must align both application-level sorting and shader
+design:</p>
+<ol type="1">
+<li><strong>Front-to-Back Rendering Order:</strong> Sort opaque geometry
+from nearest to farthest relative to the camera. The closest objects
+write their depth values to the buffer first, causing subsequent
+overlapping fragments from farther objects to fail their early depth
+tests.</li>
+<li><strong>Explicit Shader Qualifiers:</strong> In GLSL 4.2 and later,
+you can enforce early tests using the input layout qualifier:
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">early_fragment_tests</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span></code></pre></div></li>
+<li><strong>Avoid Disqualifying Shader Operations:</strong> Modern GPU
+drivers attempt to enable early depth tests automatically, but certain
+shader operations force the GPU to fall back to late fragment testing.
+Modifying <code>gl_FragDepth</code> or using the <code>discard</code>
+keyword alters fragment visibility or depth dynamically, preventing the
+hardware from determining visibility before the shader completes.
+Keeping fragment depth writes disabled ensures early testing stays
+active.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

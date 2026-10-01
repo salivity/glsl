@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why GPUs Disable Early Fragment Tests in GLSL - glsl</title>
+    <meta name="description" content="Early fragment tests allow a GPU to perform depth and stencil operations before executing the fragment shader, significantly saving processing power by discarding occluded fragments before costly shading occurs. However, because early testing assumes the">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/why-gp-us-disable-early-fragment-tests-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Why GPUs Disable Early Fragment Tests in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/why-gp-us-disable-early-fragment-tests-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Early fragment tests allow a GPU to perform depth and stencil operations before executing the fragment shader, significantly saving processing power by discarding occluded fragments before costly shading occurs. However, because early testing assumes the" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="why-gpus-disable-early-fragment-tests-in-glsl">Why GPUs Disable
+Early Fragment Tests in GLSL</h1>
+<p>Early fragment tests allow a GPU to perform depth and stencil
+operations before executing the fragment shader, significantly saving
+processing power by discarding occluded fragments before costly shading
+occurs. However, because early testing assumes the fragment shader will
+not alter depth values, coverage, or rely on specific execution counts,
+certain operations inside the shader or pipeline state will force the
+driver to disable this optimization automatically and fall back to late
+fragment tests.</p>
+<h3 id="writing-to-gl_fragdepth">Writing to
+<code>gl_FragDepth</code></h3>
+<p>The most common reason a GPU disables early depth testing is when the
+fragment shader writes to the built-in variable
+<code>gl_FragDepth</code>. Early fragment tests compare the interpolated
+primitive depth against the depth buffer. If the fragment shader
+calculates and assigns a custom depth value, the hardware cannot
+determine the final depth until the shader finishes execution, making
+early depth evaluation impossible.</p>
+<p><em>Note: Developers can mitigate this by declaring depth qualifiers
+such as <code>layout (depth_greater) out float gl_FragDepth;</code>
+(conservative depth), which allows the hardware to perform partial early
+depth rejections.</em></p>
+<h3 id="using-the-discard-keyword">Using the <code>discard</code>
+Keyword</h3>
+<p>Executing a <code>discard</code> statement dynamically kills a
+fragment during shader execution. If early depth tests were allowed to
+write directly to the depth buffer before the fragment shader ran, a
+fragment that updates the depth buffer and is subsequently discarded
+would leave an incorrect depth value in the buffer. Consequently, the
+presence of <code>discard</code> forces the driver to either disable
+early fragment testing entirely or split the test into an early depth
+read and a late depth write.</p>
+<h3 id="modifying-sample-masks-gl_samplemask">Modifying Sample Masks
+(<code>gl_SampleMask</code>)</h3>
+<p>In multisample anti-aliasing (MSAA) pipelines, coverage is determined
+per sub-sample. If a fragment shader writes to the
+<code>gl_SampleMask[]</code> output array, it modifies which sample
+locations are covered. Because final coverage is altered dynamically
+within the shader, the hardware cannot finalize depth and stencil
+updates for individual samples during an early pass.</p>
+<h3
+id="unsynchronized-shader-storage-and-images-side-effects">Unsynchronized
+Shader Storage and Images (Side Effects)</h3>
+<p>When a fragment shader performs writes to Shader Storage Buffer
+Objects (SSBOs) or writes to textures via <code>imageStore()</code>,
+early fragment testing would alter the side effects of the shader. If
+early depth testing is active, occluded fragments never run, suppressing
+these memory writes. While some drivers still allow early testing with
+side effects by default, others revert to late fragment tests to avoid
+dropping unintended memory operations unless the shader explicitly
+mandates early testing via
+<code>layout(early_fragment_tests) in;</code>.</p>
+<h3 id="alpha-to-coverage-and-custom-blending-logic">Alpha-to-Coverage
+and Custom Blending Logic</h3>
+<p>Enabling <code>GL_SAMPLE_ALPHA_TO_COVERAGE</code> computes sample
+coverage masks based on the alpha value output by the fragment shader.
+Because the alpha channel cannot be known until the shader computes it,
+the GPU cannot evaluate sample-accurate depth operations upfront,
+requiring fragment tests to execute late.</p>
+<h3 id="forcing-early-tests">Forcing Early Tests</h3>
+<p>If a shader uses operations like <code>discard</code> or memory side
+effects but does not alter <code>gl_FragDepth</code>, developers can
+explicitly force the GPU to retain early depth and stencil operations by
+specifying the layout qualifier:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">early_fragment_tests</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span></code></pre></div>
+<p>When this layout qualifier is present, depth and stencil tests occur
+strictly prior to shader execution, ensuring maximum performance even if
+the shader discards fragments or performs memory writes.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

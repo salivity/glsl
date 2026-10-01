@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does Data Packing and Unpacking Work in GLSL? - glsl</title>
+    <meta name="description" content="OpenGL Shading Language (GLSL) provides built-in packing and unpacking functions that serialize multiple low-precision or normalized data values into compact 32-bit or 64-bit scalar types, and reconstruct them back into vector forms. By converting vector">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-data-packing-and-unpacking-work-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does Data Packing and Unpacking Work in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-data-packing-and-unpacking-work-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="OpenGL Shading Language (GLSL) provides built-in packing and unpacking functions that serialize multiple low-precision or normalized data values into compact 32-bit or 64-bit scalar types, and reconstruct them back into vector forms. By converting vector" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-data-packing-and-unpacking-work-in-glsl">How Does Data
+Packing and Unpacking Work in GLSL?</h1>
+<p>OpenGL Shading Language (GLSL) provides built-in packing and
+unpacking functions that serialize multiple low-precision or normalized
+data values into compact 32-bit or 64-bit scalar types, and reconstruct
+them back into vector forms. By converting vectors of floating-point
+values into packed unsigned integers or double-precision scalars, these
+functions enable lossy or lossless data compression directly on the GPU.
+This mechanism optimizes memory bandwidth, reduces storage footprints in
+Shader Storage Buffer Objects (SSBOs) and Uniform Buffer Objects (UBOs),
+and streamlines data passing between render stages.</p>
+<h2 id="core-mechanisms-of-gpu-data-packing">Core Mechanisms of GPU Data
+Packing</h2>
+<p>Data packing functions compress multi-component vector data by
+reinterpreting or quantizing floating-point components into fixed-width
+bitfields. The GPU processes these operations natively, transforming
+wide 128-bit vector types (such as <code>vec4</code> containing four
+32-bit floats) into single 32-bit scalar representations
+(<code>uint</code>).</p>
+<p>The compression mechanism relies on two primary techniques:</p>
+<ul>
+<li><strong>Fixed-Point Quantization:</strong> Values in standard ranges
+(such as <code>[0.0, 1.0]</code> or <code>[-1.0, 1.0]</code>) are
+scaled, rounded, and mapped across discrete integer ranges (e.g., 8-bit
+or 16-bit integers) before being bit-shifted into a single
+container.</li>
+<li><strong>Format Reinterpretation:</strong> Floating-point
+representations are truncated or converted according to IEEE 754
+standards, such as downscaling 32-bit single-precision floats into
+16-bit half-precision floats without manual bit-shifting.</li>
+</ul>
+<p>Unpacking functions reverse this sequence. They isolate the
+constituent bitfields using bitmasking and shifting, convert the integer
+or half-precision representations back into 32-bit floating-point
+numbers, and apply the appropriate normalization factor.</p>
+<h2 id="standard-glsl-packing-and-unpacking-built-ins">Standard GLSL
+Packing and Unpacking Built-Ins</h2>
+<p>GLSL provides specialized functions categorized by target bit depth,
+sign handling, and normalization behavior.</p>
+<h3 id="8-bit-normalized-vector-packing">8-Bit Normalized Vector
+Packing</h3>
+<p>Functions operating on 8-bit components compress a 4-component vector
+into a single 32-bit unsigned integer:</p>
+<ul>
+<li><code>uint packUnorm4x8(vec4 v)</code> and
+<code>vec4 unpackUnorm4x8(uint p)</code> convert four unsigned
+normalized floats in the range <code>[0.0, 1.0]</code> to and from four
+8-bit unsigned integers.</li>
+<li><code>uint packSnorm4x8(vec4 v)</code> and
+<code>vec4 unpackSnorm4x8(uint p)</code> convert four signed normalized
+floats in the range <code>[-1.0, 1.0]</code> to and from four 8-bit
+signed integers.</li>
+</ul>
+<p>During normalization packing, each component <span
+class="math inline">\(c\)</span> is clamped to the allowable range and
+converted using fixed-point math:</p>
+<p><span class="math display">\[\text{Unsigned: }
+\text{round}(\text{clamp}(c, 0.0, 1.0) \times 255.0)\]</span></p>
+<p><span class="math display">\[\text{Signed: }
+\text{round}(\text{clamp}(c, -1.0, 1.0) \times 127.0)\]</span></p>
+<h3 id="16-bit-precision-conversions">16-Bit Precision Conversions</h3>
+<p>For data requiring higher fidelity than 8-bit formats, GLSL provides
+16-bit pack routines:</p>
+<ul>
+<li><code>uint packHalf2x16(vec2 v)</code> and
+<code>vec2 unpackHalf2x16(uint p)</code> convert two 32-bit IEEE 754
+floats to and from 16-bit half-precision floating-point numbers stored
+in a single 32-bit <code>uint</code>.</li>
+<li><code>uint packUnorm2x16(vec2 v)</code> and
+<code>vec2 unpackUnorm2x16(uint p)</code> quantize two normalized floats
+into 16-bit unsigned integers.</li>
+<li><code>uint packSnorm2x16(vec2 v)</code> and
+<code>vec2 unpackSnorm2x16(uint p)</code> quantize two signed floats
+into 16-bit signed integers.</li>
+</ul>
+<h3 id="64-bit-conversions">64-Bit Conversions</h3>
+<p>GLSL also supports combining two 32-bit unsigned or signed integers
+into a single 64-bit scalar:</p>
+<ul>
+<li><code>double packDouble2x32(uvec2 v)</code> and
+<code>uvec2 unpackDouble2x32(double d)</code> pack and unpack two 32-bit
+unsigned integers into a double-precision float.</li>
+<li><code>int64_t</code> or <code>uint64_t</code> extensions provide
+similar bitfield packing functionality for 64-bit integer targets where
+available.</li>
+</ul>
+<h2 id="practical-applications-in-real-time-graphics">Practical
+Applications in Real-Time Graphics</h2>
+<h3 id="g-buffer-compression-in-deferred-rendering">G-Buffer Compression
+in Deferred Rendering</h3>
+<p>In deferred shading pipelines, multiple geometry attributes must be
+written to framebuffer attachments. Packing allows non-critical
+data—such as surface roughness, metallic properties, ambient occlusion,
+and material IDs—to be packed into a single 32-bit integer channel
+rather than consuming separate render targets.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Compressing material parameters into a single 32-bit uint</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> materialProps <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>roughness<span class="op">,</span> metallic<span class="op">,</span> ambientOcclusion<span class="op">,</span> subsurface<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> packedMaterial <span class="op">=</span> <span class="bu">packUnorm4x8</span><span class="op">(</span>materialProps<span class="op">);</span></span></code></pre></div>
+<h3 id="buffer-bandwidth-optimization">Buffer Bandwidth
+Optimization</h3>
+<p>When dispatching compute shaders that process millions of particles
+or vertices, transferring full <code>vec4</code> structures creates a
+memory bottleneck. Storing positions or velocity vectors using
+<code>packHalf2x16</code> or <code>packSnorm4x8</code> cuts GPU memory
+bus traffic by up to 75%, accelerating memory-bound passes.</p>
+<h2 id="precision-loss-and-numerical-considerations">Precision Loss and
+Numerical Considerations</h2>
+<p>Packing and unpacking operations introduce trade-offs between storage
+density and numeric accuracy:</p>
+<ul>
+<li><strong>Quantization Error:</strong> Converting continuous
+floating-point numbers to 8-bit or 16-bit integers creates stepped
+approximations. For surface normals, 8-bit packing
+(<code>packSnorm4x8</code>) can cause visible banding artifacts under
+specular lighting, making 16-bit (<code>packSnorm2x16</code>) or
+octahedral encoding preferable.</li>
+<li><strong>Underflow and Overflow:</strong> Floating-point values
+exceeding the expected range are clamped during normalized packing.
+Exponents out of range in <code>packHalf2x16</code> can result in
+infinities or subnormal precision penalties.</li>
+<li><strong>Instruction Cost vs. Bandwidth:</strong> Unpacking requires
+ALU cycles on the execution units. The performance benefit depends on
+whether the GPU kernel is bottlenecked by memory bandwidth (where
+packing yields significant gains) or arithmetic throughput.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

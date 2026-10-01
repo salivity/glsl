@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL 3D Triangle Area with Cross Product - glsl</title>
+    <meta name="description" content="Computing the geometric surface area of a 3D triangle is a fundamental task in shader programming and computational geometry. In the OpenGL Shading Language (GLSL), you can calculate this area efficiently by taking two edge vectors of the triangle, calcu">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-3-d-triangle-area-with-cross-product">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL 3D Triangle Area with Cross Product - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-3-d-triangle-area-with-cross-product" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Computing the geometric surface area of a 3D triangle is a fundamental task in shader programming and computational geometry. In the OpenGL Shading Language (GLSL), you can calculate this area efficiently by taking two edge vectors of the triangle, calcu" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-3d-triangle-area-with-cross-product">GLSL 3D Triangle Area
+with Cross Product</h1>
+<p>Computing the geometric surface area of a 3D triangle is a
+fundamental task in shader programming and computational geometry. In
+the OpenGL Shading Language (GLSL), you can calculate this area
+efficiently by taking two edge vectors of the triangle, calculating
+their cross product to find the area of the spanned parallelogram, and
+taking half of its magnitude. This article provides the mathematical
+foundation and the exact GLSL code required to implement this
+formula.</p>
+<h2 id="the-mathematical-formula">The Mathematical Formula</h2>
+<p>Given three 3D vertices that form a triangle, <span
+class="math inline">\(A\)</span>, <span
+class="math inline">\(B\)</span>, and <span
+class="math inline">\(C\)</span>, the area is half the magnitude of the
+cross product of two edge vectors sharing a common vertex:</p>
+<p><span class="math display">\[\text{Area} = \frac{1}{2} \| (B - A)
+\times (C - A) \|\]</span></p>
+<p>The cross product <span class="math inline">\((B - A) \times (C -
+A)\)</span> produces a vector that is orthogonal to the plane containing
+the triangle. The length (magnitude) of this resulting vector equals the
+surface area of the parallelogram formed by the two vectors. Dividing
+this magnitude by two yields the area of the triangle.</p>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>GLSL provides built-in functions for vector subtraction, the cross
+product, and vector magnitude. You can implement the area calculation
+with the following function:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">getTriangleArea</span><span class="op">(</span><span class="dt">vec3</span> a<span class="op">,</span> <span class="dt">vec3</span> b<span class="op">,</span> <span class="dt">vec3</span> c<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> edge1 <span class="op">=</span> b <span class="op">-</span> a<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> edge2 <span class="op">=</span> c <span class="op">-</span> a<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fl">0.5</span> <span class="op">*</span> <span class="bu">length</span><span class="op">(</span><span class="bu">cross</span><span class="op">(</span>edge1<span class="op">,</span> edge2<span class="op">));</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Or as a compact one-liner:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> area <span class="op">=</span> <span class="fl">0.5</span> <span class="op">*</span> <span class="bu">length</span><span class="op">(</span><span class="bu">cross</span><span class="op">(</span>b <span class="op">-</span> a<span class="op">,</span> c <span class="op">-</span> a<span class="op">));</span></span></code></pre></div>
+<h2 id="step-by-step-breakdown">Step-by-Step Breakdown</h2>
+<ol type="1">
+<li><strong>Calculate Edge Vectors</strong>: Subtract vertex
+<code>a</code> from <code>b</code> and vertex <code>a</code> from
+<code>c</code> to obtain two direction vectors along the triangle's
+edges.</li>
+<li><strong><code>cross(edge1, edge2)</code></strong>: Calculates the
+cross product of the two 3D vectors. The direction of the resulting
+<code>vec3</code> represents the surface normal (scaled by orientation),
+and its length represents the area of the parallelogram.</li>
+<li><strong><code>length(...)</code></strong>: Evaluates the Euclidean
+norm <span class="math inline">\(\sqrt{x^2 + y^2 + z^2}\)</span> of the
+cross product vector.</li>
+<li><strong><code>0.5 * ...</code></strong>: Halves the parallelogram
+area to yield the exact planar surface area of the triangle.</li>
+</ol>
+<h2 id="considerations">Considerations</h2>
+<ul>
+<li><strong>Degenerate Triangles</strong>: If all three points are
+collinear or if any two vertices share the same coordinates,
+<code>cross(edge1, edge2)</code> evaluates to <code>vec3(0.0)</code>,
+and <code>length()</code> returns <code>0.0</code>.</li>
+<li><strong>Winding Order</strong>: The order of vertices affects the
+direction of the normal vector returned by <code>cross()</code>, but
+because <code>length()</code> computes an absolute magnitude, the
+calculated area will always remain positive regardless of vertex winding
+order.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

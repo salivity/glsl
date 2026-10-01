@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gl_SubgroupSize in GLSL Adaptive Warp Algorithms - glsl</title>
+    <meta name="description" content="Modern GPU computing relies heavily on subgroup operations to achieve maximum memory bandwidth and arithmetic throughput without relying on costly shared memory barriers. In OpenGL and Vulkan GLSL, the glSubgroupSize built-in constant represents the runt">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gl-subgroup-size-in-glsl-adaptive-warp-algorithms">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="gl_SubgroupSize in GLSL Adaptive Warp Algorithms - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gl-subgroup-size-in-glsl-adaptive-warp-algorithms" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Modern GPU computing relies heavily on subgroup operations to achieve maximum memory bandwidth and arithmetic throughput without relying on costly shared memory barriers. In OpenGL and Vulkan GLSL, the glSubgroupSize built-in constant represents the runt" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="gl_subgroupsize-in-glsl-adaptive-warp-algorithms">gl_SubgroupSize in
+GLSL Adaptive Warp Algorithms</h1>
+<p>Modern GPU computing relies heavily on subgroup operations to achieve
+maximum memory bandwidth and arithmetic throughput without relying on
+costly shared memory barriers. In OpenGL and Vulkan GLSL, the
+<code>gl_SubgroupSize</code> built-in constant represents the runtime
+hardware execution width—commonly referred to as a warp on NVIDIA GPUs
+or a wavefront on AMD GPUs. This article explores how
+<code>gl_SubgroupSize</code> functions as a foundational primitive in
+adaptive warp algorithms, enabling compute shaders to dynamically adjust
+their execution logic, reduction trees, and memory partitioning to
+execute efficiently across diverse GPU architectures.</p>
+<h3 id="the-problem-with-fixed-warp-assumptions">The Problem with Fixed
+Warp Assumptions</h3>
+<p>Historically, GPU compute algorithms were designed with hardcoded
+execution widths, most commonly 32 threads. While this assumption worked
+reliably across generations of NVIDIA hardware, it breaks down in
+heterogeneous environments:</p>
+<ul>
+<li><strong>AMD GPUs</strong> frequently switch between Wave32 and
+Wave64 execution modes depending on register pressure and target
+architecture (RDNA vs. GCN).</li>
+<li><strong>Intel GPUs</strong> utilize variable execution widths,
+spanning 8, 16, or 32 threads.</li>
+<li><strong>Mobile and Embedded GPUs</strong> (such as ARM Mali or
+Qualcomm Adreno) employ distinct, architecture-specific SIMD
+dimensions.</li>
+</ul>
+<p>Hardcoding a subgroup width leads to code that either wastes
+available execution lanes, produces incorrect calculation boundaries, or
+fails compilation entirely.</p>
+<h3 id="what-is-gl_subgroupsize">What is
+<code>gl_SubgroupSize</code>?</h3>
+<p>Declared via the <code>GL_KHR_shader_subgroup_basic</code> extension
+(or core in modern Vulkan/GLSL versions), <code>gl_SubgroupSize</code>
+is a constant integer available at shader runtime. It explicitly defines
+the number of invocations within the current subgroup:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">128</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> laneId <span class="op">=</span> gl_SubgroupInvocationID<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> warpSize <span class="op">=</span> gl_SubgroupSize<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ...</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Unlike <code>gl_WorkGroupSize</code>, which is defined by the
+developer via layout qualifiers, <code>gl_SubgroupSize</code> is
+dictated directly by the underlying GPU hardware and driver scheduler
+for that specific pipeline execution.</p>
+<h3 id="the-role-of-gl_subgroupsize-in-adaptive-algorithms">The Role of
+<code>gl_SubgroupSize</code> in Adaptive Algorithms</h3>
+<p>An adaptive warp algorithm is an algorithm that inspects
+hardware-level SIMD traits at runtime to alter its mathematical strategy
+or control flow. <code>gl_SubgroupSize</code> serves several critical
+roles in these designs:</p>
+<h4 id="1-dynamic-striding-and-parallel-reductions">1. Dynamic Striding
+and Parallel Reductions</h4>
+<p>When performing subgroup-wide prefix sums, scans, or reductions, the
+number of communication steps is directly proportional to the logarithm
+of the execution width (<span
+class="math inline">\(\log_2(\text{gl\_SubgroupSize})\)</span>). An
+adaptive algorithm uses <code>gl_SubgroupSize</code> to terminate
+shuffle or exchange loops at the precise step count required:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">for</span> <span class="op">(</span><span class="dt">uint</span> <span class="dt">offset</span> <span class="op">=</span> gl_SubgroupSize <span class="op">/</span> <span class="dv">2</span><span class="op">;</span> <span class="dt">offset</span> <span class="op">&gt;</span> <span class="dv">0</span><span class="op">;</span> <span class="dt">offset</span> <span class="op">/=</span> <span class="dv">2</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    value <span class="op">+=</span> <span class="fu">subgroupShuffleDown</span><span class="op">(</span>value<span class="op">,</span> <span class="dt">offset</span><span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This prevents reading out-of-bounds lanes on architectures where the
+subgroup is smaller than 32, and ensures complete reductions on
+architectures where the subgroup width is 64.</p>
+<h4 id="2-correct-bitmask-sizing-for-ballot-operations">2. Correct
+Bitmask Sizing for Ballot Operations</h4>
+<p>Subgroup ballot operations (such as <code>subgroupBallot()</code>)
+return a <code>uvec4</code> representing bitmasks of active invocations.
+Because a subgroup may consist of 8, 16, 32, or 64 lanes, masking
+operations and active-lane counts must adapt. Developers use
+<code>gl_SubgroupSize</code> to build runtime bitmasks, avoiding
+shift-overflows and ensuring valid operations when evaluating active
+lane sets.</p>
+<h4 id="3-dynamic-shared-memory-partitioning">3. Dynamic Shared Memory
+Partitioning</h4>
+<p>Complex algorithms frequently transition data from subgroup-level
+operations to workgroup-level shared memory (<code>shared</code>).
+Because a workgroup contains an arbitrary number of subgroups (<span
+class="math inline">\(N =
+\frac{\text{gl\_WorkGroupSize.x}}{\text{gl\_SubgroupSize}}\)</span>),
+allocating and indexing shared memory stages requires knowing the true
+subgroup count:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> subgroupCount <span class="op">=</span> <span class="bu">gl_WorkGroupSize</span><span class="op">.</span><span class="fu">x</span> <span class="op">/</span> gl_SubgroupSize<span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">shared</span> <span class="dt">float</span> subgroupResults<span class="op">[</span>subgroupCount<span class="op">];</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>gl_SubgroupInvocationID <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    subgroupResults<span class="op">[</span>gl_SubgroupID<span class="op">]</span> <span class="op">=</span> value<span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Adapting to <code>gl_SubgroupSize</code> ensures that shared memory
+is not over-allocated on wider execution architectures, saving precious
+cache for higher occupancy, while ensuring sufficient space exists on
+narrower architectures.</p>
+<h4 id="4-portable-lane-striped-memory-access">4. Portable Lane-Striped
+Memory Access</h4>
+<p>Maximizing memory performance requires coalesced global memory access
+patterns. An adaptive kernel partitions memory loads using
+<code>gl_SubgroupSize</code> as the stride factor:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> globalIndex <span class="op">=</span> <span class="op">(</span>gl_SubgroupID <span class="op">*</span> gl_SubgroupSize<span class="op">)</span> <span class="op">+</span> gl_SubgroupInvocationID<span class="op">;</span></span></code></pre></div>
+<p>This ensures that consecutive threads in the hardware execution unit
+always load consecutive memory addresses, completely eliminating memory
+divergence regardless of the device running the shader.</p>
+<h3 id="summary">Summary</h3>
+<p>The <code>gl_SubgroupSize</code> constant is the linchpin of
+architecture-agnostic GPU computing in GLSL. By querying the hardware
+SIMD width rather than relying on compiler macros or hardcoded
+constants, developers can write adaptive warp algorithms that
+automatically achieve optimal register usage, correct reduction
+topology, and peak memory coalescing across all major desktop and mobile
+graphics hardware.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

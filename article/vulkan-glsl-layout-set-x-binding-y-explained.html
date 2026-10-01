@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vulkan GLSL layout(set = X, binding = Y) Explained - glsl</title>
+    <meta name="description" content="In Vulkan GLSL, the layout(set = X, binding = Y) qualifier defines how a shader resource connects to the Vulkan API's descriptor system. This syntax maps shader-accessible resources—such as uniform buffers, storage buffers, combined image samplers, and">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/vulkan-glsl-layout-set-x-binding-y-explained">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Vulkan GLSL layout(set = X, binding = Y) Explained - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/vulkan-glsl-layout-set-x-binding-y-explained" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In Vulkan GLSL, the layout(set = X, binding = Y) qualifier defines how a shader resource connects to the Vulkan API's descriptor system. This syntax maps shader-accessible resources—such as uniform buffers, storage buffers, combined image samplers, and" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="vulkan-glsl-layoutset--x-binding--y-explained">Vulkan GLSL
+layout(set = X, binding = Y) Explained</h1>
+<p>In Vulkan GLSL, the <code>layout(set = X, binding = Y)</code>
+qualifier defines how a shader resource connects to the Vulkan API's
+descriptor system. This syntax maps shader-accessible resources—such as
+uniform buffers, storage buffers, combined image samplers, and storage
+images—to specific memory structures allocated and bound on the CPU
+side. By organizing resources into sets and bindings, Vulkan provides
+fine-grained control over how data is passed to the GPU, enabling
+efficient state changes and high-performance rendering pipelines.</p>
+<h3 id="the-role-of-descriptors">The Role of Descriptors</h3>
+<p>Vulkan does not use traditional OpenGL-style binding points where
+individual resources are bound globally. Instead, it uses
+<strong>descriptors</strong>, which are handles or pointers stored in
+GPU memory that reference buffers or images. To minimize driver
+overhead, descriptors are grouped into <strong>Descriptor Sets</strong>,
+and multiple descriptor sets can be bound simultaneously through a
+<strong>Pipeline Layout</strong>.</p>
+<p>The <code>layout(set = X, binding = Y)</code> syntax in GLSL
+specifies the exact location within this hierarchy where the shader
+expects to find a given resource.</p>
+<h3 id="breaking-down-the-syntax">Breaking Down the Syntax</h3>
+<ul>
+<li><strong><code>set = X</code> (The Set Index):</strong> Identifies
+which descriptor set contains the resource. A pipeline can access
+multiple sets simultaneously (typically up to 4 or more, depending on
+hardware limits defined by <code>maxBoundDescriptorSets</code>). The
+integer <code>X</code> directly corresponds to the index of the
+<code>VkDescriptorSetLayout</code> array passed to
+<code>VkPipelineLayoutCreateInfo</code> on the CPU.</li>
+<li><strong><code>binding = Y</code> (The Binding Index):</strong>
+Identifies the specific slot within descriptor set <code>X</code>. The
+integer <code>Y</code> matches the <code>binding</code> member of a
+<code>VkDescriptorSetLayoutBinding</code> structure defined in
+application code.</li>
+</ul>
+<p>If <code>set = X</code> is omitted in the shader code, GLSL defaults
+to <code>set = 0</code>.</p>
+<h3 id="example-glsl-declaration">Example GLSL Declaration</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Global scene data (camera view/projection) in Set 0, Binding 0</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> SceneData <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> view<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> projection<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> scene<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Material properties in Set 1, Binding 0 and Binding 1</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">sampler2D</span> diffuseTexture<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">sampler2D</span> normalMap<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="co">// Per-object transform data in Set 2, Binding 0</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">2</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> ObjectTransforms <span class="op">{</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> model<span class="op">[];</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> objects<span class="op">;</span></span></code></pre></div>
+<h3 id="cpu-to-shader-mapping">CPU-to-Shader Mapping</h3>
+<p>The interaction between the C/C++ Vulkan API and the GLSL shader
+follows a strict structure:</p>
+<ol type="1">
+<li><strong>Descriptor Set Layout Creation:</strong> For each set, an
+array of <code>VkDescriptorSetLayoutBinding</code> structures is
+created. Each structure defines a <code>binding</code> number (matching
+<code>Y</code>), the descriptor type (e.g.,
+<code>VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER</code>), descriptor count, and
+applicable shader stages.</li>
+<li><strong>Pipeline Layout Creation:</strong> An array of
+<code>VkDescriptorSetLayout</code> objects is passed to
+<code>vkCreatePipelineLayout</code>. The array index matches
+<code>set = X</code>. For instance, the layout at array index
+<code>0</code> corresponds to <code>set = 0</code>.</li>
+<li><strong>Descriptor Allocation and Update:</strong> Individual
+<code>VkDescriptorSet</code> objects are allocated from a
+<code>VkDescriptorPool</code> and updated with actual buffer and image
+handles via <code>vkUpdateDescriptorSets</code>.</li>
+<li><strong>Binding at Command Time:</strong> The application binds the
+allocated descriptor sets to the command buffer using
+<code>vkCmdBindDescriptorSets</code>, specifying the
+<code>firstSet</code> parameter and an array of sets matching the
+configured indices.</li>
+</ol>
+<h3 id="why-sets-and-bindings-are-separated">Why Sets and Bindings Are
+Separated</h3>
+<p>The separation of resources into sets allows for frequency-of-change
+optimizations. Re-binding descriptor sets introduces CPU and GPU
+overhead. Vulkan allows developers to group resources by how frequently
+they change:</p>
+<ul>
+<li><strong>Set 0 (Per-Frame):</strong> Global data that changes once
+per frame (e.g., camera matrices, directional light, delta time). Bound
+once at the start of a frame.</li>
+<li><strong>Set 1 (Per-Pass / Per-Material):</strong> Textures and
+material parameters shared by multiple meshes. Bound whenever the active
+material changes.</li>
+<li><strong>Set 2 (Per-Object):</strong> Model-specific transformation
+matrices or dynamic instances. Bound per draw call, or replaced entirely
+with dynamic offsets or push constants.</li>
+</ul>
+<p>When drawing multiple objects with the same material, the engine only
+needs to rebind Set 2. When switching materials for objects within the
+same scene, only Set 1 and Set 2 change, leaving Set 0 permanently
+bound. This structural organization prevents unnecessary state updates
+and optimizes GPU pipeline throughput.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

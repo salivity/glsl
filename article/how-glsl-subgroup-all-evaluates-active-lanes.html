@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GLSL subgroupAll Evaluates Active Lanes - glsl</title>
+    <meta name="description" content="In GLSL, the subgroupAll function is a collective vote operation that determines if a boolean condition holds true across all concurrently executing invocations within a subgroup. This article explains how GLSL determines lane activity, how hardware exec">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-glsl-subgroup-all-evaluates-active-lanes">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GLSL subgroupAll Evaluates Active Lanes - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-glsl-subgroup-all-evaluates-active-lanes" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL, the subgroupAll function is a collective vote operation that determines if a boolean condition holds true across all concurrently executing invocations within a subgroup. This article explains how GLSL determines lane activity, how hardware exec" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-glsl-subgroupall-evaluates-active-lanes">How GLSL
+subgroupAll Evaluates Active Lanes</h1>
+<p>In GLSL, the <code>subgroupAll</code> function is a collective vote
+operation that determines if a boolean condition holds true across all
+concurrently executing invocations within a subgroup. This article
+explains how GLSL determines lane activity, how hardware execution masks
+evaluate local boolean expressions, and how the final result is
+propagated uniformly across all active threads.</p>
+<h3 id="the-execution-model-and-active-lanes">The Execution Model and
+Active Lanes</h3>
+<p>A subgroup (often corresponding to a warp on NVIDIA hardware or a
+wavefront on AMD hardware) consists of a fixed number of invocations
+executing in lockstep. However, control flow divergence—such as
+<code>if-else</code> branches or loops—can cause individual invocations
+to become inactive.</p>
+<p>The execution state of a subgroup is tracked via an internal bitmask
+known as the <strong>active invocation mask</strong> (or execution
+mask). Each bit in this mask corresponds to a lane in the subgroup:</p>
+<ul>
+<li><code>1</code> indicates the lane is active and currently executing
+the instruction.</li>
+<li><code>0</code> indicates the lane is inactive (diverged or
+disabled).</li>
+</ul>
+<p>Helper invocations, often found in fragment shaders executing outside
+primitive boundaries to compute derivatives, may also have designated
+states depending on subgroup extensions and hardware
+implementations.</p>
+<h3 id="local-evaluation-and-the-ballot-mechanism">Local Evaluation and
+the Ballot Mechanism</h3>
+<p>When an active invocation calls <code>subgroupAll(bool value)</code>,
+the GPU executes the following sequence:</p>
+<ol type="1">
+<li><strong>Local Evaluation:</strong> Each active lane evaluates its
+local boolean expression (<code>value</code>), producing a
+<code>true</code> (1) or <code>false</code> (0) result.</li>
+<li><strong>Subgroup Ballot Generation:</strong> The hardware collects
+these boolean states into a condition mask. In this mask, each bit
+represents the boolean result evaluated by the corresponding lane.
+Inactive lanes do not contribute valid data to this mask.</li>
+<li><strong>Mask Comparison:</strong> The hardware compares the
+condition mask with the active invocation mask. The operation performs a
+bitwise check equivalent to verifying whether every bit enabled in the
+active mask is also enabled in the condition mask:</li>
+</ol>
+<p><span class="math display">\[\text{AllTrue} = (\text{condition\_mask}
+\ \&amp; \ \text{active\_mask}) == \text{active\_mask}\]</span></p>
+<h3 id="resolution-and-broadcast">Resolution and Broadcast</h3>
+<p>If the condition mask matches the active mask, every active lane
+evaluated <code>value</code> to <code>true</code>, and the operation
+returns <code>true</code>. If even a single active lane evaluated
+<code>value</code> to <code>false</code>, the operation returns
+<code>false</code>. Inactive lanes are completely excluded from the
+evaluation; their local variables and conditions do not affect the
+outcome.</p>
+<p>Once evaluated, the resulting scalar boolean value is uniformly
+broadcast to all participating active invocations in the subgroup.
+Because this is handled entirely at the hardware level using dedicated
+ballot or vote registers, <code>subgroupAll</code> executes in minimal
+clock cycles without requiring memory accesses or scratchpad memory.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

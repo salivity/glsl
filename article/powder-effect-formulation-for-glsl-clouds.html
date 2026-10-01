@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Powder Effect Formulation for GLSL Clouds - glsl</title>
+    <meta name="description" content="The powder effect is an empirical lighting approximation used in real-time volumetric cloud rendering to simulate complex multiple scattering within dense cloud formations. In GLSL raymarching shaders, integrating the powder effect modifies the standard">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/powder-effect-formulation-for-glsl-clouds">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Powder Effect Formulation for GLSL Clouds - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/powder-effect-formulation-for-glsl-clouds" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The powder effect is an empirical lighting approximation used in real-time volumetric cloud rendering to simulate complex multiple scattering within dense cloud formations. In GLSL raymarching shaders, integrating the powder effect modifies the standard" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="powder-effect-formulation-for-glsl-clouds">Powder Effect
+Formulation for GLSL Clouds</h1>
+<p>The powder effect is an empirical lighting approximation used in
+real-time volumetric cloud rendering to simulate complex multiple
+scattering within dense cloud formations. In GLSL raymarching shaders,
+integrating the powder effect modifies the standard Beer-Lambert
+attenuation to create deep contrast and self-shadowing in dense cloud
+crevices. This prevents forward-scattering highlights from washing out
+the cloud structure, producing realistic, detailed volumetric
+cloudscapes.</p>
+<h2 id="the-core-concept">The Core Concept</h2>
+<p>In real clouds, water droplets densely scatter light in multiple
+directions. Standard single-scattering models rely on the Beer-Lambert
+law, which states that light transmittance decreases exponentially with
+optical depth:</p>
+<p><span class="math display">\[T = e^{-d}\]</span></p>
+<p>While Beer's law correctly attenuates light through uniform media, it
+fails to capture the internal illumination and edge darkening observed
+in dense cloud tops. In dense areas, light is scattered out of the
+medium quickly when entering peaks, causing crevices and opposite edges
+to appear darker relative to the surrounding volume. The "powder effect"
+artificially re-creates this phenomenon by reversing the exponential
+decay, ensuring that higher local density dampens direct
+illumination.</p>
+<h2 id="mathematical-formulation">Mathematical Formulation</h2>
+<p>The standard powder formulation represents transmittance <span
+class="math inline">\(P\)</span> as an inverted exponential decay
+relative to density or optical depth <span
+class="math inline">\(d\)</span>:</p>
+<p><span class="math display">\[P(d) = 1.0 - e^{-d \cdot k}\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(d\)</span> is the sampled optical
+thickness or density along the light ray.</li>
+<li><span class="math inline">\(k\)</span> is a tuning scalar (typically
+set between <span class="math inline">\(2.0\)</span> and <span
+class="math inline">\(4.0\)</span>) controlling how aggressively the
+dark fringes form.</li>
+</ul>
+<p>To achieve physically plausible lighting, the powder term is
+multiplied directly by Beer’s law transmittance:</p>
+<p><span class="math display">\[\text{Attenuation} = 2.0 \cdot e^{-d}
+\cdot (1.0 - e^{-d \cdot 2.0})\]</span></p>
+<p>The constant factor of <span class="math inline">\(2.0\)</span> acts
+as a normalization multiplier to maintain energy conservation across the
+combined curve.</p>
+<h2 id="enhancing-forward-scattering">Enhancing Forward Scattering</h2>
+<p>Forward scattering in GLSL clouds is traditionally calculated using
+the Henyey-Greenstein phase function:</p>
+<p><span class="math display">\[g \in (0, 1)\]</span> <span
+class="math display">\[p(\theta) = \frac{1 - g^2}{4\pi (1 + g^2 - 2g
+\cos\theta)^{1.5}}\]</span></p>
+<p>When the view vector aligns closely with the sun vector (<span
+class="math inline">\(\cos\theta \to 1\)</span>), forward scattering
+creates an intense silver lining effect. Without the powder effect, this
+highlight flattens surface details by overexposing both thin wisps and
+thick billows.</p>
+<p>When the powder effect is coupled with Henyey-Greenstein scattering,
+the forward-scattering peak is preserved on thin, grazing cloud edges
+while deep, high-density regions are suppressed. This differential
+lighting accentuates the contours of cumulus clouds during
+high-phase-angle lighting conditions, such as sunsets.</p>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>Below is a GLSL implementation combining dual-lobe Henyey-Greenstein
+phase scattering, Beer-Lambert attenuation, and the powder effect:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Dual-lobe Henyey-Greenstein phase function</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">henyeyGreenstein</span><span class="op">(</span><span class="dt">float</span> cosAngle<span class="op">,</span> <span class="dt">float</span> g<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> g2 <span class="op">=</span> g <span class="op">*</span> g<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> g2<span class="op">)</span> <span class="op">/</span> <span class="op">(</span><span class="fl">4.0</span> <span class="op">*</span> <span class="fl">3.14159265</span> <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">+</span> g2 <span class="op">-</span> <span class="fl">2.0</span> <span class="op">*</span> g <span class="op">*</span> cosAngle<span class="op">,</span> <span class="fl">1.5</span><span class="op">));</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">cloudPhase</span><span class="op">(</span><span class="dt">float</span> cosAngle<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Combine forward and backward scattering lobes</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> forward <span class="op">=</span> <span class="fu">henyeyGreenstein</span><span class="op">(</span>cosAngle<span class="op">,</span> <span class="fl">0.7</span><span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> backward <span class="op">=</span> <span class="fu">henyeyGreenstein</span><span class="op">(</span>cosAngle<span class="op">,</span> <span class="op">-</span><span class="fl">0.2</span><span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">mix</span><span class="op">(</span>forward<span class="op">,</span> backward<span class="op">,</span> <span class="fl">0.3</span><span class="op">);</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="co">// Combined Beer-Powder attenuation</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">getLightEnergy</span><span class="op">(</span><span class="dt">float</span> opticalDepth<span class="op">,</span> <span class="dt">float</span> cosAngle<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Standard Beer-Lambert Law</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> beer <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>opticalDepth<span class="op">);</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Powder effect term</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> powder <span class="op">=</span> <span class="fl">1.0</span> <span class="op">-</span> <span class="bu">exp</span><span class="op">(-</span>opticalDepth <span class="op">*</span> <span class="fl">2.0</span><span class="op">);</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Combined transmittance</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lightTransmittance <span class="op">=</span> <span class="fl">2.0</span> <span class="op">*</span> beer <span class="op">*</span> powder<span class="op">;</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Modulate direct light with phase function</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> lightTransmittance <span class="op">*</span> <span class="fu">cloudPhase</span><span class="op">(</span>cosAngle<span class="op">);</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="tuning-parameters">Tuning Parameters</h2>
+<ul>
+<li><strong>Powder Multiplier:</strong> Adjusting the inner coefficient
+(e.g., <code>-opticalDepth * 2.0</code>) alters crevice contrast. Higher
+values restrict the dark edges to only the densest pockets, whereas
+lower values spread the darkening broadly across the cloud volume.</li>
+<li><strong>Sun Angle Modulation:</strong> The powder effect can be
+dynamically scaled based on the light phase angle. Fading the powder
+effect out when facing directly away from the sun ensures that back-lit
+surfaces remain properly shadowed without artificial inversions.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

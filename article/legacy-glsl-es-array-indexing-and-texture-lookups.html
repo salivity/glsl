@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Legacy GLSL ES Array Indexing and Texture Lookups - glsl</title>
+    <meta name="description" content="In legacy GLSL ES (specifically GLSL ES 1.00 used in OpenGL ES 2.0 and WebGL 1.0), the specification strictly restricted array indexing, prohibiting non-constant expressions when indexing into arrays of samplers. This article examines why this limitation">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/legacy-glsl-es-array-indexing-and-texture-lookups">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Legacy GLSL ES Array Indexing and Texture Lookups - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/legacy-glsl-es-array-indexing-and-texture-lookups" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In legacy GLSL ES (specifically GLSL ES 1.00 used in OpenGL ES 2.0 and WebGL 1.0), the specification strictly restricted array indexing, prohibiting non-constant expressions when indexing into arrays of samplers. This article examines why this limitation" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="legacy-glsl-es-array-indexing-and-texture-lookups">Legacy GLSL
+ES Array Indexing and Texture Lookups</h1>
+<p>In legacy GLSL ES (specifically GLSL ES 1.00 used in OpenGL ES 2.0
+and WebGL 1.0), the specification strictly restricted array indexing,
+prohibiting non-constant expressions when indexing into arrays of
+samplers. This article examines why this limitation existed, how it
+directly affected texture lookups by preventing dynamic texture
+selection, and the architectural workarounds—such as conditional
+branching and texture atlases—developers were forced to implement.</p>
+<h2 id="the-restriction-in-glsl-es-100">The Restriction in GLSL ES
+1.00</h2>
+<p>The GLSL ES 1.00 specification mandated that indices used to access
+arrays of <code>sampler2D</code> or <code>samplerCube</code> had to be
+constant integral expressions. While some implementations permitted loop
+indices within fully unrollable loops, arbitrary run-time expressions
+(such as vertex attributes, varying variables, or dynamically calculated
+values) could not be used to index sampler arrays.</p>
+<p>Because early mobile hardware lacked unified register architectures
+and advanced indirect addressing capabilities in texture units, hardware
+drivers could not dynamically route texture sampling instructions to
+varying sampler units on a per-fragment basis. The specification
+reflected these hardware limits to ensure consistent baseline
+compatibility.</p>
+<h2 id="impact-on-shader-execution-and-branching">Impact on Shader
+Execution and Branching</h2>
+<p>Because shaders could not evaluate
+<code>texture2D(u_textures[dynamic_index], v_uv)</code> directly,
+developers had to replace indirect lookups with explicit conditional
+branching trees. A typical implementation required chained
+<code>if-else</code> blocks:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> color<span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>materialIndex <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> <span class="dt">texture2D</span><span class="op">(</span>u_texture0<span class="op">,</span> v_uv<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span>materialIndex <span class="op">==</span> <span class="dv">1</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> <span class="dt">texture2D</span><span class="op">(</span>u_texture1<span class="op">,</span> v_uv<span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> <span class="dt">texture2D</span><span class="op">(</span>u_texture2<span class="op">,</span> v_uv<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This structural necessity produced several distinct performance
+challenges:</p>
+<ol type="1">
+<li><strong>Warp and Wavefront Divergence:</strong> GPUs execute
+fragments in lockstep across SIMD warps or wavefronts. When adjacent
+pixels required textures from different branches, both paths of the
+conditional statement were executed, masking out inactive threads and
+substantially degrading fragment throughput.</li>
+<li><strong>Implicit Derivative Disruptions:</strong> Texture sampling
+operations rely on implicit screen-space derivatives (<span
+class="math inline">\(dFdx\)</span> and <span
+class="math inline">\(dFdy\)</span>) to select mipmap levels. Placing
+texture lookups inside non-uniform conditional branches creates
+undefined or discontinuous derivatives, often resulting in visual
+sampling artifacts or forced fallback to explicit LOD sampling where
+available.</li>
+<li><strong>Instruction Cache Pressure:</strong> Large conditional
+ladders expand the compiled shader code significantly. In batch
+rendering systems attempting to bind dozens of materials at once, the
+code footprint often bloated beyond the cache capacities of legacy
+mobile GPUs.</li>
+</ol>
+<h2 id="texture-atlases-as-the-primary-workaround">Texture Atlases as
+the Primary Workaround</h2>
+<p>To circumvent the inability to dynamically index samplers without
+incurring branching penalties, developers predominantly relied on
+texture atlasing. By combining multiple distinct textures into a single
+large texture page, a single constant sampler could be referenced while
+dynamic indices were converted into UV coordinate offsets.</p>
+<p>While texture atlasing avoided sampler array indexing entirely, it
+introduced its own graphics pipeline issues:</p>
+<ul>
+<li><strong>Mipmapping Bleed:</strong> Sub-textures adjacent to one
+another in an atlas tend to bleed colors across borders at lower mipmap
+levels, requiring padding, clamping math, or manual derivative
+handling.</li>
+<li><strong>Wrap Mode Incompatibility:</strong> Standard texture
+wrapping modes like <code>GL_REPEAT</code> cannot be natively applied to
+regions inside an atlas, requiring complex modulo operations in the
+fragment shader that increase arithmetic overhead.</li>
+</ul>
+<h2 id="resolution-in-later-standards">Resolution in Later
+Standards</h2>
+<p>The limitation was resolved with the introduction of GLSL ES 3.00
+(OpenGL ES 3.0 / WebGL 2.0). Modern specifications introduced 2D texture
+arrays (<code>sampler2DArray</code>), which treat layered slices of a
+single texture as an indexed coordinate. This architecture provides the
+performance profile of a single bound sampler while allowing
+non-constant, dynamically computed float or integer layer selection in a
+single sampling instruction, rendering the legacy indexing restrictions
+obsolete.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

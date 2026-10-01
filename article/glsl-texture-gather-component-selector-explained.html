@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL textureGather Component Selector Explained - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), the textureGather function retrieves the four texels that would normally be used during bilinear interpolation and packs one channel from each texel into a single four-component vector. The component selector parameter">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-texture-gather-component-selector-explained">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL textureGather Component Selector Explained - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-texture-gather-component-selector-explained" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), the textureGather function retrieves the four texels that would normally be used during bilinear interpolation and packs one channel from each texel into a single four-component vector. The component selector parameter" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-texturegather-component-selector-explained">GLSL
+textureGather Component Selector Explained</h1>
+<p>In OpenGL Shading Language (GLSL), the <code>textureGather</code>
+function retrieves the four texels that would normally be used during
+bilinear interpolation and packs one channel from each texel into a
+single four-component vector. The component selector parameter
+determines exactly which color channel—red, green, blue, or alpha—is
+extracted from these four neighboring texels. By isolating a specific
+channel across a 2x2 texel footprint in a single operation, this
+parameter enables efficient custom filtering, shadow mapping, and packed
+data processing.</p>
+<h3 id="function-signature-and-selector-values">Function Signature and
+Selector Values</h3>
+<p>The standard overload for two-dimensional sampling takes the
+following form:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>gvec4 <span class="bu">textureGather</span><span class="op">(</span>gsampler2D <span class="dt">sampler</span><span class="op">,</span> <span class="dt">vec2</span> P <span class="op">[,</span> <span class="dt">int</span> comp<span class="op">]);</span></span></code></pre></div>
+<p>The <code>comp</code> parameter is an optional integer specifying the
+zero-based index of the component to extract:</p>
+<ul>
+<li><code>0</code>: Red (<code>r</code> / <code>x</code>) component
+(default if omitted)</li>
+<li><code>1</code>: Green (<code>g</code> / <code>y</code>)
+component</li>
+<li><code>2</code>: Blue (<code>b</code> / <code>z</code>)
+component</li>
+<li><code>3</code>: Alpha (<code>a</code> / <code>w</code>)
+component</li>
+</ul>
+<p>The value of <code>comp</code> must be a compile-time constant
+expression within the range <code>0</code> to <code>3</code>. If a
+requested component is not present in the texture's internal format (for
+example, requesting component <code>2</code> from a two-channel
+<code>GL_RG</code> texture), GLSL returns a default fallback
+value—typically <code>0.0</code> for missing color channels or
+<code>1.0</code> for missing alpha.</p>
+<h3 id="output-vector-layout">Output Vector Layout</h3>
+<p>When <code>textureGather</code> executes, it samples the 2x2
+footprint around coordinate <code>P</code> and assigns the chosen
+component from each texel to the returned <code>vec4</code> in a
+counter-clockwise order:</p>
+<ul>
+<li><code>.x</code>: Texel at <code>[i, j + 1]</code> (top-left)</li>
+<li><code>.y</code>: Texel at <code>[i + 1, j + 1]</code>
+(top-right)</li>
+<li><code>.z</code>: Texel at <code>[i + 1, j]</code>
+(bottom-right)</li>
+<li><code>.w</code>: Texel at <code>[i, j]</code> (bottom-left)</li>
+</ul>
+<p>Because all four components of the return vector belong to the same
+channel specified by <code>comp</code>, developers can implement custom
+interpolation weights without calling standard texture lookups multiple
+times.</p>
+<h3 id="practical-applications">Practical Applications</h3>
+<p>The component selector is particularly valuable in the following
+scenarios:</p>
+<ul>
+<li><strong>Packed Texture Atlases and G-Buffers:</strong> Modern
+rendering pipelines frequently pack unrelated single-channel data into
+different channels of one texture (e.g., roughness in R, metallic in G,
+ambient occlusion in B). The component selector allows a shader to
+gather neighbors for a specific property without fetching or
+reconstructing the entire RGBA color.</li>
+<li><strong>Shadow and Depth Processing:</strong> While depth textures
+naturally rely on component <code>0</code>, custom depth packing or
+multi-layer shadow maps can use the selector to isolate depth data
+stored across arbitrary channels.</li>
+<li><strong>Custom Reconstruction Filters:</strong> Hardware bilinear
+filtering is limited to linear blending. Gathering a specific channel
+across four texels allows shaders to perform non-linear filtering, such
+as bicubic, Catmull-Rom, or threshold-based edge-aware filtering, on
+individual scalar fields with minimal memory bandwidth overhead.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

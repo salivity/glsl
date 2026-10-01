@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL imageStore Behavior for Raw Texels - glsl</title>
+    <meta name="description" content="This article provides an overview of the imageStore function in GLSL, detailing how it writes raw texel data into image variables. It covers function mechanics, type-matching rules, component truncation, format conversions, out-of-bounds behavior, and th">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-image-store-behavior-for-raw-texels">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL imageStore Behavior for Raw Texels - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-image-store-behavior-for-raw-texels" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of the imageStore function in GLSL, detailing how it writes raw texel data into image variables. It covers function mechanics, type-matching rules, component truncation, format conversions, out-of-bounds behavior, and th" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-imagestore-behavior-for-raw-texels">GLSL imageStore
+Behavior for Raw Texels</h1>
+<p>This article provides an overview of the <code>imageStore</code>
+function in GLSL, detailing how it writes raw texel data into image
+variables. It covers function mechanics, type-matching rules, component
+truncation, format conversions, out-of-bounds behavior, and the memory
+coherency requirements necessary to ensure written values are read
+correctly across shader invocations.</p>
+<h3 id="function-signature-and-core-mechanism">Function Signature and
+Core Mechanism</h3>
+<p>In OpenGL Shading Language (GLSL), <code>imageStore</code> is a
+built-in function used to perform random-access writes to image
+variables without blending or filtering. Its general signature is:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="bu">imageStore</span><span class="op">(</span><span class="dt">writeonly</span> gimageIMAGE_PARAMS image<span class="op">,</span> ivecCOORD_PARAMS P<span class="op">,</span> gvec4 data<span class="op">);</span></span></code></pre></div>
+<p>The function takes an image unit, an integer coordinate vector
+matching the dimensionality of the target image, and a four-component
+vector (<code>vec4</code>, <code>ivec4</code>, or <code>uvec4</code>)
+containing the raw texel value to be written. The data type of the input
+vector must match the underlying scalar type of the image format:
+floating-point images require <code>vec4</code>, signed integer images
+require <code>ivec4</code>, and unsigned integer images require
+<code>uvec4</code>.</p>
+<h3 id="component-truncation-and-unused-channels">Component Truncation
+and Unused Channels</h3>
+<p>Regardless of the target image format, <code>imageStore</code> always
+expects a four-component vector as the payload. When writing to formats
+with fewer than four channels, excess components are discarded:</p>
+<ul>
+<li><strong>Single-channel formats (e.g., <code>r32f</code>,
+<code>r8</code>):</strong> Only <code>data.r</code> (or
+<code>data.x</code>) is written. Components <code>y</code>,
+<code>z</code>, and <code>w</code> are ignored.</li>
+<li><strong>Two-channel formats (e.g., <code>rg16f</code>,
+<code>rg32ui</code>):</strong> Only <code>data.rg</code> (or
+<code>data.xy</code>) are written. Components <code>z</code> and
+<code>w</code> are ignored.</li>
+<li><strong>Three-channel formats (where supported) and four-channel
+formats:</strong> Components are mapped directly to the available
+channels in order (R, G, B, A).</li>
+</ul>
+<h3 id="data-conversion-and-quantization">Data Conversion and
+Quantization</h3>
+<p>The raw values passed to <code>imageStore</code> undergo conversion
+according to the memory format qualifier defined on the image variable
+in the shader (or the bound texture's internal format):</p>
+<ul>
+<li><strong>Floating-Point Formats (<code>rgba32f</code>,
+<code>rgba16f</code>):</strong> Values are stored directly or rounded to
+the appropriate floating-point precision (e.g., 32-bit values are
+converted to half-precision floats for 16-bit targets).</li>
+<li><strong>Normalized Formats (<code>rgba8</code>,
+<code>r16_snorm</code>):</strong> Floating-point values are converted to
+fixed-point integers. Unsigned normalized formats (<code>unorm</code>)
+clamp input values to the range <code>[0.0, 1.0]</code> before scaling
+to integer space. Signed normalized formats (<code>snorm</code>) clamp
+input values to the range <code>[-1.0, 1.0]</code>.</li>
+<li><strong>Pure Integer Formats (<code>rgba32i</code>,
+<code>rgba32ui</code>, <code>r8ui</code>):</strong> Raw integer values
+are written without normalization. If the target format has fewer bits
+than the shader integer (e.g., writing to <code>r8ui</code>), values are
+truncated to the target bit depth.</li>
+</ul>
+<h3 id="out-of-bounds-behavior">Out-of-Bounds Behavior</h3>
+<p>If the coordinate <code>P</code> passed to <code>imageStore</code>
+falls outside the valid dimensions of the target image, the write
+operation is discarded. Unlike standard memory writes in native C/C++,
+writing out of bounds via <code>imageStore</code> does not cause memory
+corruption or a hardware fault; it acts as a safe no-op.</p>
+<h3 id="memory-coherency-and-visibility">Memory Coherency and
+Visibility</h3>
+<p>Writes performed by <code>imageStore</code> are not automatically
+coherent with subsequent memory reads. Because the graphics pipeline
+executes work concurrently across cache domains:</p>
+<ol type="1">
+<li><strong>In-Shader Reads:</strong> If an invocation writes data with
+<code>imageStore</code> and later reads it via <code>imageLoad</code>,
+the variable should be declared with the <code>coherent</code> memory
+qualifier.</li>
+<li><strong>Pipeline Barriers:</strong> For subsequent draw calls,
+compute dispatches, or texture sampling operations to see texels written
+by <code>imageStore</code>, an explicit memory barrier must be issued on
+the host side (such as
+<code>glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)</code> or
+<code>GL_TEXTURE_FETCH_BARRIER_BIT</code>) or within the shader via
+<code>memoryBarrierImage()</code>.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

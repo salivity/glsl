@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does the GLSL Step Function Work? - glsl</title>
+    <meta name="description" content="The OpenGL Shading Language (GLSL) step function is a fundamental mathematical intrinsic used to create hard, binary step-edge transitions in procedural shaders. This article explores the mathematical definition, execution mechanics, and visual consequen">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-the-glsl-step-function-work">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does the GLSL Step Function Work? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-the-glsl-step-function-work" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The OpenGL Shading Language (GLSL) step function is a fundamental mathematical intrinsic used to create hard, binary step-edge transitions in procedural shaders. This article explores the mathematical definition, execution mechanics, and visual consequen" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-the-glsl-step-function-work">How Does the GLSL Step
+Function Work?</h1>
+<p>The OpenGL Shading Language (GLSL) <code>step</code> function is a
+fundamental mathematical intrinsic used to create hard, binary step-edge
+transitions in procedural shaders. This article explores the
+mathematical definition, execution mechanics, and visual consequences of
+the <code>step</code> function, detailing how it evaluates input
+thresholds, its performance advantages as a branchless operation, the
+visual aliasing artifacts it can produce, and how it compares to
+smoothed interpolation alternatives like <code>smoothstep</code>.</p>
+<h2 id="mathematical-definition-and-syntax">Mathematical Definition and
+Syntax</h2>
+<p>In GLSL, the <code>step</code> function implements the standard
+Heaviside step function. It evaluates an input coordinate against a
+predefined threshold edge and outputs either <code>0.0</code> or
+<code>1.0</code>.</p>
+<p>The standard function signatures in GLSL are:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="bu">step</span><span class="op">(</span><span class="dt">float</span> edge<span class="op">,</span> <span class="dt">float</span> x<span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span>  <span class="bu">step</span><span class="op">(</span><span class="dt">vec2</span> edge<span class="op">,</span>  <span class="dt">vec2</span> x<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span>  <span class="bu">step</span><span class="op">(</span><span class="dt">vec3</span> edge<span class="op">,</span>  <span class="dt">vec3</span> x<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span>  <span class="bu">step</span><span class="op">(</span><span class="dt">vec4</span> edge<span class="op">,</span>  <span class="dt">vec4</span> x<span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>genType <span class="bu">step</span><span class="op">(</span><span class="dt">float</span> edge<span class="op">,</span> genType x<span class="op">);</span></span></code></pre></div>
+<p>Mathematically, for any component, the function evaluates as:</p>
+<p><span class="math display">\[\text{step}(\text{edge}, x) =
+\begin{cases} 0.0 &amp; \text{if } x &lt; \text{edge} \\ 1.0 &amp;
+\text{if } x \ge \text{edge} \end{cases}\]</span></p>
+<p>When vectors are provided, the operation executes component-wise. If
+the <code>edge</code> parameter is passed as a single scalar
+<code>float</code> alongside a vector <code>x</code>, the scalar
+threshold is broadcast across all vector components simultaneously.</p>
+<h2 id="step-edge-behavior-and-hardware-execution">Step-Edge Behavior
+and Hardware Execution</h2>
+<p>When used to construct spatial patterns—such as masks, borders,
+checkerboards, or cutouts—the <code>step</code> function produces an
+instantaneous, non-continuous edge transition. The output switches
+abruptly at the exact boundary coordinate where <span
+class="math inline">\(x\)</span> equals the edge parameter.</p>
+<h3 id="branchless-thresholding">Branchless Thresholding</h3>
+<p>On modern GPU architectures, conditional branching (such as
+<code>if-else</code> blocks) can cause warp divergence when adjacent
+fragment threads execute different execution paths. The
+<code>step</code> function translates directly into hardware-level
+conditional set or comparison instructions (such as <code>SETGE</code>
+or conditional move operations). This ensures that every fragment
+executes the exact same instruction sequence without branching
+penalties, making it an efficient method for generating masks.</p>
+<h3 id="discontinuous-derivatives">Discontinuous Derivatives</h3>
+<p>Because the transition is instantaneous, the mathematical derivative
+of the function is zero everywhere except at the exact threshold, where
+the slope is infinite. In screen-space, standard hardware derivative
+functions like <code>dFdx(step(edge, x))</code> and
+<code>dFdy(step(edge, x))</code> return zero for almost all pixels,
+completely missing the sub-pixel location of the transition
+boundary.</p>
+<h2 id="aliasing-and-visual-artifacts">Aliasing and Visual
+Artifacts</h2>
+<p>The primary limitation of using <code>step</code> for visual
+transitions is spatial aliasing (the "stair-stepping" or "jaggies"
+effect).</p>
+<p>Because screen pixels sample discrete spatial coordinates,
+high-frequency spatial changes cannot be reconstructed properly without
+filtering:</p>
+<ul>
+<li><strong>Pixel Snapping:</strong> A pixel whose center coordinate
+evaluates to <code>0.499</code> receives an output of <code>0.0</code>,
+while a neighboring pixel at <code>0.501</code> receives
+<code>1.0</code>.</li>
+<li><strong>Temporal Shimmering:</strong> In animated scenes or dynamic
+cameras, hard edges created by <code>step</code> pop abruptly across
+pixel boundaries, causing noticeable shimmering and visual noise.</li>
+<li><strong>Mipmapping Issues:</strong> If the output of a
+<code>step</code> function is used directly to derive UV coordinates or
+sample textures with implicit level-of-detail calculation, the
+discontinuity can trigger incorrect texture mipmap levels along the
+boundary edge.</li>
+</ul>
+<h2 id="comparing-step-and-smoothstep">Comparing Step and
+Smoothstep</h2>
+<p>To mitigate aliasing artifacts along edge transitions, GLSL provides
+the <code>smoothstep</code> function. Understanding the difference
+between these two functions determines when each should be applied.</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th><code>step(edge, x)</code></th>
+<th><code>smoothstep(edge0, edge1, x)</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Transition Width</strong></td>
+<td>Zero (instantaneous)</td>
+<td>Configurable (<span class="math inline">\([\text{edge0},
+\text{edge1}]\)</span>)</td>
+</tr>
+<tr>
+<td><strong>Interpolation</strong></td>
+<td>None (Binary <code>0.0</code> or <code>1.0</code>)</td>
+<td>Cubic Hermite polynomial</td>
+</tr>
+<tr>
+<td><strong>Anti-Aliasing</strong></td>
+<td>Prone to harsh aliasing</td>
+<td>Naturally mitigates aliasing when matched to pixel width</td>
+</tr>
+<tr>
+<td><strong>Continuity</strong></td>
+<td>Discontinuous (<span class="math inline">\(C^{-1}\)</span>)</td>
+<td>Smoothly continuous (<span class="math inline">\(C^1\)</span>)</td>
+</tr>
+<tr>
+<td><strong>Primary Use Cases</strong></td>
+<td>Logical masks, binary gating, data mapping</td>
+<td>Visual shapes, soft borders, lighting falloffs</td>
+</tr>
+</tbody>
+</table>
+<p>While <code>smoothstep</code> provides smooth visual rendering across
+a small screen-space span (often calculated using <code>fwidth</code>),
+the <code>step</code> function remains optimal when an absolute
+mathematical threshold is required without intermediate blend
+states.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

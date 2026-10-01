@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Branching Divergence and Warp Efficiency in GLSL - glsl</title>
+    <meta name="description" content="This article explains dynamic branching divergence in GLSL and examines how it degrades GPU warp execution efficiency. You will learn the mechanics of the Single Instruction, Multiple Threads (SIMT) architecture, how data-dependent conditionals force bra">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/dynamic-branching-divergence-and-warp-efficiency-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Dynamic Branching Divergence and Warp Efficiency in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/dynamic-branching-divergence-and-warp-efficiency-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains dynamic branching divergence in GLSL and examines how it degrades GPU warp execution efficiency. You will learn the mechanics of the Single Instruction, Multiple Threads (SIMT) architecture, how data-dependent conditionals force bra" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="dynamic-branching-divergence-and-warp-efficiency-in-glsl">Dynamic
+Branching Divergence and Warp Efficiency in GLSL</h1>
+<p>This article explains dynamic branching divergence in GLSL and
+examines how it degrades GPU warp execution efficiency. You will learn
+the mechanics of the Single Instruction, Multiple Threads (SIMT)
+architecture, how data-dependent conditionals force branch
+serialization, and practical approaches to minimize performance loss in
+shader programming.</p>
+<h2 id="understanding-gpu-warps-and-the-simt-model">Understanding GPU
+Warps and the SIMT Model</h2>
+<p>Modern GPUs achieve high throughput by executing code via the Single
+Instruction, Multiple Threads (SIMT) architecture. Instead of managing
+threads independently like a CPU, the GPU groups threads into fixed-size
+units known as <strong>warps</strong> (NVIDIA, typically 32 threads) or
+<strong>wavefronts</strong> (AMD, typically 32 or 64 threads).</p>
+<p>All threads within a single warp share the same instruction pointer.
+At any given clock cycle, every active thread in that warp executes the
+exact same assembly instruction, but on different data (such as
+different fragment coordinates or vertex attributes).</p>
+<h2 id="what-is-dynamic-branching-divergence">What is Dynamic Branching
+Divergence?</h2>
+<p>In GLSL, branching occurs through control-flow statements such as
+<code>if-else</code>, <code>switch</code>, and dynamic loops
+(<code>for</code>, <code>while</code>). Branching falls into two
+categories:</p>
+<ol type="1">
+<li><strong>Uniform Branching:</strong> The condition relies on uniform
+variables or compile-time constants. Because uniforms have identical
+values across all invocations in a draw call, every thread in every warp
+follows the exact same path. No divergence occurs.</li>
+<li><strong>Dynamic Branching:</strong> The condition evaluates dynamic
+data that varies per fragment or vertex, such as texture samples, normal
+vectors, or interpolated inputs.</li>
+</ol>
+<p><strong>Dynamic branching divergence</strong> occurs when threads
+within the <em>same</em> warp evaluate a dynamic condition
+differently—meaning some threads evaluate the condition to
+<code>true</code> while others evaluate it to <code>false</code>.</p>
+<h2 id="how-divergence-degrades-warp-execution-efficiency">How
+Divergence Degrades Warp Execution Efficiency</h2>
+<p>Because all threads in a warp share a single instruction issue unit,
+a warp cannot execute two different code paths simultaneously. When
+divergence occurs, the GPU hardware must resolve the paths sequentially
+using execution masks:</p>
+<ol type="1">
+<li><strong>Path Serialization:</strong> The hardware first executes the
+<code>true</code> path. The threads that evaluated to <code>false</code>
+are masked off (disabled), sitting idle while consuming clock
+cycles.</li>
+<li><strong>Secondary Path Execution:</strong> The hardware then
+switches the mask and executes the <code>false</code> path. The threads
+that completed the <code>true</code> path are now disabled and
+idle.</li>
+<li><strong>Reconvergence:</strong> Once all divergent branches
+complete, the warp converges back to unified execution.</li>
+</ol>
+<h3 id="performance-consequences">Performance Consequences</h3>
+<ul>
+<li><strong>Additive Latency:</strong> Instead of the branch executing
+in the time of the taken path, the warp requires the combined time of
+both paths: <span class="math display">\[\text{Execution Time} =
+\text{Time}(\text{Branch A}) + \text{Time}(\text{Branch
+B})\]</span></li>
+<li><strong>Reduced ALU Utilization:</strong> If only 1 out of 32
+threads takes a costly branch, the remaining 31 threads must idle while
+that single thread executes. The warp operates at <span
+class="math inline">\(\frac{1}{32}\)</span> (roughly 3.1%) compute
+efficiency for the duration of that branch.</li>
+<li><strong>Register Pressure and Occupancy:</strong> Complex branching
+logic can increase the number of temporary registers required by the
+shader, which lowers overall warp occupancy per Streaming Multiprocessor
+(SM) / Compute Unit (CU).</li>
+</ul>
+<h2 id="mitigating-divergence-in-glsl">Mitigating Divergence in
+GLSL</h2>
+<p>To maintain high warp execution efficiency, consider the following
+optimization strategies:</p>
+<ul>
+<li><strong>Favor Uniform Conditions:</strong> When possible, isolate
+dynamic logic so that branch decisions rely on uniforms rather than
+per-fragment evaluations.</li>
+<li><strong>Spatial Coherency:</strong> Fragments are mapped to warps in
+spatial tiles (often <span class="math inline">\(8 \times 4\)</span> or
+<span class="math inline">\(4 \times 8\)</span> pixels). If branching
+conditions naturally correlate with spatial proximity (such as material
+boundaries or screen-space effects), adjacent pixels will evaluate the
+same branch, reducing divergence to only the edge boundaries.</li>
+<li><strong>Branch Flattening via Mathematical Functions:</strong> For
+short, non-expensive operations, conditional moves or built-in functions
+like <code>mix()</code>, <code>step()</code>, and <code>clamp()</code>
+can replace branches. However, avoid replacing branches with math if
+both paths involve heavy texture lookups or complex arithmetic, as
+functions like <code>mix()</code> always evaluate both sides of the
+expression.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

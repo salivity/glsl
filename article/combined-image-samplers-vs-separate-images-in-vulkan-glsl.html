@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Combined Image Samplers vs Separate Images in Vulkan GLSL - glsl</title>
+    <meta name="description" content="Vulkan GLSL supports two distinct approaches for sampling textures: combined image samplers and decoupled (separate) sampled images paired with standalone samplers. While combined image samplers bundle the texture data and sampling configuration into a s">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/combined-image-samplers-vs-separate-images-in-vulkan-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Combined Image Samplers vs Separate Images in Vulkan GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/combined-image-samplers-vs-separate-images-in-vulkan-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Vulkan GLSL supports two distinct approaches for sampling textures: combined image samplers and decoupled (separate) sampled images paired with standalone samplers. While combined image samplers bundle the texture data and sampling configuration into a s" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="combined-image-samplers-vs-separate-images-in-vulkan-glsl">Combined
+Image Samplers vs Separate Images in Vulkan GLSL</h1>
+<p>Vulkan GLSL supports two distinct approaches for sampling textures:
+combined image samplers and decoupled (separate) sampled images paired
+with standalone samplers. While combined image samplers bundle the
+texture data and sampling configuration into a single descriptor, the
+separated approach decouples the image resource from the sampler state.
+This article explains the syntax used to declare both types in GLSL, how
+they map to Vulkan descriptor types, and how to differentiate their
+usage in shader code.</p>
+<h2 id="combined-image-samplers">Combined Image Samplers</h2>
+<p>A combined image sampler packages an image resource and a sampler
+configuration into a single entity. It corresponds to the Vulkan
+descriptor type
+<code>VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER</code>.</p>
+<h3 id="declaration-syntax">Declaration Syntax</h3>
+<p>To declare a combined image sampler, use the traditional OpenGL-style
+<code>sampler</code> types (such as <code>sampler2D</code>,
+<code>samplerCube</code>, or <code>sampler3D</code>):</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">sampler2D</span> combinedImageSampler<span class="op">;</span></span></code></pre></div>
+<h3 id="sampling-in-shader-code">Sampling in Shader Code</h3>
+<p>Because the sampling parameters (filtering, addressing modes) and the
+image data are coupled, you can pass the identifier directly to GLSL
+texture lookup functions:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> color <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>combinedImageSampler<span class="op">,</span> uvCoordinates<span class="op">);</span></span></code></pre></div>
+<h2 id="separate-sampled-images-and-samplers">Separate Sampled Images
+and Samplers</h2>
+<p>Vulkan allows the separation of image view state from sampler state.
+This corresponds to two distinct descriptor types:
+<code>VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE</code> for the texture data and
+<code>VK_DESCRIPTOR_TYPE_SAMPLER</code> for the filtering and wrapping
+configurations. Decoupling them allows a single sampler to be reused
+across multiple textures, or multiple samplers (such as nearest and
+linear) to sample the same texture.</p>
+<h3 id="declaration-syntax-1">Declaration Syntax</h3>
+<p>Separate resources are declared using the <code>texture</code> prefix
+for image resources and the raw <code>sampler</code> keyword for sampler
+objects:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">texture2D</span> separateTexture<span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">sampler</span> separateSampler<span class="op">;</span></span></code></pre></div>
+<ul>
+<li><code>texture2D</code> (or <code>textureCube</code>,
+<code>texture3D</code>, etc.) represents only the image data.</li>
+<li><code>sampler</code> represents only the sampling rules (filtering,
+mipmap modes, wrapping).</li>
+</ul>
+<h3 id="sampling-in-shader-code-1">Sampling in Shader Code</h3>
+<p>Because a <code>texture2D</code> cannot be read without specifying
+sampling behavior, you must construct a temporary combined sampler at
+the point of sampling using the constructor syntax:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> color <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span><span class="dt">sampler2D</span><span class="op">(</span>separateTexture<span class="op">,</span> separateSampler<span class="op">),</span> uvCoordinates<span class="op">);</span></span></code></pre></div>
+<p>The expression
+<code>sampler2D(separateTexture, separateSampler)</code> combines the
+two separate components on the fly for the <code>texture()</code>
+call.</p>
+<h2 id="distinguishing-between-the-two-approaches">Distinguishing
+Between the Two Approaches</h2>
+<p>You can easily distinguish combined image samplers from separate
+images by examining three primary areas:</p>
+<ol type="1">
+<li><p><strong>Type Names in GLSL Declarations</strong></p>
+<ul>
+<li>Combined: Prefixed with <code>sampler</code> followed by the
+dimensional type (e.g., <code>sampler2D</code>,
+<code>sampler2DArray</code>, <code>samplerCube</code>).</li>
+<li>Separate: Images are declared using <code>texture</code> followed by
+dimension (e.g., <code>texture2D</code>, <code>textureCube</code>),
+while samplers are declared using the pure keyword
+<code>sampler</code>.</li>
+</ul></li>
+<li><p><strong>Descriptor Set Allocation</strong></p>
+<ul>
+<li>Combined image samplers consume a single descriptor binding
+(<code>VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER</code>).</li>
+<li>Separate images and samplers require two separate bindings: one for
+<code>VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE</code> and another for
+<code>VK_DESCRIPTOR_TYPE_SAMPLER</code>.</li>
+</ul></li>
+<li><p><strong>Sampling Call Syntax</strong></p>
+<ul>
+<li>Combined: Evaluated directly:
+<code>texture(mySampler2D, uv)</code>.</li>
+<li>Separate: Evaluated via constructor syntax:
+<code>texture(sampler2D(myTexture2D, mySampler), uv)</code>.</li>
+</ul></li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

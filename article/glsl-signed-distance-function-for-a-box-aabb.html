@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Signed Distance Function for a Box (AABB) - glsl</title>
+    <meta name="description" content="This article provides a concise technical breakdown of formulating an exact Signed Distance Function (SDF) for an axis-aligned bounding box (AABB) in GLSL. You will learn the canonical GLSL implementation popularized by Inigo Quilez, how coordinate foldi">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-signed-distance-function-for-a-box-aabb">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Signed Distance Function for a Box (AABB) - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-signed-distance-function-for-a-box-aabb" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a concise technical breakdown of formulating an exact Signed Distance Function (SDF) for an axis-aligned bounding box (AABB) in GLSL. You will learn the canonical GLSL implementation popularized by Inigo Quilez, how coordinate foldi" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-signed-distance-function-for-a-box-aabb">GLSL Signed
+Distance Function for a Box (AABB)</h1>
+<p>This article provides a concise technical breakdown of formulating an
+exact Signed Distance Function (SDF) for an axis-aligned bounding box
+(AABB) in GLSL. You will learn the canonical GLSL implementation
+popularized by Inigo Quilez, how coordinate folding simplifies the
+calculation, and the exact mathematical derivation distinguishing points
+outside the box from points inside.</p>
+<h3 id="the-canonical-glsl-implementation">The Canonical GLSL
+Implementation</h3>
+<p>An axis-aligned box is typically defined by its center position
+(assumed here to be at the origin <code>vec3(0.0)</code>) and its
+half-extents vector <code>b</code> (the distances from the center to
+each face along the X, Y, and Z axes).</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">sdBox</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">,</span> <span class="dt">vec3</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> q <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span>p<span class="op">)</span> <span class="op">-</span> b<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">length</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>q<span class="op">,</span> <span class="fl">0.0</span><span class="op">))</span> <span class="op">+</span> <span class="bu">min</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>q<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="bu">max</span><span class="op">(</span>q<span class="op">.</span><span class="fu">y</span><span class="op">,</span> q<span class="op">.</span><span class="fu">z</span><span class="op">)),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="step-by-step-breakdown">Step-by-Step Breakdown</h3>
+<h4 id="1-exploiting-octant-symmetry-with-absp">1. Exploiting Octant
+Symmetry with <code>abs(p)</code></h4>
+<p>Because an axis-aligned box is symmetric across the XY, YZ, and XZ
+planes, any query point <code>p</code> can be mirrored into the first
+positive octant using <code>abs(p)</code>. This reduces the problem from
+evaluating eight octants to evaluating only one, drastically simplifying
+boundary checks.</p>
+<h4 id="2-calculating-the-offset-vector-q">2. Calculating the Offset
+Vector <code>q</code></h4>
+<p>The vector <code>q = abs(p) - b</code> measures the signed distance
+component-wise from the mirrored point to the box corner.</p>
+<ul>
+<li>If a component of <code>q</code> is positive, the point lies beyond
+the box boundary on that axis.</li>
+<li>If a component of <code>q</code> is negative, the point is within
+the box boundary along that axis.</li>
+</ul>
+<h4 id="3-calculating-the-exterior-distance">3. Calculating the Exterior
+Distance</h4>
+<p>When a point is outside the box, its distance to the nearest face,
+edge, or vertex is computed via:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">length</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>q<span class="op">,</span> <span class="fl">0.0</span><span class="op">))</span></span></code></pre></div>
+<p>The <code>max(q, 0.0)</code> operation clamps negative components to
+zero.</p>
+<ul>
+<li>If <code>p</code> is outside a single face, two components of
+<code>q</code> are negative and clamped to zero, leaving the standard
+Euclidean distance to that face.</li>
+<li>If <code>p</code> is outside an edge or corner, two or three
+components remain positive, and <code>length()</code> computes the
+Euclidean distance to that edge or corner.</li>
+<li>If <code>p</code> is inside the box, all components of
+<code>q</code> are negative, causing <code>max(q, 0.0)</code> to yield
+<code>vec3(0.0)</code>, whose length is <code>0.0</code>.</li>
+</ul>
+<h4 id="4-calculating-the-interior-distance">4. Calculating the Interior
+Distance</h4>
+<p>When a point is inside the box, the distance must be negative,
+corresponding to the distance to the closest face:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">min</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>q<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="bu">max</span><span class="op">(</span>q<span class="op">.</span><span class="fu">y</span><span class="op">,</span> q<span class="op">.</span><span class="fu">z</span><span class="op">)),</span> <span class="fl">0.0</span><span class="op">)</span></span></code></pre></div>
+<p>The term <code>max(q.x, max(q.y, q.z))</code> finds the component of
+<code>q</code> closest to zero, which represents the nearest boundary
+plane. The outer <code>min(..., 0.0)</code> ensures that this term only
+contributes a negative value when the point is strictly inside the box.
+For exterior points, this term evaluates to <code>0.0</code>.</p>
+<h4 id="5-combining-exterior-and-interior-terms">5. Combining Exterior
+and Interior Terms</h4>
+<p>Adding both components together:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="bu">length</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>q<span class="op">,</span> <span class="fl">0.0</span><span class="op">))</span> <span class="op">+</span> <span class="bu">min</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>q<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="bu">max</span><span class="op">(</span>q<span class="op">.</span><span class="fu">y</span><span class="op">,</span> q<span class="op">.</span><span class="fu">z</span><span class="op">)),</span> <span class="fl">0.0</span><span class="op">)</span></span></code></pre></div>
+<p>Because exterior points produce a zero interior term and interior
+points produce a zero exterior term, this single expression cleanly
+produces the correct signed Euclidean distance everywhere in 3D space
+without branching.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

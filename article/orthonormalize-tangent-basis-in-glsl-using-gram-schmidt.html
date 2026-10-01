@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orthonormalize Tangent Basis in GLSL Using Gram-Schmidt - glsl</title>
+    <meta name="description" content="Normal mapping relies on an orthonormal Tangent, Bitangent, and Normal (TBN) frame to accurately transform surface details from tangent space to world or view space. During linear vertex interpolation or mesh deformation, tangent vectors often lose their">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/orthonormalize-tangent-basis-in-glsl-using-gram-schmidt">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Orthonormalize Tangent Basis in GLSL Using Gram-Schmidt - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/orthonormalize-tangent-basis-in-glsl-using-gram-schmidt" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Normal mapping relies on an orthonormal Tangent, Bitangent, and Normal (TBN) frame to accurately transform surface details from tangent space to world or view space. During linear vertex interpolation or mesh deformation, tangent vectors often lose their" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="orthonormalize-tangent-basis-in-glsl-using-gram-schmidt">Orthonormalize
+Tangent Basis in GLSL Using Gram-Schmidt</h1>
+<p>Normal mapping relies on an orthonormal Tangent, Bitangent, and
+Normal (TBN) frame to accurately transform surface details from tangent
+space to world or view space. During linear vertex interpolation or mesh
+deformation, tangent vectors often lose their perpendicularity relative
+to interpolated normals, causing rendering artifacts. This article
+details the mathematical formulation and practical GLSL implementation
+of the Gram-Schmidt process to re-orthogonalize the tangent vector
+against the surface normal.</p>
+<h2 id="the-mathematical-principle">The Mathematical Principle</h2>
+<p>The standard Gram-Schmidt process takes a set of linearly independent
+vectors and generates an orthogonal basis spanning the same subspace. In
+computer graphics, the surface normal (<span
+class="math inline">\(\mathbf{N}\)</span>) is prioritized as the
+ground-truth direction for surface orientation. The tangent vector
+(<span class="math inline">\(\mathbf{T}\)</span>) must be adjusted so
+that it lies strictly within the plane perpendicular to <span
+class="math inline">\(\mathbf{N}\)</span>.</p>
+<p>The projection of vector <span
+class="math inline">\(\mathbf{T}\)</span> onto unit vector <span
+class="math inline">\(\mathbf{N}\)</span> is calculated as:</p>
+<p><span
+class="math display">\[\operatorname{proj}_{\mathbf{N}}(\mathbf{T}) =
+(\mathbf{T} \cdot \mathbf{N}) \mathbf{N}\]</span></p>
+<p>Subtracting this projection from <span
+class="math inline">\(\mathbf{T}\)</span> removes any component pointing
+along the normal, yielding an orthogonal tangent vector <span
+class="math inline">\(\mathbf{T}_{\perp}\)</span>:</p>
+<p><span class="math display">\[\mathbf{T}_{\perp} = \mathbf{T} -
+(\mathbf{T} \cdot \mathbf{N}) \mathbf{N}\]</span></p>
+<p>Normalizing <span class="math inline">\(\mathbf{T}_{\perp}\)</span>
+produces the unit tangent vector <span
+class="math inline">\(\mathbf{T}&#39;\)</span>. The bitangent vector
+(<span class="math inline">\(\mathbf{B}\)</span>) is then derived using
+the cross product of <span class="math inline">\(\mathbf{N}\)</span> and
+<span class="math inline">\(\mathbf{T}&#39;\)</span>, scaled by the
+handedness factor (<span class="math inline">\(w\)</span>) to preserve
+correct UV coordinate orientation across mirrored seams:</p>
+<p><span class="math display">\[\mathbf{B} = (\mathbf{N} \times
+\mathbf{T}&#39;) \cdot w\]</span></p>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>The algorithm can be implemented in either the vertex shader or the
+fragment shader. Performing it in the fragment shader yields the highest
+visual accuracy because it accounts for non-linearities introduced by
+perspective-correct attribute interpolation.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Inputs:</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">// inNormal: Interpolated surface normal (vec3)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// inTangent: Interpolated surface tangent with handedness stored in .w (vec4)</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 1. Normalize the surface normal</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> N <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>inNormal<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co">// 2. Re-orthogonalize T with respect to N using Gram-Schmidt</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> T <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>inTangent<span class="op">.</span><span class="fu">xyz</span> <span class="op">-</span> <span class="bu">dot</span><span class="op">(</span>inTangent<span class="op">.</span><span class="fu">xyz</span><span class="op">,</span> N<span class="op">)</span> <span class="op">*</span> N<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co">// 3. Compute the bitangent B using the cross product and handedness</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> B <span class="op">=</span> <span class="bu">cross</span><span class="op">(</span>N<span class="op">,</span> T<span class="op">)</span> <span class="op">*</span> inTangent<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="co">// 4. Construct the orthonormal TBN matrix</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="dt">mat3</span> TBN <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span>T<span class="op">,</span> B<span class="op">,</span> N<span class="op">);</span></span></code></pre></div>
+<h2 id="step-by-step-breakdown">Step-by-Step Breakdown</h2>
+<ol type="1">
+<li><strong>Normalize the Normal Vector</strong>: Vertex attributes lose
+unit length during rasterization interpolation. Normalizing
+<code>inNormal</code> first ensures the projection math <span
+class="math inline">\((\mathbf{T} \cdot \mathbf{N})\mathbf{N}\)</span>
+functions correctly without requiring division by <span
+class="math inline">\(\|\mathbf{N}\|^2\)</span>.</li>
+<li><strong>Project and Subtract</strong>: The expression
+<code>dot(inTangent.xyz, N) * N</code> computes the scalar projection of
+the tangent onto the normal and scales the normal by that factor.
+Subtracting this from <code>inTangent.xyz</code> guarantees the
+resulting vector is at a 90-degree angle to <code>N</code>.</li>
+<li><strong>Re-normalize the Tangent</strong>: Subtracting the
+projection reduces the magnitude of the tangent vector. A call to
+<code>normalize()</code> restores it to unit length.</li>
+<li><strong>Compute the Orthogonal Bitangent</strong>: Calculating
+<code>cross(N, T)</code> produces a third vector perpendicular to both
+<code>N</code> and <code>T</code>. Multiplying by
+<code>inTangent.w</code> preserves texture mirroring where UV
+coordinates are flipped on symmetric geometry.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phillips Spectrum Ocean Wave Displacement in GLSL - glsl</title>
+    <meta name="description" content="Simulating realistic ocean surfaces in real-time computer graphics relies on statistical oceanography and the fast Fourier transform. Synthesizing ocean wave displacement involves computing the Phillips spectrum in the frequency domain, propagating waves">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/phillips-spectrum-ocean-wave-displacement-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Phillips Spectrum Ocean Wave Displacement in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/phillips-spectrum-ocean-wave-displacement-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Simulating realistic ocean surfaces in real-time computer graphics relies on statistical oceanography and the fast Fourier transform. Synthesizing ocean wave displacement involves computing the Phillips spectrum in the frequency domain, propagating waves" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="phillips-spectrum-ocean-wave-displacement-in-glsl">Phillips
+Spectrum Ocean Wave Displacement in GLSL</h1>
+<p>Simulating realistic ocean surfaces in real-time computer graphics
+relies on statistical oceanography and the fast Fourier transform.
+Synthesizing ocean wave displacement involves computing the Phillips
+spectrum in the frequency domain, propagating waves through time using
+the deep-water dispersion relation, and transforming the frequency
+amplitudes into spatial displacement maps using a two-dimensional
+Inverse Fast Fourier Transform (IFFT) executed across GLSL shaders.</p>
+<h2 id="1-the-phillips-spectrum-formulation">1. The Phillips Spectrum
+Formulation</h2>
+<p>The Phillips spectrum models wind-driven equilibrium seas by
+calculating the statistical variance of wave heights for a given wave
+vector <span class="math inline">\(\mathbf{k} = (k_x, k_z)\)</span>. The
+mathematical formula for the Phillips spectrum <span
+class="math inline">\(P_h(\mathbf{k})\)</span> is:</p>
+<p><span class="math display">\[P_h(\mathbf{k}) = A
+\frac{e^{-\frac{1}{(k L)^2}}}{k^4} |\hat{\mathbf{k}} \cdot
+\hat{\mathbf{w}}|^2 e^{-k^2 l^2}\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(\mathbf{k}\)</span> is the 2D wave
+vector, and <span class="math inline">\(k = |\mathbf{k}|\)</span> is its
+magnitude.</li>
+<li><span class="math inline">\(\hat{\mathbf{k}} =
+\frac{\mathbf{k}}{k}\)</span> is the unit directional vector of the
+wave.</li>
+<li><span class="math inline">\(\hat{\mathbf{w}}\)</span> is the
+normalized wind direction vector.</li>
+<li><span class="math inline">\(V\)</span> is the wind speed, and <span
+class="math inline">\(g\)</span> is the gravitational constant (<span
+class="math inline">\(9.81 \, \text{m/s}^2\)</span>).</li>
+<li><span class="math inline">\(L = \frac{V^2}{g}\)</span> represents
+the largest possible wave generated by the wind speed.</li>
+<li><span class="math inline">\(A\)</span> is a global scaling factor
+adjusting wave amplitudes.</li>
+<li><span class="math inline">\(l\)</span> is an optional suppression
+factor to damp waves smaller than a specified capillary limit (<span
+class="math inline">\(l \ll L\)</span>).</li>
+</ul>
+<h2 id="2-generating-the-initial-frequency-domain-amplitudes">2.
+Generating the Initial Frequency Domain Amplitudes</h2>
+<p>To obtain real spatial heights after the transform, the frequency
+spectrum must satisfy Hermitian symmetry. Two independent Gaussian
+random variables <span class="math inline">\(\xi_r, \xi_i \sim
+\mathcal{N}(0, 1)\)</span> generate the base complex amplitude <span
+class="math inline">\(\tilde{h}_0(\mathbf{k})\)</span>:</p>
+<p><span class="math display">\[\tilde{h}_0(\mathbf{k}) =
+\frac{1}{\sqrt{2}} (\xi_r + i \xi_i) \sqrt{P_h(\mathbf{k})}\]</span></p>
+<p>The conjugate spectrum for opposite wave vectors is computed as:</p>
+<p><span class="math display">\[\tilde{h}_0^*(-\mathbf{k}) =
+\frac{1}{\sqrt{2}} (\xi_r - i \xi_i)
+\sqrt{P_h(-\mathbf{k})}\]</span></p>
+<h2 id="3-time-evolution-via-the-dispersion-relation">3. Time Evolution
+via the Dispersion Relation</h2>
+<p>Ocean waves evolve over time based on the gravitational dispersion
+relation for deep water:</p>
+<p><span class="math display">\[\omega(\mathbf{k}) = \sqrt{g
+k}\]</span></p>
+<p>The dynamic complex amplitude <span
+class="math inline">\(\tilde{h}(\mathbf{k}, t)\)</span> at time <span
+class="math inline">\(t\)</span> is calculated by advancing both the
+forward and conjugate frequencies:</p>
+<p><span class="math display">\[\tilde{h}(\mathbf{k}, t) =
+\tilde{h}_0(\mathbf{k}) e^{i \omega(\mathbf{k}) t} +
+\tilde{h}_0^*(-\mathbf{k}) e^{-i \omega(\mathbf{k}) t}\]</span></p>
+<p>Using Euler's identity (<span class="math inline">\(e^{i \theta} =
+\cos \theta + i \sin \theta\)</span>), this evaluation is performed
+directly in a GLSL compute or fragment shader:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// GLSL snippet for time-dependent spectrum evaluation</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">complexMult</span><span class="op">(</span><span class="dt">vec2</span> a<span class="op">,</span> <span class="dt">vec2</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec2</span><span class="op">(</span>a<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> b<span class="op">.</span><span class="fu">x</span> <span class="op">-</span> a<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> b<span class="op">.</span><span class="fu">y</span><span class="op">,</span> a<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> b<span class="op">.</span><span class="fu">y</span> <span class="op">+</span> a<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> b<span class="op">.</span><span class="fu">x</span><span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">evaluateWaveSpectrum</span><span class="op">(</span><span class="dt">vec2</span> h0<span class="op">,</span> <span class="dt">vec2</span> h0Conj<span class="op">,</span> <span class="dt">float</span> kLen<span class="op">,</span> <span class="dt">float</span> t<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> g <span class="op">=</span> <span class="fl">9.81</span><span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> w <span class="op">=</span> <span class="bu">sqrt</span><span class="op">(</span>g <span class="op">*</span> kLen<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> exp_iwt <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="bu">cos</span><span class="op">(</span>w <span class="op">*</span> t<span class="op">),</span> <span class="bu">sin</span><span class="op">(</span>w <span class="op">*</span> t<span class="op">));</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> exp_inv_iwt <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="bu">cos</span><span class="op">(</span>w <span class="op">*</span> t<span class="op">),</span> <span class="op">-</span><span class="bu">sin</span><span class="op">(</span>w <span class="op">*</span> t<span class="op">));</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fu">complexMult</span><span class="op">(</span>h0<span class="op">,</span> exp_iwt<span class="op">)</span> <span class="op">+</span> <span class="fu">complexMult</span><span class="op">(</span>h0Conj<span class="op">,</span> exp_inv_iwt<span class="op">);</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="4-inverse-fft-and-spatial-displacement-synthesis">4. Inverse FFT
+and Spatial Displacement Synthesis</h2>
+<p>The physical surface displacement vector <span
+class="math inline">\(\mathbf{S}(\mathbf{x}, t) = (D_x, h, D_z)\)</span>
+is synthesized by computing the 2D Inverse Discrete Fourier Transform
+(IDFT) of the complex frequency fields.</p>
+<h3 id="vertical-height-field">Vertical Height Field</h3>
+<p>The vertical displacement <span class="math inline">\(h(\mathbf{x},
+t)\)</span> at horizontal position <span
+class="math inline">\(\mathbf{x} = (x, z)\)</span> is synthesized
+via:</p>
+<p><span class="math display">\[h(\mathbf{x}, t) = \sum_{\mathbf{k}}
+\tilde{h}(\mathbf{k}, t) e^{i \mathbf{k} \cdot \mathbf{x}}\]</span></p>
+<h3 id="horizontal-choppy-displacement">Horizontal Choppy
+Displacement</h3>
+<p>To create peaked wave crests and flattened troughs, horizontal
+displacement components <span
+class="math inline">\(\mathbf{D}(\mathbf{x}, t)\)</span> are derived
+using the Hilbert transform of the wave height:</p>
+<p><span class="math display">\[\mathbf{D}(\mathbf{x}, t) =
+\sum_{\mathbf{k}} -i \frac{\mathbf{k}}{k} \tilde{h}(\mathbf{k}, t) e^{i
+\mathbf{k} \cdot \mathbf{x}}\]</span></p>
+<p>This splits into individual axes:</p>
+<p><span class="math display">\[\tilde{D}_x(\mathbf{k}, t) = -i
+\frac{k_x}{k} \tilde{h}(\mathbf{k}, t)\]</span> <span
+class="math display">\[\tilde{D}_z(\mathbf{k}, t) = -i \frac{k_z}{k}
+\tilde{h}(\mathbf{k}, t)\]</span></p>
+<h2 id="5-glsl-gpu-implementation-pipeline">5. GLSL GPU Implementation
+Pipeline</h2>
+<p>Running the summation directly requires <span
+class="math inline">\(\mathcal{O}(N^4)\)</span> operations, which is too
+slow for real-time applications. Instead, an <span
+class="math inline">\(\mathcal{O}(N^2 \log_2 N)\)</span> radix-2
+Cooley-Tukey butterfly algorithm is implemented across textures:</p>
+<ol type="1">
+<li><strong>Spectrum Texture Generation:</strong> A compute shader
+populates an <span class="math inline">\(N \times N\)</span> 32-bit
+floating-point texture containing <span
+class="math inline">\(\tilde{h}(\mathbf{k}, t)\)</span>, <span
+class="math inline">\(\tilde{D}_x(\mathbf{k}, t)\)</span>, and <span
+class="math inline">\(\tilde{D}_z(\mathbf{k}, t)\)</span>.</li>
+<li><strong>Horizontal 1D FFT Passes:</strong> A fragment/compute pass
+executes <span class="math inline">\(\log_2(N)\)</span> iterations along
+the rows, applying butterfly operations: <span
+class="math display">\[X_{k} = X_{k, \text{even}} + e^{-2\pi i k / N}
+X_{k, \text{odd}}\]</span></li>
+<li><strong>Vertical 1D FFT Passes:</strong> Another <span
+class="math inline">\(\log_2(N)\)</span> iterations are performed along
+the columns of the transposed or ping-pong target textures.</li>
+<li><strong>Vertex Shader Displacement:</strong> The real components of
+the resulting inverse transform map directly into the 3D vertex
+position: <span class="math display">\[Vertex.xyz =
+\mathbf{x}_{original} + \lambda \begin{pmatrix} D_x(\mathbf{x}, t) \\
+h(\mathbf{x}, t) \\ D_z(\mathbf{x}, t) \end{pmatrix}\]</span> where
+<span class="math inline">\(\lambda\)</span> is a choppiness factor
+preventing self-intersection when adjusted.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

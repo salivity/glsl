@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guide to GLSL lines_adjacency in Geometry Shaders - glsl</title>
+    <meta name="description" content="This article explains how the layout(linesadjacency) qualifier works in GLSL geometry shaders to access neighborhood mesh data. It breaks down the primitive assembly process, illustrates the mapping of the four input vertices, discusses drawing modes lik">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/guide-to-glsl-lines-adjacency-in-geometry-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Guide to GLSL lines_adjacency in Geometry Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/guide-to-glsl-lines-adjacency-in-geometry-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the layout(linesadjacency) qualifier works in GLSL geometry shaders to access neighborhood mesh data. It breaks down the primitive assembly process, illustrates the mapping of the four input vertices, discusses drawing modes lik" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="guide-to-glsl-lines_adjacency-in-geometry-shaders">Guide to GLSL
+lines_adjacency in Geometry Shaders</h1>
+<p>This article explains how the <code>layout(lines_adjacency)</code>
+qualifier works in GLSL geometry shaders to access neighborhood mesh
+data. It breaks down the primitive assembly process, illustrates the
+mapping of the four input vertices, discusses drawing modes like line
+strips, and outlines common rendering applications such as miter joins
+and curve evaluation.</p>
+<p>In standard line rendering, a geometry shader declared with
+<code>layout(lines) in;</code> receives only two vertices defining a
+discrete segment: the start point and the end point. Declaring
+<code>layout(lines_adjacency) in;</code> expands this input stream to
+provide four vertices per primitive within the built-in
+<code>gl_in[]</code> array. The four vertices represent the current line
+segment along with the immediate neighboring vertices before and after
+it.</p>
+<p>The topology passed into the shader is indexed as follows:</p>
+<ul>
+<li><code>gl_in[0]</code>: The adjacent vertex preceding the line
+segment.</li>
+<li><code>gl_in[1]</code>: The start vertex of the actual line
+segment.</li>
+<li><code>gl_in[2]</code>: The end vertex of the actual line
+segment.</li>
+<li><code>gl_in[3]</code>: The adjacent vertex following the line
+segment.</li>
+</ul>
+<p>To feed this topology into the pipeline, the application must issue
+draw calls using either <code>GL_LINES_ADJACENCY</code> or
+<code>GL_LINE_STRIP_ADJACENCY</code>.</p>
+<p>When using <code>GL_LINES_ADJACENCY</code>, every segment requires
+four explicit vertex indices. If rendering two disconnected segments
+with adjacency, eight vertex indices are needed: indices 0–3 define the
+first line with its neighbors, and indices 4–7 define the second.</p>
+<p>When using <code>GL_LINE_STRIP_ADJACENCY</code>, vertices are shared
+sequentially across segments. For a strip of <span
+class="math inline">\(N\)</span> rendered line segments, the buffer must
+contain <span class="math inline">\(N + 3\)</span> vertices. For any
+segment <span class="math inline">\(i\)</span> (where <span
+class="math inline">\(i\)</span> ranges from 0 to <span
+class="math inline">\(N-1\)</span>):</p>
+<ul>
+<li><code>gl_in[0]</code> maps to vertex <span
+class="math inline">\(i\)</span></li>
+<li><code>gl_in[1]</code> maps to vertex <span class="math inline">\(i +
+1\)</span></li>
+<li><code>gl_in[2]</code> maps to vertex <span class="math inline">\(i +
+2\)</span></li>
+<li><code>gl_in[3]</code> maps to vertex <span class="math inline">\(i +
+3\)</span></li>
+</ul>
+<p>The core segment processed is always the connection between
+<code>gl_in[1]</code> and <code>gl_in[2]</code>. Vertices
+<code>gl_in[0]</code> and <code>gl_in[3]</code> are purely auxiliary and
+are not automatically rasterized.</p>
+<p>Having access to <code>gl_in[0]</code> and <code>gl_in[3]</code>
+solves several common algorithmic challenges in geometry processing:</p>
+<ol type="1">
+<li><p><strong>Screen-Space Line Expansion and Miter Joins:</strong> To
+expand thin lines into screen-aligned quads with proper corner joins
+(such as miter, bevel, or round joints), the shader must know the
+direction vectors of the incoming segment
+(<code>gl_in[1] - gl_in[0]</code>) and outgoing segment
+(<code>gl_in[3] - gl_in[2]</code>). Comparing these vectors with the
+main segment vector (<code>gl_in[2] - gl_in[1]</code>) allows for the
+calculation of the miter bisector and prevents gaps or overlapping
+artifacts at line joints.</p></li>
+<li><p><strong>Cubic Spline Interpolation:</strong> Four continuous
+control points are required to compute cubic Hermite or Catmull-Rom
+splines directly on the GPU. With <code>lines_adjacency</code>, the
+geometry shader can evaluate the curve between <code>gl_in[1]</code> and
+<code>gl_in[2]</code> using <code>gl_in[0]</code> and
+<code>gl_in[3]</code> as tangent anchors, outputting a finely
+tessellated series of sub-segments.</p></li>
+<li><p><strong>Silhouette and Crease Detection:</strong> In wireframe
+and feature-edge rendering, knowing the positions of neighboring
+vertices allows the shader to detect edge curvature, sharp crease
+angles, or boundary transitions relative to the camera view.</p></li>
+</ol>
+<p>For open paths where a start or end segment lacks a physical
+neighbor, the calling application must provide phantom or clamped
+vertices (often duplicating the first or last endpoint) to ensure the
+vertex count matches the four-vertex constraint required by the
+pipeline.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

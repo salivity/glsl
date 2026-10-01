@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL ES 3.00 Features in WebGL 2.0 Explained - glsl</title>
+    <meta name="description" content="WebGL 2.0 brought modern GPU programming to the web primarily through its adoption of the OpenGL ES 3.0 API and its companion shading language, GLSL ES 3.00. Moving away from the legacy constraints of GLSL ES 1.00 used in WebGL 1.0, this upgrade introduc">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-es-3-00-features-in-web-gl-2-0-explained">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL ES 3.00 Features in WebGL 2.0 Explained - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-es-3-00-features-in-web-gl-2-0-explained" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="WebGL 2.0 brought modern GPU programming to the web primarily through its adoption of the OpenGL ES 3.0 API and its companion shading language, GLSL ES 3.00. Moving away from the legacy constraints of GLSL ES 1.00 used in WebGL 1.0, this upgrade introduc" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-es-300-features-in-webgl-20-explained">GLSL ES 3.00
+Features in WebGL 2.0 Explained</h1>
+<p>WebGL 2.0 brought modern GPU programming to the web primarily through
+its adoption of the OpenGL ES 3.0 API and its companion shading
+language, GLSL ES 3.00. Moving away from the legacy constraints of GLSL
+ES 1.00 used in WebGL 1.0, this upgrade introduced native integer
+support, enhanced data structures, structured memory blocks, and
+powerful new texture-sampling methods. This article breaks down the
+major shader features, syntax modernizations, and pipeline capabilities
+unlocked by this standard.</p>
+<h3 id="updated-syntax-and-variable-qualifiers">Updated Syntax and
+Variable Qualifiers</h3>
+<p>GLSL ES 3.00 shaders must begin with the <code>#version 300 es</code>
+directive. The update replaced deprecated qualifiers to unify input and
+output semantics:</p>
+<ul>
+<li><strong><code>in</code> and <code>out</code> Qualifiers:</strong>
+Replaced the older <code>attribute</code> and <code>varying</code>
+keywords. Vertex shader inputs are marked with <code>in</code>, vertex
+outputs/fragment inputs with <code>out</code> and <code>in</code>
+respectively, and fragment shader outputs with <code>out</code>.</li>
+<li><strong>Explicit Attribute Locations:</strong> Developers can use
+layout qualifiers such as
+<code>layout(location = 0) in vec3 aPosition;</code> to bind attribute
+indices directly within shader code, reducing the need for CPU-side
+bindings.</li>
+</ul>
+<h3 id="full-integer-and-bitwise-support">Full Integer and Bitwise
+Support</h3>
+<p>GLSL ES 1.00 lacked robust integer handling, forcing developers to
+simulate bitwise operations and integer logic using floating-point math.
+GLSL ES 3.00 introduced:</p>
+<ul>
+<li><strong>True Signed and Unsigned Integers:</strong> Native
+<code>int</code> and <code>uint</code> types along with their
+corresponding vector formats (<code>ivec</code>,
+<code>uvec</code>).</li>
+<li><strong>Bitwise Operations:</strong> Standard bitwise operators
+(<code>&amp;</code>, <code>|</code>, <code>^</code>, <code>~</code>,
+<code>&lt;&lt;</code>, <code>&gt;&gt;</code>) for efficient masking,
+bit-packing, hashing, and procedural generation directly on the
+GPU.</li>
+</ul>
+<h3 id="uniform-buffer-objects-ubos">Uniform Buffer Objects (UBOs)</h3>
+<p>In WebGL 1.0, uniforms had to be updated independently per shader
+program. GLSL ES 3.00 added <code>uniform</code> blocks, enabling the
+use of Uniform Buffer Objects (UBOs):</p>
+<ul>
+<li><strong>Data Sharing:</strong> Large sets of uniforms (such as
+camera matrices or lighting parameters) can be grouped into single
+buffers and shared across multiple shader programs without redundant
+re-binding.</li>
+<li><strong>Faster CPU-to-GPU Transfers:</strong> Uniform data can be
+updated in contiguous memory blocks, reducing CPU overhead and draw call
+latency.</li>
+</ul>
+<h3 id="multiple-render-targets-mrt">Multiple Render Targets (MRT)</h3>
+<p>GLSL ES 3.00 natively integrates Multiple Render Targets into the
+core standard, removing the need for browser-dependent extensions.
+Fragment shaders can output to multiple textures simultaneously by
+defining multiple <code>out</code> variables tied to specific attachment
+locations:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> outColor<span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> outNormal<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> outDepth<span class="op">;</span></span></code></pre></div>
+<p>This capability is foundational for modern rendering pipelines,
+particularly deferred shading and screen-space ambient occlusion
+(SSAO).</p>
+<h3 id="advanced-texture-querying-and-formats">Advanced Texture Querying
+and Formats</h3>
+<p>The standard overhauled how shaders interact with textures, replacing
+specific functions like <code>texture2D</code> and
+<code>textureCube</code> with overloaded <code>texture()</code>
+functions:</p>
+<ul>
+<li><strong><code>texelFetch()</code>:</strong> Allows fetching raw
+texels directly by integer coordinates without filtering or normalized
+coordinates, behaving like a standard array lookup.</li>
+<li><strong><code>textureSize()</code>:</strong> Enables shaders to
+query the dimensions of a texture directly, eliminating the need to pass
+image dimensions as uniforms.</li>
+<li><strong>3D and Array Textures:</strong> Introduced samplers such as
+<code>sampler3D</code>, <code>sampler2DArray</code>, and comparison
+samplers for hardware-accelerated depth mapping
+(<code>sampler2DShadow</code>).</li>
+</ul>
+<h3 id="expanded-matrix-operations-and-standard-library">Expanded Matrix
+Operations and Standard Library</h3>
+<p>The standard expanded linear algebra functionality and flow
+control:</p>
+<ul>
+<li><strong>Non-Square Matrices:</strong> Full support for
+<code>mat2x3</code>, <code>mat3x2</code>, <code>mat2x4</code>,
+<code>mat4x2</code>, <code>mat3x4</code>, and <code>mat4x3</code>.</li>
+<li><strong>Built-in Matrix Functions:</strong> Native support for
+<code>transpose()</code> and <code>inverse()</code>.</li>
+<li><strong>Flow Control:</strong> Support for <code>switch</code>
+statements, dynamic loop indexing, and extended built-in numerical
+functions, making complex shader logic simpler to write and
+maintain.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

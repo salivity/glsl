@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Facing Billboard Matrix Calculation in GLSL - glsl</title>
+    <meta name="description" content="In 3D computer graphics, billboard particles are flat, two-dimensional planes that continuously rotate to face the camera, creating the illusion of three-dimensional volume for effects like smoke, fire, and sparks. This orientation is achieved in OpenGL">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/camera-facing-billboard-matrix-calculation-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Camera Facing Billboard Matrix Calculation in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/camera-facing-billboard-matrix-calculation-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In 3D computer graphics, billboard particles are flat, two-dimensional planes that continuously rotate to face the camera, creating the illusion of three-dimensional volume for effects like smoke, fire, and sparks. This orientation is achieved in OpenGL" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="camera-facing-billboard-matrix-calculation-in-glsl">Camera
+Facing Billboard Matrix Calculation in GLSL</h1>
+<p>In 3D computer graphics, billboard particles are flat,
+two-dimensional planes that continuously rotate to face the camera,
+creating the illusion of three-dimensional volume for effects like
+smoke, fire, and sparks. This orientation is achieved in OpenGL Shading
+Language (GLSL) by generating a camera-facing transformation or rotation
+matrix within the vertex shader. By extracting the camera’s orientation
+vectors directly from the view matrix or calculating an orthogonal basis
+toward the camera position, GLSL can construct a matrix that aligns the
+local vertices of a quad with the viewer's line of sight.</p>
+<h3 id="the-mathematics-of-camera-alignment">The Mathematics of Camera
+Alignment</h3>
+<p>A standard 2D particle quad lies flat on a plane (typically the XY
+plane). To make this quad face the viewer, its local coordinate system
+must match the orientation of the camera.</p>
+<p>A rotation matrix in three dimensions is composed of three
+orthonormal basis vectors:</p>
+<ul>
+<li><strong>Right vector (<span
+class="math inline">\(\vec{R}\)</span>):</strong> Points to the camera’s
+local horizontal right axis.</li>
+<li><strong>Up vector (<span
+class="math inline">\(\vec{U}\)</span>):</strong> Points to the camera’s
+local vertical axis.</li>
+<li><strong>Forward vector (<span
+class="math inline">\(\vec{F}\)</span>):</strong> Points directly toward
+or away from the camera.</li>
+</ul>
+<p>When these vectors form the columns of a <span
+class="math inline">\(3 \times 3\)</span> matrix, multiplying a local 2D
+vertex position by this matrix reorients the quad into world space while
+aligning it with the camera:</p>
+<p><span class="math display">\[M_{billboard} = \begin{bmatrix} R_x
+&amp; U_x &amp; F_x \\ R_y &amp; U_y &amp; F_y \\ R_z &amp; U_z &amp;
+F_z \end{bmatrix}\]</span></p>
+<h3
+id="method-1-view-plane-aligned-billboards-extracting-basis-vectors">Method
+1: View-Plane Aligned Billboards (Extracting Basis Vectors)</h3>
+<p>View-plane aligned billboards orient the quad parallel to the
+camera's rendering plane. This approach is computationally efficient
+because the basis vectors already exist inside the standard view
+matrix.</p>
+<p>In GLSL, the view matrix transforms world space into camera space.
+The inverse of the view matrix (or the transpose of its upper <span
+class="math inline">\(3 \times 3\)</span> rotation portion) contains the
+camera's world-space Right, Up, and Forward vectors.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// GLSL Vertex Shader</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> u_view<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> u_projection<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> u_particleCenterWorld<span class="op">;</span> <span class="co">// World position of particle</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec2</span> a_quadVertex<span class="op">;</span>               <span class="co">// Local quad offsets (-0.5 to 0.5)</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Extract camera right and up from the view matrix</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> cameraRight <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span>u_view<span class="op">[</span><span class="dv">0</span><span class="op">][</span><span class="dv">0</span><span class="op">],</span> u_view<span class="op">[</span><span class="dv">1</span><span class="op">][</span><span class="dv">0</span><span class="op">],</span> u_view<span class="op">[</span><span class="dv">2</span><span class="op">][</span><span class="dv">0</span><span class="op">]);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> cameraUp    <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span>u_view<span class="op">[</span><span class="dv">0</span><span class="op">][</span><span class="dv">1</span><span class="op">],</span> u_view<span class="op">[</span><span class="dv">1</span><span class="op">][</span><span class="dv">1</span><span class="op">],</span> u_view<span class="op">[</span><span class="dv">2</span><span class="op">][</span><span class="dv">1</span><span class="op">]);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Construct the world-space position</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> worldPosition <span class="op">=</span> u_particleCenterWorld</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>                       <span class="op">+</span> cameraRight <span class="op">*</span> a_quadVertex<span class="op">.</span><span class="fu">x</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>                       <span class="op">+</span> cameraUp    <span class="op">*</span> a_quadVertex<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> u_projection <span class="op">*</span> u_view <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>worldPosition<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Alternatively, you can bypass the world-space calculation entirely by
+transforming the particle center to view space, applying the 2D quad
+offset directly, and then applying projection:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// View-Space Shortcut</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> viewCenter <span class="op">=</span> u_view <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>u_particleCenterWorld<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    viewCenter<span class="op">.</span><span class="fu">xy</span> <span class="op">+=</span> a_quadVertex<span class="op">.</span><span class="fu">xy</span><span class="op">;</span> <span class="co">// Offset directly in view space</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> u_projection <span class="op">*</span> viewCenter<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3
+id="method-2-true-camera-facing-billboards-spherical-alignment">Method
+2: True Camera-Facing Billboards (Spherical Alignment)</h3>
+<p>Unlike plane-aligned billboards, spherical billboards calculate a
+direct line of sight from the individual particle's center to the camera
+position. This avoids distortion when particles appear near the edges of
+a wide field-of-view perspective camera.</p>
+<p>To calculate this matrix in GLSL:</p>
+<ol type="1">
+<li>Compute the normalized forward vector pointing from the particle to
+the camera.</li>
+<li>Take the cross product of an arbitrary world up vector (usually
+<span class="math inline">\((0, 1, 0)\)</span>) and the forward vector
+to find the right vector.</li>
+<li>Take the cross product of the forward vector and the right vector to
+derive the orthogonal up vector.</li>
+</ol>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// GLSL Vertex Shader</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> u_cameraPositionWorld<span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> u_viewProjection<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> u_particleCenterWorld<span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec2</span> a_quadVertex<span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 1. Calculate Forward vector</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> forward <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>u_cameraPositionWorld <span class="op">-</span> u_particleCenterWorld<span class="op">);</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 2. Calculate Right vector</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> worldUp <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> right <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="bu">cross</span><span class="op">(</span>worldUp<span class="op">,</span> forward<span class="op">));</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 3. Calculate true Up vector</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> up <span class="op">=</span> <span class="bu">cross</span><span class="op">(</span>forward<span class="op">,</span> right<span class="op">);</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 4. Construct the 3x3 billboard rotation matrix</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat3</span> billboardRotation <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span>right<span class="op">,</span> up<span class="op">,</span> forward<span class="op">);</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 5. Rotate local vertex and translate to world space</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> worldPosition <span class="op">=</span> billboardRotation <span class="op">*</span> <span class="dt">vec3</span><span class="op">(</span>a_quadVertex<span class="op">,</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">+</span> u_particleCenterWorld<span class="op">;</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> u_viewProjection <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>worldPosition<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="method-3-axial-cylindrical-billboards">Method 3: Axial
+(Cylindrical) Billboards</h3>
+<p>For objects that must remain anchored to a vertical axis (such as
+trees or vertical energy beams), the up vector is constrained to a fixed
+axis (such as the world Y-axis).</p>
+<ol type="1">
+<li>The Up vector is locked to <span class="math inline">\((0, 1,
+0)\)</span>.</li>
+<li>The Forward vector is calculated, and its Y component is set to zero
+or overridden.</li>
+<li>The Right vector is derived via <span
+class="math inline">\(\text{cross}(\vec{U}, \vec{F})\)</span>.</li>
+<li>The real Forward vector is recalculated via <span
+class="math inline">\(\text{cross}(\vec{R}, \vec{U})\)</span> to
+preserve orthogonality.</li>
+</ol>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> up <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> forward <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>u_cameraPositionWorld <span class="op">-</span> u_particleCenterWorld<span class="op">);</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> right <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="bu">cross</span><span class="op">(</span>up<span class="op">,</span> forward<span class="op">));</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>forward <span class="op">=</span> <span class="bu">cross</span><span class="op">(</span>right<span class="op">,</span> up<span class="op">);</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="dt">mat3</span> axialMatrix <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span>right<span class="op">,</span> up<span class="op">,</span> forward<span class="op">);</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> worldPosition <span class="op">=</span> axialMatrix <span class="op">*</span> <span class="dt">vec3</span><span class="op">(</span>a_quadVertex<span class="op">,</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">+</span> u_particleCenterWorld<span class="op">;</span></span></code></pre></div>
+<h3 id="performance-considerations">Performance Considerations</h3>
+<ul>
+<li><strong>View-Space Offsetting:</strong> Applying offsets in view
+space is the fastest method, as it requires zero trigonometric
+calculations or cross products per vertex.</li>
+<li><strong>Uniform Matrix Passing:</strong> If all particles in a draw
+call share the same orientation (as in view-plane alignment), calculate
+the inverse view rotation on the CPU and pass it as a single
+<code>mat3</code> uniform to eliminate redundant matrix operations in
+the vertex shader.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

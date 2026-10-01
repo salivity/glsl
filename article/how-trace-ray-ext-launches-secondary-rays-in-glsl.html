@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How traceRayEXT Launches Secondary Rays in GLSL - glsl</title>
+    <meta name="description" content="In GLSL ray tracing pipelines using the GLEXTraytracing extension, traceRayEXT is the core intrinsic used to initiate ray traversal through a scene hierarchy. While typically called first within a ray generation shader to cast primary camera rays, traceR">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-trace-ray-ext-launches-secondary-rays-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How traceRayEXT Launches Secondary Rays in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-trace-ray-ext-launches-secondary-rays-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL ray tracing pipelines using the GLEXTraytracing extension, traceRayEXT is the core intrinsic used to initiate ray traversal through a scene hierarchy. While typically called first within a ray generation shader to cast primary camera rays, traceR" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-tracerayext-launches-secondary-rays-in-glsl">How traceRayEXT
+Launches Secondary Rays in GLSL</h1>
+<p>In GLSL ray tracing pipelines using the
+<code>GL_EXT_ray_tracing</code> extension, <code>traceRayEXT</code> is
+the core intrinsic used to initiate ray traversal through a scene
+hierarchy. While typically called first within a ray generation shader
+to cast primary camera rays, <code>traceRayEXT</code> can also be
+invoked from within hit shaders (such as closest hit shaders) to cast
+secondary rays for effects like reflections, refractions, ambient
+occlusion, and shadows. This article explains the technical mechanics of
+<code>traceRayEXT</code>, the parameters required to define a secondary
+ray, and how the underlying hardware processes secondary traversal
+through top-level acceleration structures.</p>
+<h3 id="the-role-of-acceleration-structures">The Role of Acceleration
+Structures</h3>
+<p>Secondary rays do not intersect raw geometry directly; instead, they
+query a two-level acceleration structure (TLAS and BLAS). The Top-Level
+Acceleration Structure (TLAS) holds instances of objects, transforms,
+and visibility masks, while the Bottom-Level Acceleration Structures
+(BLAS) contain the actual geometric primitives (triangles or AABBs).</p>
+<p>When casting a secondary ray, the shader passes the uniform
+<code>accelerationStructureEXT</code> handle representing the TLAS. The
+traversal engine queries this structure to locate the nearest or any
+primitive intersecting the secondary ray’s path.</p>
+<h3 id="function-signature-and-parameters">Function Signature and
+Parameters</h3>
+<p>The <code>traceRayEXT</code> function is declared as follows:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">traceRayEXT</span><span class="op">(</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    accelerationStructureEXT topLevelAS<span class="op">,</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> rayFlags<span class="op">,</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> cullMask<span class="op">,</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> sbtRecordOffset<span class="op">,</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> sbtRecordStride<span class="op">,</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> missIndex<span class="op">,</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> origin<span class="op">,</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> Tmin<span class="op">,</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> direction<span class="op">,</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> Tmax<span class="op">,</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> payloadLocation</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<ul>
+<li><strong><code>topLevelAS</code></strong>: The scene's acceleration
+structure to traverse.</li>
+<li><strong><code>rayFlags</code></strong>: Traversal behavior
+modifiers, such as <code>gl_RayFlagsOpaqueEXT</code> (to skip any-hit
+shaders) or <code>gl_RayFlagsTerminateOnFirstHitEXT</code> (ideal for
+shadow/visibility rays).</li>
+<li><strong><code>cullMask</code></strong>: An 8-bit mask tested against
+each instance’s mask in the TLAS to conditionally skip non-relevant
+geometry.</li>
+<li><strong><code>sbtRecordOffset</code> and
+<code>sbtRecordStride</code></strong>: Values used to calculate hit
+shader indices within the Shader Binding Table (SBT), determining which
+intersection, any-hit, or closest-hit shaders are executed.</li>
+<li><strong><code>missIndex</code></strong>: The index offset in the SBT
+indicating which miss shader runs if the secondary ray misses all
+geometry.</li>
+<li><strong><code>origin</code> and <code>direction</code></strong>: The
+world-space coordinates defining the secondary ray.</li>
+<li><strong><code>Tmin</code> and <code>Tmax</code></strong>: The
+parametric interval limiting the ray segment. Setting an appropriate
+<code>Tmin</code> (e.g., <code>0.001</code>) helps avoid surface acne
+from self-intersection.</li>
+<li><strong><code>payloadLocation</code></strong>: The layout location
+index of the ray payload structure where results from the secondary ray
+are written.</li>
+</ul>
+<h3 id="launching-secondary-rays-from-hit-shaders">Launching Secondary
+Rays from Hit Shaders</h3>
+<p>To launch a secondary ray, the shader must declare a designated
+payload storage qualifier matching the <code>payloadLocation</code>
+parameter:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> rayPayloadEXT RayPayload secondaryPayload<span class="op">;</span></span></code></pre></div>
+<p>Within a closest-hit shader, secondary rays are derived from the hit
+attributes of the primary ray:</p>
+<ol type="1">
+<li><strong>Calculate Ray Geometry</strong>: The world-space
+intersection point is calculated using the primary ray parameters
+(<code>gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT</code>).
+The new ray direction is computed based on lighting vectors (for
+shadows) or surface normal reflection (for mirrors).</li>
+<li><strong>Offset Origin</strong>: To prevent the ray from
+re-intersecting the originating surface due to floating-point
+imprecision, the origin is nudged slightly along the surface normal or
+<code>Tmin</code> is set to a small non-zero value.</li>
+<li><strong>Invoke <code>traceRayEXT</code></strong>: The function is
+executed, passing the TLAS handle and the secondary payload
+location.</li>
+</ol>
+<h3 id="traversal-and-execution-flow">Traversal and Execution Flow</h3>
+<p>When <code>traceRayEXT</code> executes for a secondary ray:</p>
+<ol type="1">
+<li><strong>Pipeline State Pause</strong>: Execution of the calling
+shader is paused at the call site.</li>
+<li><strong>Hardware Traversal</strong>: The ray traversal unit
+intersects bounding boxes and triangles in the TLAS and corresponding
+BLAS instances according to <code>cullMask</code> and
+<code>rayFlags</code>.</li>
+<li><strong>Shader Invocation</strong>: Depending on ray path
+interactions, the pipeline executes relevant intersection or any-hit
+shaders. Upon finding the definitive hit, the designated closest hit
+shader runs, modifying <code>secondaryPayload</code>. If no hit occurs
+within <code>[Tmin, Tmax]</code>, the specified miss shader
+executes.</li>
+<li><strong>Resumption</strong>: Control returns to the calling hit
+shader directly after the <code>traceRayEXT</code> instruction, where it
+reads <code>secondaryPayload</code> to composite the final surface
+color.</li>
+</ol>
+<h3 id="pipeline-recursion-limits">Pipeline Recursion Limits</h3>
+<p>To use <code>traceRayEXT</code> recursively (e.g., secondary rays
+calling tertiary rays), the pipeline must be configured via the Vulkan
+API with a <code>maxPipelineRayRecursionDepth</code> greater than 1.
+Because deep recursion places substantial pressure on execution stack
+memory, multi-bounce secondary rays are often unrolled iteratively in
+the ray generation shader using an explicit loop and state payload
+instead of relying on recursive hit shader calls.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

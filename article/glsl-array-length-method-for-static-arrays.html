@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Array Length Method for Static Arrays - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), the .length() method returns the total number of elements in an array. When applied to compile-time statically sized arrays, this method behaves as a constant expression that is evaluated entirely at compile time, p">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-array-length-method-for-static-arrays">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Array Length Method for Static Arrays - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-array-length-method-for-static-arrays" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), the .length() method returns the total number of elements in an array. When applied to compile-time statically sized arrays, this method behaves as a constant expression that is evaluated entirely at compile time, p" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-array-length-method-for-static-arrays">GLSL Array Length
+Method for Static Arrays</h1>
+<p>In the OpenGL Shading Language (GLSL), the <code>.length()</code>
+method returns the total number of elements in an array. When applied to
+compile-time statically sized arrays, this method behaves as a constant
+expression that is evaluated entirely at compile time, producing zero
+runtime overhead. This article details how the GLSL compiler evaluates
+<code>.length()</code> on static arrays, its return type
+characteristics, and how developers can leverage it for shader
+optimization and safety.</p>
+<h3 id="compile-time-evaluation-and-constant-expressions">Compile-Time
+Evaluation and Constant Expressions</h3>
+<p>A statically sized array in GLSL has its bounds declared explicitly
+(such as <code>float values[8];</code>) or implicitly determined via an
+array initializer list (such as
+<code>int data[] = int[](1, 2, 3);</code>). Because the dimensions of
+these arrays are fixed and known before the shader executes on the GPU,
+calls to <code>.length()</code> are resolved during the compilation
+phase.</p>
+<p>The compiler substitutes the method call with an integer literal
+constant representing the array's capacity. Because the result is a
+compile-time constant expression, it can be used anywhere an integral
+constant expression is required in GLSL, such as:</p>
+<ul>
+<li>Defining the size of another static array.</li>
+<li>Setting loop bounds.</li>
+<li>Configuring interface blocks and uniform array constraints.</li>
+</ul>
+<h3 id="return-type-and-type-rules">Return Type and Type Rules</h3>
+<p>The <code>.length()</code> method in standard GLSL returns a signed
+32-bit integer (<code>int</code>). This is distinct from languages like
+C++ where array sizes are conventionally represented by unsigned types
+(e.g., <code>size_t</code>).</p>
+<p>Because it returns a signed <code>int</code>, it integrates
+seamlessly with standard signed loop indices without triggering implicit
+conversion warnings or signed/unsigned mismatch errors:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> MAX_LIGHTS <span class="op">=</span> <span class="dv">4</span><span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> lightPositions<span class="op">[</span>MAX_LIGHTS<span class="op">];</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> lightPositions<span class="op">.</span><span class="fu">length</span><span class="op">();</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// lightPositions.length() evaluates directly to 4 at compile time</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">processLight</span><span class="op">(</span>lightPositions<span class="op">[</span>i<span class="op">]);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="performance-and-compiler-optimizations">Performance and Compiler
+Optimizations</h3>
+<p>Using <code>.length()</code> on a statically sized array carries no
+runtime cost. The GPU does not store a dynamic size field alongside the
+array in memory, nor does it perform a function call to compute the
+element count.</p>
+<p>Furthermore, exposing the exact boundary to the compiler via
+<code>.length()</code> aids shader optimization. When unrolling loops,
+the GLSL compiler relies on compile-time boundary knowledge to duplicate
+code blocks efficiently, register allocate, and eliminate branch
+instructions entirely.</p>
+<h3 id="multidimensional-arrays">Multidimensional Arrays</h3>
+<p>For multidimensional arrays, <code>.length()</code> queries only the
+outer dimension upon which it is directly invoked. To determine the size
+of sub-dimensions, the method must be chained to an indexed element:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> matrixGrid<span class="op">[</span><span class="dv">4</span><span class="op">][</span><span class="dv">8</span><span class="op">];</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> outerSize <span class="op">=</span> matrixGrid<span class="op">.</span><span class="fu">length</span><span class="op">();</span>       <span class="co">// Evaluates to 4</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> innerSize <span class="op">=</span> matrixGrid<span class="op">[</span><span class="dv">0</span><span class="op">].</span><span class="fu">length</span><span class="op">();</span>    <span class="co">// Evaluates to 8</span></span></code></pre></div>
+<p>Both invocations evaluate at compile time to signed integer
+constants, ensuring uniform optimization across all dimensions.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

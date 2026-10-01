@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Inline Function Expansion: Impact on Size and Speed - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), compiler inlining replaces function calls directly with the function's underlying body of code, fundamentally altering shader binary size and execution speed. Because most GPU architectures lack a traditional call stack">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-inline-function-expansion-impact-on-size-and-speed">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Inline Function Expansion: Impact on Size and Speed - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-inline-function-expansion-impact-on-size-and-speed" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), compiler inlining replaces function calls directly with the function's underlying body of code, fundamentally altering shader binary size and execution speed. Because most GPU architectures lack a traditional call stack" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-inline-function-expansion-impact-on-size-and-speed">GLSL
+Inline Function Expansion: Impact on Size and Speed</h1>
+<p>In OpenGL Shading Language (GLSL), compiler inlining replaces
+function calls directly with the function's underlying body of code,
+fundamentally altering shader binary size and execution speed. Because
+most GPU architectures lack a traditional call stack, GLSL compilers
+rely heavily on aggressive inlining to generate flat, vectorized machine
+code. While this behavior eliminates call overhead and unlocks extensive
+cross-expression optimizations, it can also lead to severe code bloat,
+increased register pressure, and degraded hardware occupancy.</p>
+<h3 id="how-glsl-compilers-handle-inlining">How GLSL Compilers Handle
+Inlining</h3>
+<p>Unlike standard CPU compilers that support complex stack frames,
+function pointers, and recursion, GPU hardware is fundamentally
+optimized for massive data-parallel throughput rather than branchy
+control flow. Consequently, standard GLSL (up to modern versions)
+effectively treats all user-defined functions as candidates for forced
+inlining. The compiler expands the callee's operations directly into the
+caller’s scope, resolving arguments and local variables within a single
+unified control flow graph.</p>
+<h3 id="impact-on-execution-speed">Impact on Execution Speed</h3>
+<p>Inline expansion typically enhances shader execution speed by
+stripping away function call and return mechanics, but it carries hidden
+performance costs:</p>
+<ul>
+<li><strong>Cross-Boundary Optimizations:</strong> Once a function is
+inlined, the compiler can apply intra-procedural optimizations across
+what were previously isolated boundaries. This enables constant
+propagation, dead code elimination, common subexpression elimination,
+and loop unrolling tailored to the specific arguments passed into the
+function.</li>
+<li><strong>Instruction Cache Performance:</strong> Although GPUs are
+relatively resilient to instruction cache (I-cache) misses due to thread
+latency hiding, excessively large inlined shaders can exceed the local
+I-cache capacity. This causes cache thrashing, stalling execution units
+while instructions are refetched from main memory.</li>
+<li><strong>Increased Register Pressure:</strong> The primary
+performance bottleneck caused by aggressive inlining is register
+consumption. Merging scopes extends the live ranges of variables. If a
+shader demands more general-purpose registers (GPRs) to hold these
+values simultaneously, the GPU must reduce its "occupancy"—the number of
+active warps or wavefronts scheduled concurrently on a compute unit.
+Lower occupancy diminishes the GPU's ability to hide memory access
+latency, drastically slowing down execution.</li>
+</ul>
+<h3 id="impact-on-code-size">Impact on Code Size</h3>
+<p>Inlining has a direct, and often dramatic, effect on the final
+compiled bytecode of a shader:</p>
+<ul>
+<li><strong>Code Multiplication:</strong> Calling a non-trivial function
+multiple times—especially inside loops or distinct branching
+paths—causes the compiled assembly to duplicate the function logic for
+every call site. In complex shaders featuring nested utility functions,
+this can produce an exponential increase in final binary size.</li>
+<li><strong>Rare Shrinking via Constant Folding:</strong> In cases where
+a function is small and called with compile-time constants or uniform
+values, inlining combined with constant folding can occasionally reduce
+code size. The compiler evaluates the static branches at compile time
+and strips away unused logic, yielding fewer instructions than a
+generalized function implementation.</li>
+<li><strong>Compilation and Load Stutter:</strong> Significantly bloated
+code sizes translate to longer compile times at runtime, leading to
+pipeline compilation stutter during application runtime and larger
+memory footprints in driver-managed video memory.</li>
+</ul>
+<h3 id="balancing-size-and-speed">Balancing Size and Speed</h3>
+<p>Because GLSL provides limited manual control over inlining heuristics
+compared to CPU languages, developers must manage this behavior through
+architectural design:</p>
+<ul>
+<li><strong>De-duplicate Call Paths:</strong> Avoid invoking the same
+large utility function across separate branches of an
+<code>if-else</code> statement. Consolidate inputs prior to the call
+site to allow the compiler to emit the inlined logic only once.</li>
+<li><strong>Minimize Variable Lifetimes:</strong> In functions intended
+to be called frequently, declare and consume variables in narrow,
+localized scopes to help the compiler reuse registers and mitigate
+occupancy drops.</li>
+<li><strong>Manage Loop Unrolling Interplay:</strong> Be cautious when
+combining function calls with unrolled loops
+(<code>#pragma optionNV(unroll, all)</code> or language-level loop
+unrolling), as this combination multiplies inlined function bodies by
+the iteration count, quickly maximizing register usage and binary
+size.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

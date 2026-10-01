@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gl_PointSize and GL_PROGRAM_POINT_SIZE in GLSL - glsl</title>
+    <meta name="description" content="In OpenGL and GLSL, rendering point primitives (GLPOINTS) requires defining their screen-space dimensions. When the GLPROGRAMPOINTSIZE capability is enabled via the OpenGL API, point sizing control is handed directly to the shader pipeline through the bu">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gl-point-size-and-gl-program-point-size-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="gl_PointSize and GL_PROGRAM_POINT_SIZE in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gl-point-size-and-gl-program-point-size-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL and GLSL, rendering point primitives (GLPOINTS) requires defining their screen-space dimensions. When the GLPROGRAMPOINTSIZE capability is enabled via the OpenGL API, point sizing control is handed directly to the shader pipeline through the bu" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="gl_pointsize-and-gl_program_point_size-in-glsl">gl_PointSize and
+GL_PROGRAM_POINT_SIZE in GLSL</h1>
+<p>In OpenGL and GLSL, rendering point primitives
+(<code>GL_POINTS</code>) requires defining their screen-space
+dimensions. When the <code>GL_PROGRAM_POINT_SIZE</code> capability is
+enabled via the OpenGL API, point sizing control is handed directly to
+the shader pipeline through the built-in output variable
+<code>gl_PointSize</code>. This bypasses the static, global point size
+defined on the CPU, allowing developers to compute dynamic, per-vertex
+point sizes directly on the GPU.</p>
+<h3 id="default-state-vs-enabled-state">Default State vs. Enabled
+State</h3>
+<p>By default, desktop OpenGL relies on the global state function
+<code>glPointSize(float size)</code> to determine point dimensions. When
+<code>GL_PROGRAM_POINT_SIZE</code> is disabled:</p>
+<ul>
+<li>OpenGL ignores any values assigned to <code>gl_PointSize</code>
+inside the vertex or geometry shaders.</li>
+<li>All rendered points use the fixed diameter specified by the host
+application via <code>glPointSize()</code>.</li>
+</ul>
+<p>Once enabled on the CPU side using
+<code>glEnable(GL_PROGRAM_POINT_SIZE)</code>, the pipeline behavior
+changes:</p>
+<ul>
+<li>The rasterizer ignores the global <code>glPointSize()</code>
+state.</li>
+<li>The rasterizer reads the float value assigned to
+<code>gl_PointSize</code> from the last active vertex-processing stage
+(Vertex Shader, Tessellation Evaluation Shader, or Geometry
+Shader).</li>
+</ul>
+<h3 id="behavior-in-the-shader-pipeline">Behavior in the Shader
+Pipeline</h3>
+<p>When <code>GL_PROGRAM_POINT_SIZE</code> is enabled, setting
+<code>gl_PointSize</code> becomes the responsibility of the shader:</p>
+<ul>
+<li><strong>Pixel Dimensions:</strong> The value written to
+<code>gl_PointSize</code> defines the width and height of the point
+primitive in window coordinates (pixels). For example, setting
+<code>gl_PointSize = 10.0;</code> rasterizes a 10x10 pixel square
+centered on the vertex's projected position.</li>
+<li><strong>Undefined Output:</strong> If the capability is enabled but
+the shader fails to assign a value to <code>gl_PointSize</code>, the
+resulting point size is undefined. On many drivers, this falls back to
+1.0 pixel or leads to rendering artifacts.</li>
+<li><strong>Per-Vertex Variation:</strong> Because
+<code>gl_PointSize</code> is written per vertex, sizes can be calculated
+dynamically based on vertex attributes or camera distance. A common
+application is distance attenuation:</li>
+</ul>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Attenuate point size based on distance in view space</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="bu">gl_PointSize</span> <span class="op">=</span> baseSize <span class="op">/</span> <span class="op">-</span>viewPosition<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span></code></pre></div>
+<h3 id="clamping-and-hardware-limits">Clamping and Hardware Limits</h3>
+<p>The value assigned to <code>gl_PointSize</code> is subject to
+hardware-dependent boundary constraints:</p>
+<ul>
+<li><strong>Size Limits:</strong> Values are clamped to the supported
+point size range provided by the graphics driver. This range can be
+queried on the CPU side using
+<code>glGetFloatv(GL_ALIASED_POINT_SIZE_RANGE, range)</code>.</li>
+<li><strong>Zero or Negative Values:</strong> If
+<code>gl_PointSize</code> evaluates to a value less than or equal to
+zero, the rasterizer typically discards the primitive, resulting in no
+fragments being generated.</li>
+</ul>
+<h3 id="opengl-core-profile-and-opengl-es-differences">OpenGL Core
+Profile and OpenGL ES Differences</h3>
+<p>In standard Desktop OpenGL Compatibility and Core Profiles,
+<code>GL_PROGRAM_POINT_SIZE</code> must be explicitly toggled with
+<code>glEnable()</code>.</p>
+<p>In contrast, OpenGL ES and WebGL do not require enabling
+<code>GL_PROGRAM_POINT_SIZE</code>. In those APIs, writing to
+<code>gl_PointSize</code> inside the vertex shader is always enabled and
+is the mandatory method for sizing <code>GL_POINTS</code>.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

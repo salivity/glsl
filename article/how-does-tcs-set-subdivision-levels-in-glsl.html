@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does TCS Set Subdivision Levels in GLSL? - glsl</title>
+    <meta name="description" content="Tessellation Control Shaders (TCS) determine the subdivision density of geometric primitives in OpenGL by computing and assigning tessellation level factors to built-in output arrays. This article examines how the TCS operates within the modern OpenGL pi">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-tcs-set-subdivision-levels-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does TCS Set Subdivision Levels in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-tcs-set-subdivision-levels-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Tessellation Control Shaders (TCS) determine the subdivision density of geometric primitives in OpenGL by computing and assigning tessellation level factors to built-in output arrays. This article examines how the TCS operates within the modern OpenGL pi" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-tcs-set-subdivision-levels-in-glsl">How Does TCS Set
+Subdivision Levels in GLSL?</h1>
+<p>Tessellation Control Shaders (TCS) determine the subdivision density
+of geometric primitives in OpenGL by computing and assigning
+tessellation level factors to built-in output arrays. This article
+examines how the TCS operates within the modern OpenGL pipeline, breaks
+down the roles of the outer and inner tessellation levels across
+different patch topologies, and demonstrates the mathematical strategies
+used to dynamically compute level-of-detail (LOD) based on distance,
+screen coverage, and edge length.</p>
+<h2 id="the-role-of-the-tessellation-control-shader">The Role of the
+Tessellation Control Shader</h2>
+<p>In the OpenGL rendering pipeline, tessellation sits between the
+vertex shader and the geometry or fragment shader. The tessellation
+stage consists of three components: the Tessellation Control Shader
+(TCS), the fixed-function Tessellation Primitive Generator (TPG), and
+the Tessellation Evaluation Shader (TES).</p>
+<p>The primary responsibility of the TCS is twofold:</p>
+<ol type="1">
+<li>Transforming or passing through control points that define a patch
+primitive.</li>
+<li>Determining how finely the fixed-function TPG should subdivide the
+input patch.</li>
+</ol>
+<p>The subdivision density is communicated directly to the hardware
+generator using two built-in float arrays:
+<code>gl_TessLevelOuter</code> and <code>gl_TessLevelInner</code>.</p>
+<h2 id="understanding-built-in-tessellation-levels">Understanding
+Built-in Tessellation Levels</h2>
+<p>The fixed-function stage reads the values written to
+<code>gl_TessLevelOuter</code> and <code>gl_TessLevelInner</code> by the
+TCS invocation. The dimensions and meanings of these arrays depend
+entirely on the patch domain defined in the pipeline.</p>
+<h3 id="triangle-domains-layouttriangles">Triangle Domains
+(<code>layout(triangles)</code>)</h3>
+<p>For triangular patches, three outer edges and one interior area
+require subdivision parameters:</p>
+<ul>
+<li><code>gl_TessLevelOuter[0]</code>: Subdivides the edge opposite
+control point 0.</li>
+<li><code>gl_TessLevelOuter[1]</code>: Subdivides the edge opposite
+control point 1.</li>
+<li><code>gl_TessLevelOuter[2]</code>: Subdivides the edge opposite
+control point 2.</li>
+<li><code>gl_TessLevelInner[0]</code>: Subdivides the interior space
+between concentric triangular rings.</li>
+</ul>
+<h3 id="quad-domains-layoutquads">Quad Domains
+(<code>layout(quads)</code>)</h3>
+<p>Quad patches require four outer edge factors and two directional
+inner factors:</p>
+<ul>
+<li><code>gl_TessLevelOuter[0]</code> and
+<code>gl_TessLevelOuter[2]</code>: Subdivide the left (u=0) and right
+(u=1) edges.</li>
+<li><code>gl_TessLevelOuter[1]</code> and
+<code>gl_TessLevelOuter[3]</code>: Subdivide the bottom (v=0) and top
+(v=1) edges.</li>
+<li><code>gl_TessLevelInner[0]</code>: Sets subdivision frequency across
+the horizontal (u) dimension.</li>
+<li><code>gl_TessLevelInner[1]</code>: Sets subdivision frequency across
+the vertical (v) dimension.</li>
+</ul>
+<h3 id="isoline-domains-layoutisolines">Isoline Domains
+(<code>layout(isolines)</code>)</h3>
+<p>For isoline rendering:</p>
+<ul>
+<li><code>gl_TessLevelOuter[0]</code>: Sets the number of individual
+lines to generate.</li>
+<li><code>gl_TessLevelOuter[1]</code>: Sets the number of segment
+subdivisions along each line.</li>
+</ul>
+<p>If any outer level is set to zero or less, the primitive generator
+culls the entire patch, which serves as an effective mechanism for
+primitive-level frustum culling within the TCS.</p>
+<h2 id="common-strategies-for-calculating-subdivision-levels">Common
+Strategies for Calculating Subdivision Levels</h2>
+<p>Rather than hardcoding static values, graphics applications
+dynamically compute tessellation levels based on runtime parameters.</p>
+<h3 id="1-distance-based-level-of-detail-lod">1. Distance-Based Level of
+Detail (LOD)</h3>
+<p>A standard approach calculates the Euclidean distance from the camera
+to the midpoint of each patch edge. Edges closer to the viewer receive
+higher subdivision values, while distant edges receive lower values:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">calculateDistanceLevel</span><span class="op">(</span><span class="dt">vec3</span> p0<span class="op">,</span> <span class="dt">vec3</span> p1<span class="op">,</span> <span class="dt">vec3</span> cameraPos<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> midPoint <span class="op">=</span> <span class="op">(</span>p0 <span class="op">+</span> p1<span class="op">)</span> <span class="op">*</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> dist <span class="op">=</span> <span class="bu">distance</span><span class="op">(</span>midPoint<span class="op">,</span> cameraPos<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">clamp</span><span class="op">(</span><span class="fl">100.0</span> <span class="op">/</span> dist<span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">64.0</span><span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="2-screen-space-edge-length">2. Screen-Space Edge Length</h3>
+<p>To ensure visual consistency across various screen resolutions, edge
+subdivisions can be computed by projecting patch vertices into screen
+space. The screen-space distance in pixels between adjacent vertices
+dictates the tessellation factor, maintaining roughly equal triangle
+sizes on screen:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">screenSpaceLevel</span><span class="op">(</span><span class="dt">vec4</span> clip0<span class="op">,</span> <span class="dt">vec4</span> clip1<span class="op">,</span> <span class="dt">vec2</span> viewportSize<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> ndc0 <span class="op">=</span> clip0<span class="op">.</span><span class="fu">xy</span> <span class="op">/</span> clip0<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> ndc1 <span class="op">=</span> clip1<span class="op">.</span><span class="fu">xy</span> <span class="op">/</span> clip1<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> screen0 <span class="op">=</span> <span class="op">(</span>ndc0 <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">)</span> <span class="op">*</span> viewportSize<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> screen1 <span class="op">=</span> <span class="op">(</span>ndc1 <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">)</span> <span class="op">*</span> viewportSize<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> pixelLength <span class="op">=</span> <span class="bu">distance</span><span class="op">(</span>screen0<span class="op">,</span> screen1<span class="op">);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">clamp</span><span class="op">(</span>pixelLength <span class="op">/</span> <span class="fl">16.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">64.0</span><span class="op">);</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="3-maintaining-edge-continuity">3. Maintaining Edge
+Continuity</h3>
+<p>To prevent visual cracks and stitching artifacts between adjacent
+patches, shared edges must compute identical outer tessellation levels.
+Calculating <code>gl_TessLevelOuter</code> strictly based on the two
+endpoints of that specific edge ensures that neighboring patches compute
+the exact same tessellation factor for their shared boundary.</p>
+<h2 id="glsl-implementation-example">GLSL Implementation Example</h2>
+<p>The following TCS example takes a 3-vertex triangle patch, executes
+computations once per patch using invocation ID zero, and computes
+distance-based outer and inner subdivision levels:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">vertices</span> <span class="op">=</span> <span class="dv">3</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> vPosition<span class="op">[];</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec3</span> tcPosition<span class="op">[];</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> uCameraPosition<span class="op">;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    tcPosition<span class="op">[</span><span class="bu">gl_InvocationID</span><span class="op">]</span> <span class="op">=</span> vPosition<span class="op">[</span><span class="bu">gl_InvocationID</span><span class="op">];</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">gl_InvocationID</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> edge0 <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="fl">100.0</span> <span class="op">/</span> <span class="bu">distance</span><span class="op">((</span>vPosition<span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">+</span> vPosition<span class="op">[</span><span class="dv">2</span><span class="op">])</span> <span class="op">*</span> <span class="fl">0.5</span><span class="op">,</span> uCameraPosition<span class="op">),</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">32.0</span><span class="op">);</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> edge1 <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="fl">100.0</span> <span class="op">/</span> <span class="bu">distance</span><span class="op">((</span>vPosition<span class="op">[</span><span class="dv">2</span><span class="op">]</span> <span class="op">+</span> vPosition<span class="op">[</span><span class="dv">0</span><span class="op">])</span> <span class="op">*</span> <span class="fl">0.5</span><span class="op">,</span> uCameraPosition<span class="op">),</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">32.0</span><span class="op">);</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> edge2 <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="fl">100.0</span> <span class="op">/</span> <span class="bu">distance</span><span class="op">((</span>vPosition<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">+</span> vPosition<span class="op">[</span><span class="dv">1</span><span class="op">])</span> <span class="op">*</span> <span class="fl">0.5</span><span class="op">,</span> uCameraPosition<span class="op">),</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">32.0</span><span class="op">);</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">gl_TessLevelOuter</span><span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> edge0<span class="op">;</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">gl_TessLevelOuter</span><span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">=</span> edge1<span class="op">;</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">gl_TessLevelOuter</span><span class="op">[</span><span class="dv">2</span><span class="op">]</span> <span class="op">=</span> edge2<span class="op">;</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>        <span class="bu">gl_TessLevelInner</span><span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="op">(</span>edge0 <span class="op">+</span> edge1 <span class="op">+</span> edge2<span class="op">)</span> <span class="op">/</span> <span class="fl">3.0</span><span class="op">;</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By assigning programmatic values to <code>gl_TessLevelOuter</code>
+and <code>gl_TessLevelInner</code>, the Tessellation Control Shader
+dynamically directs the hardware tessellator to scale geometric
+complexity to match runtime visual requirements.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

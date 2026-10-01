@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear Coat Specular Over Rough Metal in GLSL - glsl</title>
+    <meta name="description" content="This article details the mathematical formulation and GLSL implementation for rendering a dual-layer material consisting of an uncolored, smooth clear coat layer over a rough metallic base. It covers the underlying microfacet BRDF mechanics, Fresnel tran">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/clear-coat-specular-over-rough-metal-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Clear Coat Specular Over Rough Metal in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/clear-coat-specular-over-rough-metal-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article details the mathematical formulation and GLSL implementation for rendering a dual-layer material consisting of an uncolored, smooth clear coat layer over a rough metallic base. It covers the underlying microfacet BRDF mechanics, Fresnel tran" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="clear-coat-specular-over-rough-metal-in-glsl">Clear Coat
+Specular Over Rough Metal in GLSL</h1>
+<p>This article details the mathematical formulation and GLSL
+implementation for rendering a dual-layer material consisting of an
+uncolored, smooth clear coat layer over a rough metallic base. It covers
+the underlying microfacet BRDF mechanics, Fresnel transmission
+attenuation for physical energy conservation, and an optimized shader
+implementation tailored for modern real-time rendering pipelines.</p>
+<hr />
+<h3 id="layering-theory-and-energy-conservation">Layering Theory and
+Energy Conservation</h3>
+<p>A clear coat model simulates a thin, transparent dielectric layer
+(such as automotive lacquer or varnish) applied over an underlying
+substrate. When applied over a rough metal, the system comprises two
+distinct specular interactions:</p>
+<ol type="1">
+<li><strong>Clear Coat Layer (Top):</strong> A smooth dielectric
+interface with an index of refraction typically around <span
+class="math inline">\(1.5\)</span>, yielding an uncolored
+normal-incidence reflectance <span class="math inline">\(F_0 \approx
+0.04\)</span>.</li>
+<li><strong>Base Metal Layer (Bottom):</strong> A rough conductive
+interface characterized by complex refractive indices, yielding a
+chromatic base reflectance <span class="math inline">\(F_0\)</span>
+(derived from the base color) and high microfacet roughness.</li>
+</ol>
+<p>When light enters this medium, a portion is reflected specularly by
+the clear coat interface according to the Fresnel equations. The
+remaining fraction <span class="math inline">\((1 - F_c)\)</span>
+penetrates the clear coat, strikes the base metal, reflects, and passes
+back out through the clear coat interface. Because the clear coat is
+assumed to be thin and non-absorbing, absorption within the layer is
+neglected.</p>
+<p>The composite specular BRDF <span
+class="math inline">\(f_r(\mathbf{v}, \mathbf{l})\)</span> is defined
+as:</p>
+<p><span class="math display">\[f_r(\mathbf{v}, \mathbf{l}) =
+f_{\text{base}}(\mathbf{v}, \mathbf{l}) \cdot (1 - F_c) \cdot
+\text{clearCoat} + f_{\text{cc}}(\mathbf{v}, \mathbf{l}) \cdot
+\text{clearCoat}\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(f_{\text{cc}}\)</span> is the microfacet
+BRDF of the clear coat.</li>
+<li><span class="math inline">\(f_{\text{base}}\)</span> is the
+microfacet BRDF of the rough metal.</li>
+<li><span class="math inline">\(F_c\)</span> is the Fresnel reflection
+term of the top interface, usually evaluated as <span
+class="math inline">\(F_c = F_{\text{Schlick}}(0.04, 1.0, \mathbf{v}
+\cdot \mathbf{h})\)</span>.</li>
+<li><span class="math inline">\(\text{clearCoat}\)</span> is a scalar
+<span class="math inline">\([0, 1]\)</span> controlling the layer's
+strength.</li>
+</ul>
+<hr />
+<h3 id="component-formulations">Component Formulations</h3>
+<p>Both the base and the clear coat layers are evaluated using the
+standard Cook-Torrance microfacet specular formulation:</p>
+<p><span class="math display">\[f(\mathbf{v}, \mathbf{l}) =
+\frac{D(\mathbf{h}) \cdot F(\mathbf{v}, \mathbf{h}) \cdot G(\mathbf{v},
+\mathbf{l}, \mathbf{h})}{4 (\mathbf{n} \cdot \mathbf{v}) (\mathbf{n}
+\cdot \mathbf{l})} = D(\mathbf{h}) \cdot F(\mathbf{v}, \mathbf{h}) \cdot
+V(\mathbf{v}, \mathbf{l})\]</span></p>
+<p>where <span class="math inline">\(V(\mathbf{v}, \mathbf{l}) =
+\frac{G(\mathbf{v}, \mathbf{l}, \mathbf{h})}{4 (\mathbf{n} \cdot
+\mathbf{v}) (\mathbf{n} \cdot \mathbf{l})}\)</span> is the visibility
+function.</p>
+<h4 id="1-clear-coat-term-f_textcc">1. Clear Coat Term (<span
+class="math inline">\(f_{\text{cc}}\)</span>)</h4>
+<ul>
+<li><strong>Normal Distribution (<span
+class="math inline">\(D_{cc}\)</span>):</strong> Commonly modeled using
+standard GGX or GGX with a fixed low roughness. Disney and Filament
+frequently use the GTR1 (Berry) formulation for clear coat, but
+anisotropic/standard GGX with roughness clamped to <span
+class="math inline">\([0.001, 0.1]\)</span> is widely used: <span
+class="math display">\[D_{cc}(\mathbf{h}) = \frac{\alpha_{cc}^2}{\pi
+\left( (\mathbf{n} \cdot \mathbf{h})^2 (\alpha_{cc}^2 - 1) + 1
+\right)^2}\]</span></li>
+<li><strong>Fresnel (<span
+class="math inline">\(F_{cc}\)</span>):</strong> Evaluated with a fixed
+dielectric <span class="math inline">\(F_0 = 0.04\)</span>: <span
+class="math display">\[F_{cc} = 0.04 + (1.0 - 0.04)(1.0 - (\mathbf{v}
+\cdot \mathbf{h}))^5\]</span></li>
+<li><strong>Visibility (<span
+class="math inline">\(V_{cc}\)</span>):</strong> To minimize
+computation, Kelemen-Szirmay-Kalos visibility is often used for the
+clear coat: <span class="math display">\[V_{cc} = \frac{1}{4 (\mathbf{v}
+\cdot \mathbf{h})^2}\]</span></li>
+</ul>
+<h4 id="2-base-metal-term-f_textbase">2. Base Metal Term (<span
+class="math inline">\(f_{\text{base}}\)</span>)</h4>
+<ul>
+<li><strong>Normal Distribution (<span
+class="math inline">\(D_{\text{base}}\)</span>):</strong> Standard GGX
+using the material's surface roughness parameter <span
+class="math inline">\(\alpha = \text{roughness}^2\)</span>.</li>
+<li><strong>Fresnel (<span
+class="math inline">\(F_{\text{base}}\)</span>):</strong> Colored
+metallic Fresnel using the base color as <span
+class="math inline">\(F_0\)</span>: <span
+class="math display">\[F_{\text{base}} = F_0 + (1.0 - F_0)(1.0 -
+(\mathbf{v} \cdot \mathbf{h}))^5\]</span></li>
+<li><strong>Visibility (<span
+class="math inline">\(V_{\text{base}}\)</span>):</strong> The
+height-correlated Smith visibility function: <span
+class="math display">\[V_{\text{base}} = \frac{0.5}{(\mathbf{n} \cdot
+\mathbf{l}) \sqrt{(\mathbf{n} \cdot \mathbf{v})^2(1 - \alpha^2) +
+\alpha^2} + (\mathbf{n} \cdot \mathbf{v}) \sqrt{(\mathbf{n} \cdot
+\mathbf{l})^2(1 - \alpha^2) + \alpha^2}}\]</span></li>
+</ul>
+<hr />
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> PI <span class="op">=</span> <span class="fl">3.141592653589793</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Normal Distribution Function: GGX / Trowbridge-Reitz</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">D_GGX</span><span class="op">(</span><span class="dt">float</span> NoH<span class="op">,</span> <span class="dt">float</span> roughness<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a <span class="op">=</span> roughness <span class="op">*</span> roughness<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a2 <span class="op">=</span> a <span class="op">*</span> a<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denom <span class="op">=</span> <span class="op">(</span>NoH <span class="op">*</span> NoH <span class="op">*</span> <span class="op">(</span>a2 <span class="op">-</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">+</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> a2 <span class="op">/</span> <span class="op">(</span>PI <span class="op">*</span> denom <span class="op">*</span> denom<span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="co">// Height-Correlated Smith Visibility Function</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">V_SmithGGXCorrelated</span><span class="op">(</span><span class="dt">float</span> NoV<span class="op">,</span> <span class="dt">float</span> NoL<span class="op">,</span> <span class="dt">float</span> roughness<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a2 <span class="op">=</span> roughness <span class="op">*</span> roughness<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lambdaV <span class="op">=</span> NoL <span class="op">*</span> <span class="bu">sqrt</span><span class="op">(</span>NoV <span class="op">*</span> NoV <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> a2<span class="op">)</span> <span class="op">+</span> a2<span class="op">);</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lambdaL <span class="op">=</span> NoV <span class="op">*</span> <span class="bu">sqrt</span><span class="op">(</span>NoL <span class="op">*</span> NoL <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> a2<span class="op">)</span> <span class="op">+</span> a2<span class="op">);</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fl">0.5</span> <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>lambdaV <span class="op">+</span> lambdaL<span class="op">,</span> <span class="fl">1e-5</span><span class="op">);</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="co">// Kelemen Visibility approximation for clear coat</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">V_Kelemen</span><span class="op">(</span><span class="dt">float</span> VoH<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fl">0.25</span> <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>VoH <span class="op">*</span> VoH<span class="op">,</span> <span class="fl">1e-5</span><span class="op">);</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a><span class="co">// Fresnel-Schlick approximation</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">F_Schlick</span><span class="op">(</span><span class="dt">vec3</span> f0<span class="op">,</span> <span class="dt">float</span> VoH<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> f0 <span class="op">+</span> <span class="op">(</span><span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">)</span> <span class="op">-</span> f0<span class="op">)</span> <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span><span class="bu">clamp</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> VoH<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">),</span> <span class="fl">5.0</span><span class="op">);</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">F_SchlickDielectric</span><span class="op">(</span><span class="dt">float</span> f0<span class="op">,</span> <span class="dt">float</span> VoH<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> f0 <span class="op">+</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> f0<span class="op">)</span> <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span><span class="bu">clamp</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> VoH<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">),</span> <span class="fl">5.0</span><span class="op">);</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a><span class="co">// Evaluates clear coat layer over rough metallic base</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">evaluateClearCoatMetalBRDF</span><span class="op">(</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> N<span class="op">,</span>             <span class="co">// Surface normal</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> V<span class="op">,</span>             <span class="co">// View vector</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> L<span class="op">,</span>             <span class="co">// Light direction vector</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> baseColor<span class="op">,</span>     <span class="co">// Metallic reflectance (F0)</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> baseRoughness<span class="op">,</span><span class="co">// Base metal roughness [0..1]</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> clearCoat<span class="op">,</span>    <span class="co">// Clear coat strength [0..1]</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> ccRoughness   <span class="co">// Clear coat roughness [0..1]</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> H <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>V <span class="op">+</span> L<span class="op">);</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NoV <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">abs</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> V<span class="op">)),</span> <span class="fl">1e-5</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NoL <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> L<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NoH <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> H<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> VoH <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>V<span class="op">,</span> H<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>NoL <span class="op">&lt;=</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>    <span class="co">// --- Base Metal Layer ---</span></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> linearRoughness <span class="op">=</span> baseRoughness <span class="op">*</span> baseRoughness<span class="op">;</span></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> D_base <span class="op">=</span> <span class="fu">D_GGX</span><span class="op">(</span>NoH<span class="op">,</span> linearRoughness<span class="op">);</span></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> V_base <span class="op">=</span> <span class="fu">V_SmithGGXCorrelated</span><span class="op">(</span>NoV<span class="op">,</span> NoL<span class="op">,</span> linearRoughness<span class="op">);</span></span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> F_base  <span class="op">=</span> <span class="fu">F_Schlick</span><span class="op">(</span>baseColor<span class="op">,</span> VoH<span class="op">);</span></span>
+<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> specBase <span class="op">=</span> <span class="op">(</span>D_base <span class="op">*</span> V_base<span class="op">)</span> <span class="op">*</span> F_base<span class="op">;</span></span>
+<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a>    <span class="co">// --- Clear Coat Layer ---</span></span>
+<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Clamping clear coat roughness to avoid singularities</span></span>
+<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> ccLinearRoughness <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>ccRoughness <span class="op">*</span> ccRoughness<span class="op">,</span> <span class="fl">0.001</span><span class="op">,</span> <span class="fl">0.1</span><span class="op">);</span></span>
+<span id="cb1-66"><a href="#cb1-66" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> D_cc <span class="op">=</span> <span class="fu">D_GGX</span><span class="op">(</span>NoH<span class="op">,</span> ccLinearRoughness<span class="op">);</span></span>
+<span id="cb1-67"><a href="#cb1-67" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> V_cc <span class="op">=</span> <span class="fu">V_Kelemen</span><span class="op">(</span>VoH<span class="op">);</span></span>
+<span id="cb1-68"><a href="#cb1-68" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> F_cc <span class="op">=</span> <span class="fu">F_SchlickDielectric</span><span class="op">(</span><span class="fl">0.04</span><span class="op">,</span> VoH<span class="op">)</span> <span class="op">*</span> clearCoat<span class="op">;</span></span>
+<span id="cb1-69"><a href="#cb1-69" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> specClearCoat <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span>D_cc <span class="op">*</span> V_cc <span class="op">*</span> F_cc<span class="op">);</span></span>
+<span id="cb1-70"><a href="#cb1-70" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-71"><a href="#cb1-71" aria-hidden="true" tabindex="-1"></a>    <span class="co">// --- Layer Combination ---</span></span>
+<span id="cb1-72"><a href="#cb1-72" aria-hidden="true" tabindex="-1"></a>    <span class="co">// The clear coat absorbs/reflects energy, attenuating the base layer</span></span>
+<span id="cb1-73"><a href="#cb1-73" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> combinedColor <span class="op">=</span> specBase <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> F_cc<span class="op">)</span> <span class="op">+</span> specClearCoat<span class="op">;</span></span>
+<span id="cb1-74"><a href="#cb1-74" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-75"><a href="#cb1-75" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> combinedColor <span class="op">*</span> NoL<span class="op">;</span></span>
+<span id="cb1-76"><a href="#cb1-76" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

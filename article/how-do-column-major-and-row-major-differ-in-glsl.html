@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Do Column-Major and Row-Major Differ in GLSL? - glsl</title>
+    <meta name="description" content="Understanding the difference between column-major and row-major matrix layout in the OpenGL Shading Language (GLSL) is essential for correct mathematical computations and CPU-to-GPU memory alignment. In short, column-major order stores matrix elements co">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-do-column-major-and-row-major-differ-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Do Column-Major and Row-Major Differ in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-do-column-major-and-row-major-differ-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Understanding the difference between column-major and row-major matrix layout in the OpenGL Shading Language (GLSL) is essential for correct mathematical computations and CPU-to-GPU memory alignment. In short, column-major order stores matrix elements co" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-do-column-major-and-row-major-differ-in-glsl">How Do
+Column-Major and Row-Major Differ in GLSL?</h1>
+<p>Understanding the difference between column-major and row-major
+matrix layout in the OpenGL Shading Language (GLSL) is essential for
+correct mathematical computations and CPU-to-GPU memory alignment. In
+short, column-major order stores matrix elements column-by-column in
+linear memory and treats matrices as arrays of column vectors, whereas
+row-major order stores elements sequentially row-by-row. GLSL uses
+column-major order by default for both internal indexing and memory
+layouts, which dictates how matrices are accessed, multiplied with
+vectors, and populated from host memory buffers.</p>
+<h2 id="memory-organization-and-flattening">Memory Organization and
+Flattening</h2>
+<p>A matrix is mathematically a two-dimensional grid of numbers, but
+computer memory (VRAM and RAM) is a flat, contiguous one-dimensional
+array of addresses. The layout order defines how this 2D grid maps onto
+sequential 1D storage.</p>
+<p>For a 4x4 matrix with columns <span class="math inline">\(C_0, C_1,
+C_2, C_3\)</span> and rows <span class="math inline">\(R_0, R_1, R_2,
+R_3\)</span>:</p>
+<ul>
+<li><strong>Column-Major Layout (GLSL Default):</strong> Elements are
+stored column-by-column. The first four floats correspond to the entire
+first column, followed by the four floats of the second column, and so
+on:
+<code>[m00, m10, m20, m30, m01, m11, m21, m31, m02, m12, m22, m32, m03, m13, m23, m33]</code></li>
+<li><strong>Row-Major Layout:</strong> Elements are stored row-by-row.
+The first four floats correspond to the entire first row, followed by
+the second row:
+<code>[m00, m01, m02, m03, m10, m11, m12, m13, m20, m21, m22, m23, m30, m31, m32, m33]</code></li>
+</ul>
+<p>Because hardware memory controllers fetch data linearly, reading a
+contiguous vector from memory is faster. In GLSL, a <code>mat4</code> is
+conceptually an array of four <code>vec4</code> column vectors stored
+consecutively.</p>
+<h2 id="matrix-indexing-in-glsl">Matrix Indexing in GLSL</h2>
+<p>The column-major convention directly affects GLSL array subscript
+notation. When accessing a matrix variable in GLSL, the first bracket
+index selects the <strong>column</strong>, and the second bracket index
+selects the <strong>row</strong>:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">mat4</span> M<span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> firstColumn <span class="op">=</span> M<span class="op">[</span><span class="dv">0</span><span class="op">];</span>       <span class="co">// Returns the entire first column</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> elem <span class="op">=</span> M<span class="op">[</span><span class="dv">2</span><span class="op">][</span><span class="dv">1</span><span class="op">];</span>          <span class="co">// Accesses Column 2, Row 1 (zero-indexed)</span></span></code></pre></div>
+<p>In languages or shaders that use row-major conventions (such as
+standard C/C++ nested arrays or default HLSL configurations),
+<code>M[i][j]</code> typically denotes <code>M[row][column]</code>.
+Forgetting that GLSL indexes <code>[column][row]</code> is a frequent
+source of indexing bugs.</p>
+<h2 id="vector-matrix-multiplication-semantics">Vector-Matrix
+Multiplication Semantics</h2>
+<p>GLSL is mathematically geared toward column vectors. Transforming a
+coordinate vector <span class="math inline">\(v\)</span> by a
+transformation matrix <span class="math inline">\(M\)</span> is
+typically expressed via post-multiplication:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> transformedPos <span class="op">=</span> M <span class="op">*</span> v<span class="op">;</span></span></code></pre></div>
+<p>In this standard algebraic formulation, <span
+class="math inline">\(M\)</span> operates on <span
+class="math inline">\(v\)</span> as a column vector. The GPU performs a
+dot product between each <strong>row</strong> of <span
+class="math inline">\(M\)</span> and the vector <span
+class="math inline">\(v\)</span>, which is mathematically equivalent to
+a linear combination of the columns of <span
+class="math inline">\(M\)</span> weighted by the components of <span
+class="math inline">\(v\)</span>.</p>
+<p>If you write <code>v * M</code> (pre-multiplication), GLSL treats
+<span class="math inline">\(v\)</span> as a row vector, performing dot
+products across the columns of <span class="math inline">\(M\)</span>,
+which is mathematically equivalent to multiplying by the transpose of
+<span class="math inline">\(M\)</span> (<span class="math inline">\(M^T
+\cdot v\)</span>).</p>
+<h2 id="cpu-to-gpu-interfacing-and-uniform-buffers">CPU-to-GPU
+Interfacing and Uniform Buffers</h2>
+<p>Discrepancies between CPU mathematics libraries and GPU shaders often
+lead to unintended matrix transposition.</p>
+<p>Many CPU-side linear algebra frameworks (like DirectXMath or standard
+C-style 2D arrays) store matrices in row-major order, whereas libraries
+like GLM (OpenGL Mathematics) emulate GLSL by using column-major memory
+layouts.</p>
+<p>When transferring matrix data to GLSL shaders:</p>
+<h3 id="1-legacy-uniforms-gluniformmatrix4fv">1. Legacy Uniforms
+(<code>glUniformMatrix4fv</code>)</h3>
+<p>The OpenGL API function <code>glUniformMatrix4fv</code> includes a
+<code>transpose</code> boolean parameter:</p>
+<ul>
+<li>Pass <code>GL_FALSE</code> if the CPU data is already arranged in
+column-major order.</li>
+<li>Pass <code>GL_TRUE</code> if the CPU data is in row-major order,
+instructing the driver to transpose the memory during the upload.</li>
+</ul>
+<h3
+id="2-uniform-buffer-objects-ubo-and-shader-storage-buffer-objects-ssbo">2.
+Uniform Buffer Objects (UBO) and Shader Storage Buffer Objects
+(SSBO)</h3>
+<p>When copying memory directly into buffers via memory mapping
+(<code>glBufferData</code> or <code>glBufferSubData</code>), the CPU
+memory layout must match the shader layout qualifiers.</p>
+<p>GLSL defaults to <code>column_major</code>, but you can explicitly
+override this per uniform block or per member using layout
+qualifiers:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std140</span><span class="op">,</span> <span class="dt">row_major</span><span class="op">)</span> <span class="kw">uniform</span> TransformBlock <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> viewMatrix<span class="op">;</span>          <span class="co">// Parsed as row-major in buffer memory</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">layout</span><span class="op">(</span>column_major<span class="op">)</span> <span class="dt">mat4</span> modelMatrix<span class="op">;</span> <span class="co">// Explicitly column-major</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>Using <code>row_major</code> in a buffer layout tells the GPU
+compiler to generate memory read instructions suited for data structured
+row-by-row on the CPU, eliminating the need for manual CPU-side matrix
+transposition prior to upload.</p>
+<h2 id="summary-of-differences">Summary of Differences</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Column-Major (GLSL Standard)</th>
+<th>Row-Major</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Linear Memory Order</strong></td>
+<td><span class="math inline">\(C_0, C_1, C_2, C_3\)</span>
+sequentially</td>
+<td><span class="math inline">\(R_0, R_1, R_2, R_3\)</span>
+sequentially</td>
+</tr>
+<tr>
+<td><strong>GLSL Subscript (<code>M[i][j]</code>)</strong></td>
+<td><code>M[column][row]</code></td>
+<td><code>M[row][column]</code></td>
+</tr>
+<tr>
+<td><strong>Vector Transformation</strong></td>
+<td>Typically <code>Matrix * Vector</code></td>
+<td>Typically <code>Vector * Matrix</code></td>
+</tr>
+<tr>
+<td><strong>Buffer Layout Qualifier</strong></td>
+<td><code>layout(column_major)</code></td>
+<td><code>layout(row_major)</code></td>
+</tr>
+<tr>
+<td><strong>Typical Ecosystems</strong></td>
+<td>OpenGL, GLSL, GLM, Vulkan default</td>
+<td>DirectX (HLSL default), C/C++ native 2D arrays</td>
+</tr>
+</tbody>
+</table></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

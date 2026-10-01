@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Memory Coalescing Optimizes GLSL Buffer Reads - glsl</title>
+    <meta name="description" content="Memory coalescing is a hardware-level performance optimization that merges multiple simultaneous global memory access requests from adjacent GPU threads into a single, unified memory transaction. In GLSL compute shaders, when threads within a single exec">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-memory-coalescing-optimizes-glsl-buffer-reads">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Memory Coalescing Optimizes GLSL Buffer Reads - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-memory-coalescing-optimizes-glsl-buffer-reads" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Memory coalescing is a hardware-level performance optimization that merges multiple simultaneous global memory access requests from adjacent GPU threads into a single, unified memory transaction. In GLSL compute shaders, when threads within a single exec" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-memory-coalescing-optimizes-glsl-buffer-reads">How Memory
+Coalescing Optimizes GLSL Buffer Reads</h1>
+<p>Memory coalescing is a hardware-level performance optimization that
+merges multiple simultaneous global memory access requests from adjacent
+GPU threads into a single, unified memory transaction. In GLSL compute
+shaders, when threads within a single execution unit (such as an NVIDIA
+warp or an AMD wavefront) access consecutive locations in a Shader
+Storage Buffer Object (SSBO), the GPU hardware reads the data as a
+single memory burst. This article explains how memory coalescing
+functions, why it drastically improves read throughput in GLSL, and how
+to structure buffer access patterns to ensure full memory
+coalescing.</p>
+<h3 id="gpu-memory-architecture-and-transactions">GPU Memory
+Architecture and Transactions</h3>
+<p>Modern GPUs handle global memory access through memory controllers
+connected to high-bandwidth DRAM via wide buses and L2/L1 cache
+hierarchies. Physical reads from global memory are not fetched
+byte-by-byte; instead, they are transferred in fixed-size segments,
+typically 32, 64, or 128 bytes (a cache line).</p>
+<p>Compute shaders execute threads in lockstep groups of 32 or 64
+threads. When all threads in an execution group execute an instruction
+that reads from global memory, the memory controller evaluates the
+memory addresses requested by all threads concurrently before issuing
+requests to the memory bus.</p>
+<h3 id="the-mechanism-of-memory-coalescing">The Mechanism of Memory
+Coalescing</h3>
+<p>Memory coalescing occurs when contiguous threads request contiguous,
+aligned memory addresses:</p>
+<ol type="1">
+<li><strong>Address Evaluation</strong>: If Thread 0 requests address
+<code>0x00</code>, Thread 1 requests <code>0x04</code>, Thread 2
+requests <code>0x08</code>, and so on, the memory controller identifies
+that all requested 4-byte values reside within a single 128-byte cache
+line.</li>
+<li><strong>Transaction Merging</strong>: Instead of issuing 32 separate
+read commands across the bus, the memory controller issues a single
+128-byte memory fetch.</li>
+<li><strong>Distribution</strong>: The hardware receives the single
+128-byte payload and routes the appropriate 4-byte slice to each
+corresponding thread's register space.</li>
+</ol>
+<p>If memory access is strided (for instance, Thread <span
+class="math inline">\(N\)</span> accesses index <span
+class="math inline">\(N \times 16\)</span>), the requested addresses
+span across multiple disparate cache lines. In that scenario, the memory
+controller must issue multiple independent transactions to fetch the
+same total amount of useful data, creating a massive bottleneck,
+saturating memory bus bandwidth, and dramatically increasing
+latency.</p>
+<h3 id="coalesced-access-in-glsl-compute-shaders">Coalesced Access in
+GLSL Compute Shaders</h3>
+<p>In GLSL, coalesced memory access is achieved by mapping thread IDs
+directly to contiguous buffer indices.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">64</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> InputBuffer <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> data<span class="op">[];</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">writeonly</span> <span class="kw">buffer</span> OutputBuffer <span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> result<span class="op">[];</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> id <span class="op">=</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Coalesced Read:</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Contiguous threads read contiguous floats. </span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Threads 0-31 read 128 bytes in a single memory transaction.</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> value <span class="op">=</span> data<span class="op">[</span>id<span class="op">];</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    result<span class="op">[</span>id<span class="op">]</span> <span class="op">=</span> value <span class="op">*</span> <span class="fl">2.0</span><span class="op">;</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>In the example above, <code>gl_GlobalInvocationID.x</code> increases
+by 1 for each neighboring thread. Because each <code>float</code> is 4
+bytes, 32 consecutive threads access exactly 128 contiguous bytes,
+resulting in optimal coalescing.</p>
+<h3 id="common-pitfalls-strided-access-and-aos">Common Pitfalls: Strided
+Access and AoS</h3>
+<p>Memory coalescing is frequently broken by two main structural
+patterns:</p>
+<ul>
+<li><strong>Strided Indexing</strong>: Multiplying
+<code>gl_GlobalInvocationID.x</code> by an integer stride forces
+adjacent threads to access non-contiguous memory segments, generating
+multiple cache misses.</li>
+<li><strong>Array-of-Structures (AoS)</strong>: Defining a buffer of
+complex structures in GLSL (e.g.,
+<code>struct Particle { vec4 pos; vec4 vel; float mass; };</code>)
+causes threads reading a single field like <code>mass</code> to skip the
+intervening fields. This turns what could be a contiguous read into a
+strided read.</li>
+</ul>
+<p>To maximize memory coalescing in GLSL, use a Structure-of-Arrays
+(SoA) layout with the <code>std430</code> layout qualifier. Storing each
+component in its own independent array ensures that adjacent threads
+always access perfectly contiguous memory offsets.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

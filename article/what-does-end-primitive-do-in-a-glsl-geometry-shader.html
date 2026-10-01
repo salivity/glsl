@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Does EndPrimitive Do in a GLSL Geometry Shader? - glsl</title>
+    <meta name="description" content="In a GLSL geometry shader, the EndPrimitive() built-in function completes the generation of the current geometric primitive and signals the pipeline to assemble the emitted vertices. By finalizing the current topology—such as a triangle strip, line str">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-does-end-primitive-do-in-a-glsl-geometry-shader">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Does EndPrimitive Do in a GLSL Geometry Shader? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-does-end-primitive-do-in-a-glsl-geometry-shader" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In a GLSL geometry shader, the EndPrimitive() built-in function completes the generation of the current geometric primitive and signals the pipeline to assemble the emitted vertices. By finalizing the current topology—such as a triangle strip, line str" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-does-endprimitive-do-in-a-glsl-geometry-shader">What Does
+EndPrimitive Do in a GLSL Geometry Shader?</h1>
+<p>In a GLSL geometry shader, the <code>EndPrimitive()</code> built-in
+function completes the generation of the current geometric primitive and
+signals the pipeline to assemble the emitted vertices. By finalizing the
+current topology—such as a triangle strip, line strip, or point list—it
+allows developers to end the current shape and start emitting vertices
+for a completely new, disconnected primitive within the same shader
+invocation.</p>
+<h2 id="the-role-of-geometry-shaders-in-primitive-assembly">The Role of
+Geometry Shaders in Primitive Assembly</h2>
+<p>Geometry shaders sit between the vertex shader and the rasterizer.
+Unlike vertex shaders, which operate on a single vertex at a time,
+geometry shaders receive full primitives (such as points, lines, or
+triangles) along with optional adjacency information. Their defining
+capability is the dynamic creation or destruction of geometry,
+outputting zero, one, or multiple primitives per invocation.</p>
+<p>Geometry shaders emit data sequentially using two primary
+functions:</p>
+<ul>
+<li><code>EmitVertex()</code>: Writes the current output vertex
+attributes to the output stream.</li>
+<li><code>EndPrimitive()</code>: Concludes the current sequence of
+emitted vertices.</li>
+</ul>
+<h2 id="how-endprimitive-operates">How EndPrimitive Operates</h2>
+<p>When defining an output layout in GLSL, shaders typically output
+primitives in strip topologies, such as <code>points</code>,
+<code>line_strip</code>, or <code>triangle_strip</code>. Because strip
+topologies connect consecutive vertices by default, a mechanism is
+required to create separate, disjoint shapes without re-invoking the
+shader.</p>
+<p>Calling <code>EndPrimitive()</code> indicates that the preceding
+sequence of <code>EmitVertex()</code> calls forms a complete, closed
+primitive structure. Any subsequent <code>EmitVertex()</code> call
+begins a new, independent primitive strip.</p>
+<h3 id="behavior-by-output-primitive-type">Behavior by Output Primitive
+Type</h3>
+<ul>
+<li><strong>triangle_strip</strong>: Emitting three vertices forms a
+triangle. Additional vertices would normally extend the strip by sharing
+previous vertices. Calling <code>EndPrimitive()</code> closes the strip
+so the next vertices can form a separate triangle with entirely
+independent points.</li>
+<li><strong>line_strip</strong>: Emitting vertices creates connected
+line segments. Calling <code>EndPrimitive()</code> breaks the line
+continuity, allowing a new, disconnected line sequence to start.</li>
+<li><strong>points</strong>: For point outputs, each vertex represents
+an independent point. While <code>EndPrimitive()</code> is valid, each
+<code>EmitVertex()</code> effectively acts as a distinct element.</li>
+</ul>
+<h2 id="practical-use-cases">Practical Use Cases</h2>
+<p>The ability to segment output streams enables several advanced
+rendering techniques within a single invocation:</p>
+<ul>
+<li><strong>Particle Billboarding</strong>: Generating separate
+camera-facing quads from input point positions by emitting four vertices
+and calling <code>EndPrimitive()</code> per quad.</li>
+<li><strong>Geometry Culling and Splitting</strong>: Selectively
+discarding parts of a mesh or splitting complex shapes into discrete
+sub-components.</li>
+<li><strong>Hair, Fur, and Wire Generation</strong>: Emitting multiple
+disconnected line strips from a single surface triangle to simulate
+strand-based geometry.</li>
+</ul>
+<p>If a geometry shader finishes execution without an explicit
+<code>EndPrimitive()</code> call, the OpenGL implementation
+automatically finalizes the currently active primitive if enough
+vertices were emitted to form a valid shape. However, explicit calls
+remain best practice for code clarity and multi-primitive
+generation.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Declare and Use SSBOs in GLSL? - glsl</title>
+    <meta name="description" content="Shader Storage Buffer Objects (SSBOs) provide shaders with large, read-write structured memory buffers, making them essential for GPU compute pipelines, particle simulations, and dynamic mesh manipulation. This guide explores the GLSL syntax for declarin">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-to-declare-and-use-ssb-os-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How to Declare and Use SSBOs in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-to-declare-and-use-ssb-os-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Shader Storage Buffer Objects (SSBOs) provide shaders with large, read-write structured memory buffers, making them essential for GPU compute pipelines, particle simulations, and dynamic mesh manipulation. This guide explores the GLSL syntax for declarin" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-to-declare-and-use-ssbos-in-glsl">How to Declare and Use
+SSBOs in GLSL?</h1>
+<p>Shader Storage Buffer Objects (SSBOs) provide shaders with large,
+read-write structured memory buffers, making them essential for GPU
+compute pipelines, particle simulations, and dynamic mesh manipulation.
+This guide explores the GLSL syntax for declaring SSBOs, configuring
+memory layout qualifiers like <code>std430</code>, reading and writing
+arbitrary data structures, and handling synchronization and atomic
+operations across concurrent GPU invocations.</p>
+<h2
+id="understanding-ssbos-vs-uniform-buffer-objects-ubos">Understanding
+SSBOs vs. Uniform Buffer Objects (UBOs)</h2>
+<p>While Uniform Buffer Objects (UBOs) are strictly read-only within
+shaders and typically capped at 16 KB to 64 KB, SSBOs support
+bidirectional read-write access and can scale to hundreds of megabytes
+or gigabytes, constrained primarily by total VRAM. Additionally, SSBOs
+allow unsized runtime arrays as their final member, enabling shaders to
+process dynamically sized buffers sent from the host application.</p>
+<h2 id="declaring-ssbos-in-glsl">Declaring SSBOs in GLSL</h2>
+<p>SSBOs require OpenGL 4.3 or the
+<code>GL_ARB_shader_storage_buffer_object</code> extension. They are
+declared using the <code>buffer</code> keyword instead of
+<code>uniform</code>.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 430 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Particle <span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> position<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> velocity<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> color<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> life<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> padding<span class="op">[</span><span class="dv">3</span><span class="op">];</span> <span class="co">// Align to 16-byte boundaries</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> ParticleBuffer <span class="op">{</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> particleCount<span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    Particle particles<span class="op">[];</span> <span class="co">// Unsized array dynamically allocated on the host</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<h3 id="key-declaration-components">Key Declaration Components</h3>
+<ul>
+<li><strong>Layout Qualifier (<code>std430</code>)</strong>: Standard
+layout <code>std430</code> is designed specifically for SSBOs. Unlike
+<code>std140</code>, it packs scalar and vector arrays tightly without
+adding excessive padding to align every array element to 16 bytes.</li>
+<li><strong>Binding Index (<code>binding = N</code>)</strong>:
+Associates the GLSL buffer definition with a specific shader storage
+binding point, matching host calls like
+<code>glBindBufferBase(GL_SHADER_STORAGE_BUFFER, binding, bufferID)</code>.</li>
+<li><strong>Unsized Arrays (<code>type name[]</code>)</strong>: Must be
+the last member in the block definition. The length can be queried
+dynamically in shader code using the <code>particles.length()</code>
+function.</li>
+</ul>
+<h2 id="memory-qualifiers">Memory Qualifiers</h2>
+<p>GLSL allows you to restrict or specialize access to an SSBO to
+improve performance or ensure memory coherence:</p>
+<ul>
+<li><code>readonly</code>: Informs the compiler that the shader will
+only read data from the buffer, allowing aggressive caching
+optimizations.</li>
+<li><code>writeonly</code>: Informs the compiler that data will only be
+written, not read.</li>
+<li><code>coherent</code>: Ensures writes from one shader invocation
+become visible to other invocations after a memory barrier, bypassing
+internal hardware caches that might hold stale data.</li>
+<li><code>restrict</code>: Asserts that the buffer memory is not aliased
+by any other pointer or buffer in the shader, enabling register
+allocation optimizations.</li>
+</ul>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> InputData <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> sourceValues<span class="op">[];</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="dt">writeonly</span> <span class="kw">buffer</span> OutputData <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> resultValues<span class="op">[];</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<h2 id="reading-and-modifying-ssbo-data">Reading and Modifying SSBO
+Data</h2>
+<p>Inside the shader body, fields of an SSBO are accessed just like
+standard variables or struct members:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">64</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> <span class="dt">index</span> <span class="op">=</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="dt">index</span> <span class="op">&gt;=</span> particles<span class="op">.</span><span class="fu">length</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Read and modify</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    particles<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">position</span> <span class="op">+=</span> particles<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">velocity</span> <span class="op">*</span> <span class="fl">0.016</span><span class="op">;</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    particles<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">life</span> <span class="op">-=</span> <span class="fl">0.016</span><span class="op">;</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="synchronization-and-atomic-operations">Synchronization and
+Atomic Operations</h2>
+<p>When multiple shader invocations access or modify shared indexes
+concurrently, race conditions can corrupt data. GLSL provides built-in
+atomic functions and memory barriers to synchronize operations.</p>
+<h3 id="atomic-functions">Atomic Functions</h3>
+<p>Atomic operations guarantee that read-modify-write sequences are
+performed without interference from other invocations:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">3</span><span class="op">)</span> <span class="kw">buffer</span> CounterBuffer <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> totalActiveParticles<span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Atomically increments the counter and returns the previous value</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> allocatedSlot <span class="op">=</span> <span class="bu">atomicAdd</span><span class="op">(</span>totalActiveParticles<span class="op">,</span> <span class="dv">1</span>u<span class="op">);</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="memory-barriers">Memory Barriers</h3>
+<p>When one invocation writes data that another invocation must
+immediately read, you must insert an explicit memory barrier to ensure
+writes have flushed to global visibility:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Ensure all buffer writes within the work group or shader execution are visible</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="bu">memoryBarrierBuffer</span><span class="op">();</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Ensure all work-group threads have reached this execution point</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="bu">barrier</span><span class="op">();</span></span></code></pre></div>
+<p>Host-side synchronization must also be managed in OpenGL via
+<code>glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)</code> before
+reading data back to the CPU or rendering from the modified buffer.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

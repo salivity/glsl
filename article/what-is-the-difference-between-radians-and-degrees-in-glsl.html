@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Is the Difference Between radians and degrees in GLSL? - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), the radians() and degrees() built-in functions serve as conversion utilities between two standard units of angular measurement. While radians() converts an angle given in degrees into radians, degrees() performs the">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-is-the-difference-between-radians-and-degrees-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Is the Difference Between radians and degrees in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-is-the-difference-between-radians-and-degrees-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), the radians() and degrees() built-in functions serve as conversion utilities between two standard units of angular measurement. While radians() converts an angle given in degrees into radians, degrees() performs the" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-is-the-difference-between-radians-and-degrees-in-glsl">What
+Is the Difference Between radians and degrees in GLSL?</h1>
+<p>In the OpenGL Shading Language (GLSL), the <code>radians()</code> and
+<code>degrees()</code> built-in functions serve as conversion utilities
+between two standard units of angular measurement. While
+<code>radians()</code> converts an angle given in degrees into radians,
+<code>degrees()</code> performs the exact inverse operation by
+converting radians back into degrees. Understanding this difference is
+essential in shader programming because all native GLSL trigonometric
+functions—such as <code>sin()</code>, <code>cos()</code>, and
+<code>tan()</code>—strictly operate in radians, whereas developer
+inputs, uniform variables, and 3D modeling transformations are
+frequently specified in degrees.</p>
+<h2 id="mathematical-behavior-and-formulas">Mathematical Behavior and
+Formulas</h2>
+<p>The core distinction between the two functions lies in the
+mathematical conversion factor applied to the input argument:</p>
+<ul>
+<li><strong><code>radians(degrees_value)</code></strong>: Multiplies the
+input value by <span class="math inline">\(\frac{\pi}{180.0}\)</span>
+(approximately <span class="math inline">\(0.0174532925\)</span>).</li>
+<li><strong><code>degrees(radians_value)</code></strong>: Multiplies the
+input value by <span class="math inline">\(\frac{180.0}{\pi}\)</span>
+(approximately <span class="math inline">\(57.2957795\)</span>).</li>
+</ul>
+<p>Both functions handle floating-point values and execute element-wise
+across vector types.</p>
+<h2 id="vector-support-and-overloads">Vector Support and Overloads</h2>
+<p>GLSL defines both <code>radians()</code> and <code>degrees()</code>
+for scalar floats as well as multi-component floating-point vectors:</p>
+<ul>
+<li><code>float radians(float degrees)</code> /
+<code>float degrees(float radians)</code></li>
+<li><code>vec2 radians(vec2 degrees)</code> /
+<code>vec2 degrees(vec2 radians)</code></li>
+<li><code>vec3 radians(vec3 degrees)</code> /
+<code>vec3 degrees(vec3 radians)</code></li>
+<li><code>vec4 radians(vec4 degrees)</code> /
+<code>vec4 degrees(vec4 radians)</code></li>
+</ul>
+<p>When passed a vector, the conversion is applied independently to
+every component (<span class="math inline">\(x\)</span>, <span
+class="math inline">\(y\)</span>, <span
+class="math inline">\(z\)</span>, and <span
+class="math inline">\(w\)</span>), eliminating the need for manual
+looping or per-component calculations.</p>
+<h2 id="practical-shader-example">Practical Shader Example</h2>
+<p>A common use case involves passing rotation angles in degrees from
+the CPU application via uniform variables, then converting those values
+to radians inside the vertex or fragment shader prior to constructing
+rotation matrices or evaluating trigonometric curves:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_rotationInDegrees<span class="op">;</span> <span class="co">// e.g., 45.0</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> u_eulerRotation<span class="op">;</span>      <span class="co">// e.g., vec3(0.0, 90.0, 180.0)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Convert single float from degrees to radians</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> angleRad <span class="op">=</span> <span class="bu">radians</span><span class="op">(</span>u_rotationInDegrees<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosAngle <span class="op">=</span> <span class="bu">cos</span><span class="op">(</span>angleRad<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sinAngle <span class="op">=</span> <span class="bu">sin</span><span class="op">(</span>angleRad<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Convert full vector of angles at once</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> rotationInRadians <span class="op">=</span> <span class="bu">radians</span><span class="op">(</span>u_eulerRotation<span class="op">);</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Perform inverse calculation if needed</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> backToDegrees <span class="op">=</span> <span class="bu">degrees</span><span class="op">(</span>rotationInRadians<span class="op">);</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="side-by-side-comparison">Side-by-Side Comparison</h2>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th><code>radians()</code></th>
+<th><code>degrees()</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Input Unit</strong></td>
+<td>Degrees (<span class="math inline">\(0^\circ \text{ to }
+360^\circ\)</span>)</td>
+<td>Radians (<span class="math inline">\(0 \text{ to }
+2\pi\)</span>)</td>
+</tr>
+<tr>
+<td><strong>Output Unit</strong></td>
+<td>Radians (<span class="math inline">\(0 \text{ to }
+2\pi\)</span>)</td>
+<td>Degrees (<span class="math inline">\(0^\circ \text{ to }
+360^\circ\)</span>)</td>
+</tr>
+<tr>
+<td><strong>Multiplier</strong></td>
+<td><span class="math inline">\(\frac{\pi}{180.0}\)</span></td>
+<td><span class="math inline">\(\frac{180.0}{\pi}\)</span></td>
+</tr>
+<tr>
+<td><strong>Primary Use Case</strong></td>
+<td>Prepping human-readable degree values for GLSL <code>sin()</code>,
+<code>cos()</code>, <code>tan()</code></td>
+<td>Exporting computed angular data back into standard <span
+class="math inline">\(0^\circ\text{–}360^\circ\)</span> formats</td>
+</tr>
+<tr>
+<td><strong>Supported Types</strong></td>
+<td><code>float</code>, <code>vec2</code>, <code>vec3</code>,
+<code>vec4</code></td>
+<td><code>float</code>, <code>vec2</code>, <code>vec3</code>,
+<code>vec4</code></td>
+</tr>
+</tbody>
+</table>
+<p>Utilizing these built-in functions ensures hardware-optimized
+calculation routines and maintains clear, readable shader code when
+handling coordinate transformations and rotational calculations.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

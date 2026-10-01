@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ray Capsule Intersection Algorithm in GLSL - glsl</title>
+    <meta name="description" content="This article explains the mathematical formulation and GLSL implementation for computing the intersection of a 3D ray with a capsule. A capsule is geometrically defined as a cylinder bounded by two points and capped by two hemispheres of equal radius. By">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/ray-capsule-intersection-algorithm-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Ray Capsule Intersection Algorithm in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/ray-capsule-intersection-algorithm-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains the mathematical formulation and GLSL implementation for computing the intersection of a 3D ray with a capsule. A capsule is geometrically defined as a cylinder bounded by two points and capped by two hemispheres of equal radius. By" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="ray-capsule-intersection-algorithm-in-glsl">Ray Capsule
+Intersection Algorithm in GLSL</h1>
+<p>This article explains the mathematical formulation and GLSL
+implementation for computing the intersection of a 3D ray with a
+capsule. A capsule is geometrically defined as a cylinder bounded by two
+points and capped by two hemispheres of equal radius. By breaking the
+primitive down into its cylindrical body and spherical endcaps, we
+derive the quadratic equations needed to detect collisions, determine
+the nearest entry distance, and output surface normals in a fragment
+shader.</p>
+<h2 id="geometric-definitions">Geometric Definitions</h2>
+<p>A capsule is defined by two endpoints <span
+class="math inline">\(A\)</span> and <span
+class="math inline">\(B\)</span>, representing the central axis segment,
+and a radius <span class="math inline">\(r\)</span>.</p>
+<p>A ray is defined parametrically by an origin <span
+class="math inline">\(O\)</span> and a normalized direction vector <span
+class="math inline">\(D\)</span>:</p>
+<p><span class="math display">\[P(t) = O + tD, \quad t \ge
+0\]</span></p>
+<p>A point <span class="math inline">\(P\)</span> lies on the capsule's
+surface if its shortest Euclidean distance to the line segment <span
+class="math inline">\(AB\)</span> equals <span
+class="math inline">\(r\)</span>.</p>
+<h2 id="mathematical-formulation">Mathematical Formulation</h2>
+<p>To find the intersection parameter <span
+class="math inline">\(t\)</span>, the capsule is evaluated as an
+infinite cylinder along the axis <span
+class="math inline">\(AB\)</span>, constrained to the segment, and
+capped by two spheres centered at <span class="math inline">\(A\)</span>
+and <span class="math inline">\(B\)</span>.</p>
+<p>Let:</p>
+<ul>
+<li><span class="math inline">\(\vec{ba} = B - A\)</span></li>
+<li><span class="math inline">\(\vec{oa} = O - A\)</span></li>
+</ul>
+<p>Projecting the ray onto the axis gives the relative height along the
+segment:</p>
+<p><span class="math display">\[h(t) = \frac{(\vec{oa} + tD) \cdot
+\vec{ba}}{\|\vec{ba}\|}\]</span></p>
+<h3 id="1-the-cylindrical-body">1. The Cylindrical Body</h3>
+<p>The squared distance from a point on the ray <span
+class="math inline">\(P(t)\)</span> to the infinite line passing through
+<span class="math inline">\(AB\)</span> is given by:</p>
+<p><span class="math display">\[\|(\vec{oa} + tD) -
+\text{proj}_{\vec{ba}}(\vec{oa} + tD)\|^2 = r^2\]</span></p>
+<p>Multiplying by <span class="math inline">\(\|\vec{ba}\|^2\)</span> to
+avoid divisions yields a standard quadratic equation in terms of <span
+class="math inline">\(t\)</span>:</p>
+<p><span class="math display">\[a t^2 + 2b t + c = 0\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(a = \|\vec{ba}\|^2 - (D \cdot
+\vec{ba})^2\)</span></li>
+<li><span class="math inline">\(b = \|\vec{ba}\|^2 (\vec{oa} \cdot D) -
+(\vec{oa} \cdot \vec{ba})(D \cdot \vec{ba})\)</span></li>
+<li><span class="math inline">\(c = \|\vec{ba}\|^2 \|\vec{oa}\|^2 -
+(\vec{oa} \cdot \vec{ba})^2 - r^2 \|\vec{ba}\|^2\)</span></li>
+</ul>
+<p>The discriminant is computed as <span class="math inline">\(\Delta =
+b^2 - a c\)</span>.</p>
+<ul>
+<li>If <span class="math inline">\(\Delta &lt; 0\)</span>, the ray
+misses the infinite cylinder.</li>
+<li>If <span class="math inline">\(\Delta \ge 0\)</span>, the candidate
+distance to the cylinder surface is:</li>
+</ul>
+<p><span class="math display">\[t_{\text{cyl}} = \frac{-b -
+\sqrt{\Delta}}{a}\]</span></p>
+<p>The point is valid only if it falls within the segment bounds:</p>
+<p><span class="math display">\[0 \le (\vec{oa} + t_{\text{cyl}} D)
+\cdot \vec{ba} \le \|\vec{ba}\|^2\]</span></p>
+<h3 id="2-the-spherical-caps">2. The Spherical Caps</h3>
+<p>If the intersection falls outside this range, or if the ray misses
+the cylinder body entirely, the ray may intersect one of the two
+spherical caps:</p>
+<ul>
+<li><strong>Base Cap (Sphere at <span
+class="math inline">\(A\)</span>):</strong> Solve <span
+class="math inline">\(\|O + tD - A\|^2 = r^2\)</span></li>
+<li><strong>Tip Cap (Sphere at <span
+class="math inline">\(B\)</span>):</strong> Solve <span
+class="math inline">\(\|O + tD - B\|^2 = r^2\)</span></li>
+</ul>
+<p>For an arbitrary sphere centered at <span
+class="math inline">\(C\)</span> with radius <span
+class="math inline">\(r\)</span>:</p>
+<p><span class="math display">\[t^2 + 2( (O - C) \cdot D )t + (\|O -
+C\|^2 - r^2) = 0\]</span></p>
+<p>The valid hit is the smallest positive <span
+class="math inline">\(t\)</span> across the cylinder body and the
+appropriate hemisphere.</p>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>The following GLSL function computes the ray-capsule intersection. It
+returns a <code>vec4</code> where <code>.xyz</code> contains the surface
+normal at the hit point and <code>.w</code> contains the hit distance
+<span class="math inline">\(t\)</span> (or <code>-1.0</code> if no
+intersection occurs).</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> <span class="fu">intersectCapsule</span><span class="op">(</span><span class="dt">vec3</span> ro<span class="op">,</span> <span class="dt">vec3</span> rd<span class="op">,</span> <span class="dt">vec3</span> pa<span class="op">,</span> <span class="dt">vec3</span> pb<span class="op">,</span> <span class="dt">float</span> r<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> ba <span class="op">=</span> pb <span class="op">-</span> pa<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> oa <span class="op">=</span> ro <span class="op">-</span> pa<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> baba <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>ba<span class="op">,</span> ba<span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> bard <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>ba<span class="op">,</span> rd<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> baoa <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>ba<span class="op">,</span> oa<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> rdoa <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>rd<span class="op">,</span> oa<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> oaoa <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>oa<span class="op">,</span> oa<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Cylinder body quadratic coefficients</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a <span class="op">=</span> baba <span class="op">-</span> bard <span class="op">*</span> bard<span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> b <span class="op">=</span> baba <span class="op">*</span> rdoa <span class="op">-</span> baoa <span class="op">*</span> bard<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> c <span class="op">=</span> baba <span class="op">*</span> oaoa <span class="op">-</span> baoa <span class="op">*</span> baoa <span class="op">-</span> r <span class="op">*</span> r <span class="op">*</span> baba<span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> h <span class="op">=</span> b <span class="op">*</span> b <span class="op">-</span> a <span class="op">*</span> c<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>h <span class="op">&gt;=</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> t <span class="op">=</span> <span class="op">(-</span>b <span class="op">-</span> <span class="bu">sqrt</span><span class="op">(</span>h<span class="op">))</span> <span class="op">/</span> a<span class="op">;</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> y <span class="op">=</span> baoa <span class="op">+</span> t <span class="op">*</span> bard<span class="op">;</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Check if hit is within the finite cylinder segment</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>t <span class="op">&gt;</span> <span class="fl">0.0</span> <span class="op">&amp;&amp;</span> y <span class="op">&gt;</span> <span class="fl">0.0</span> <span class="op">&amp;&amp;</span> y <span class="op">&lt;</span> baba<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec3</span> hitPoint <span class="op">=</span> ro <span class="op">+</span> t <span class="op">*</span> rd<span class="op">;</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec3</span> normal <span class="op">=</span> <span class="op">(</span>hitPoint <span class="op">-</span> <span class="op">(</span>pa <span class="op">+</span> ba <span class="op">*</span> <span class="op">(</span>y <span class="op">/</span> baba<span class="op">)))</span> <span class="op">/</span> r<span class="op">;</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>            <span class="kw">return</span> <span class="dt">vec4</span><span class="op">(</span>normal<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Check spherical caps</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Cap at pa (y &lt;= 0.0)</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> oc <span class="op">=</span> <span class="op">(</span>bard <span class="op">&lt;=</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">?</span> oa <span class="op">:</span> ro <span class="op">-</span> pb<span class="op">;</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>rd<span class="op">,</span> oc<span class="op">);</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    c <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>oc<span class="op">,</span> oc<span class="op">)</span> <span class="op">-</span> r <span class="op">*</span> r<span class="op">;</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    h <span class="op">=</span> b <span class="op">*</span> b <span class="op">-</span> c<span class="op">;</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>h <span class="op">&gt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> t <span class="op">=</span> <span class="op">-</span>b <span class="op">-</span> <span class="bu">sqrt</span><span class="op">(</span>h<span class="op">);</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>t <span class="op">&gt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec3</span> center <span class="op">=</span> <span class="op">(</span>bard <span class="op">&lt;=</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">?</span> pa <span class="op">:</span> pb<span class="op">;</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec3</span> normal <span class="op">=</span> <span class="op">(</span>ro <span class="op">+</span> t <span class="op">*</span> rd <span class="op">-</span> center<span class="op">)</span> <span class="op">/</span> r<span class="op">;</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>            <span class="kw">return</span> <span class="dt">vec4</span><span class="op">(</span>normal<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="performance-considerations">Performance Considerations</h2>
+<ul>
+<li><strong>Precomputation:</strong> If the capsule endpoints are
+static, terms such as <code>ba</code> and <code>baba</code> can be
+precomputed outside the shader to save arithmetic instructions.</li>
+<li><strong>Normalization:</strong> Ensure <code>rd</code> is normalized
+before calling the function; non-unit direction vectors invalidate the
+quadratic derivations.</li>
+<li><strong>Ray Marching Alternative:</strong> When rendering multiple
+capsules or blending shapes, evaluating an analytical distance field
+(SDF) using sphere-tracing is often more flexible than exact analytical
+raycasting.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

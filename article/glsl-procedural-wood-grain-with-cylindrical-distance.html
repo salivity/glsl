@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Procedural Wood Grain with Cylindrical Distance - glsl</title>
+    <meta name="description" content="Procedural wood grain generation in GLSL simulates the natural biological growth of tree rings by calculating the radial distance from a central axis in three-dimensional object space. By utilizing a cylindrical distance metric, perturbing that metric wi">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-procedural-wood-grain-with-cylindrical-distance">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Procedural Wood Grain with Cylindrical Distance - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-procedural-wood-grain-with-cylindrical-distance" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Procedural wood grain generation in GLSL simulates the natural biological growth of tree rings by calculating the radial distance from a central axis in three-dimensional object space. By utilizing a cylindrical distance metric, perturbing that metric wi" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-procedural-wood-grain-with-cylindrical-distance">GLSL
+Procedural Wood Grain with Cylindrical Distance</h1>
+<p>Procedural wood grain generation in GLSL simulates the natural
+biological growth of tree rings by calculating the radial distance from
+a central axis in three-dimensional object space. By utilizing a
+cylindrical distance metric, perturbing that metric with continuous
+noise functions, and mapping the resulting values to wood-tone color
+gradients, shaders can render realistic, non-repeating concentric grain
+patterns directly onto 3D surfaces without requiring external texture
+maps.</p>
+<h3 id="establishing-the-cylindrical-coordinate-base">Establishing the
+Cylindrical Coordinate Base</h3>
+<p>Real tree trunks grow outward from a central vertical axis, forming
+concentric cylindrical layers. In 3D space, this core axis is typically
+mapped along the Y-axis. The distance <span
+class="math inline">\(r\)</span> from any point <span
+class="math inline">\(P(x, y, z)\)</span> to the Y-axis is determined
+using the 2D Euclidean distance on the XZ plane:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> radius <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>position<span class="op">.</span><span class="fu">xz</span><span class="op">);</span></span></code></pre></div>
+<p>This radial distance value forms the baseline coordinate for
+generating concentric rings. Because it ignores the Y-component, the
+basic shape forms an infinitely tall, perfect geometric cylinder.</p>
+<h3 id="introducing-biological-imperfection-with-noise">Introducing
+Biological Imperfection with Noise</h3>
+<p>Natural wood exhibits grain distortions, knots, and longitudinal
+variations. A raw geometric distance creates perfectly smooth,
+artificial concentric bands. To introduce organic variation, procedural
+noise—such as Perlin noise, Simplex noise, or Fractal Brownian Motion
+(FBM)—is added to perturb the coordinates before or during the distance
+calculation.</p>
+<p>There are two primary approaches to perturbation:</p>
+<ol type="1">
+<li><p><strong>Domain Warping:</strong> Displacing the original position
+coordinates using 3D noise before evaluating the length:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> warpedPos <span class="op">=</span> position <span class="op">+</span> <span class="fu">noise3D</span><span class="op">(</span>position <span class="op">*</span> noiseScale<span class="op">)</span> <span class="op">*</span> distortionStrength<span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> radius <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>warpedPos<span class="op">.</span><span class="fu">xz</span><span class="op">);</span></span></code></pre></div></li>
+<li><p><strong>Radius Distortion:</strong> Directly modifying the
+computed radius with noise dependent on the longitudinal axis (<span
+class="math inline">\(Y\)</span>):</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> radius <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>position<span class="op">.</span><span class="fu">xz</span><span class="op">)</span> <span class="op">+</span> <span class="fu">noise3D</span><span class="op">(</span><span class="dt">vec3</span><span class="op">(</span>position<span class="op">.</span><span class="fu">xz</span> <span class="op">*</span> <span class="fl">2.0</span><span class="op">,</span> position<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> <span class="fl">0.1</span><span class="op">))</span> <span class="op">*</span> distortionStrength<span class="op">;</span></span></code></pre></div></li>
+</ol>
+<p>Scaling the noise inputs unevenly—stretching along the Y-axis while
+keeping the X and Z axes compact—reproduces the long, directional
+streaks characteristic of split wood lumber.</p>
+<h3 id="ring-modulation-and-pattern-repetition">Ring Modulation and
+Pattern Repetition</h3>
+<p>Once the distorted radius is established, it must be transformed into
+a recurring pattern of alternating rings (earlywood and latewood). This
+is typically achieved using periodic mathematical functions such as
+<code>sin()</code> or the fractional component function
+<code>fract()</code>.</p>
+<p>Using a sine function yields smooth transitions between rings:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> ringPattern <span class="op">=</span> <span class="bu">sin</span><span class="op">(</span>radius <span class="op">*</span> ringFrequency<span class="op">);</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>ringPattern <span class="op">=</span> ringPattern <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span> <span class="co">// Remap from [-1, 1] to [0, 1]</span></span></code></pre></div>
+<p>To create sharper transitions where the harder latewood abruptly
+stops before the softer earlywood begins, high-frequency exponentiation
+or an asymmetric shaping curve can be applied:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> ringPattern <span class="op">=</span> <span class="bu">fract</span><span class="op">(</span>radius <span class="op">*</span> ringFrequency<span class="op">);</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>ringPattern <span class="op">=</span> <span class="bu">pow</span><span class="op">(</span>ringPattern<span class="op">,</span> <span class="fl">0.8</span><span class="op">);</span> <span class="co">// Adjust edge sharpness</span></span></code></pre></div>
+<h3 id="fine-grain-details-and-color-mapping">Fine Grain Details and
+Color Mapping</h3>
+<p>Wood micro-structure consists of fine fibers running parallel to the
+trunk. A high-frequency, anisotropic noise stretched along the Y-axis
+can be added to modulate the surface brightness, simulating these
+capillary fibers.</p>
+<p>Finally, the synthesized scalar value maps into a color palette using
+the <code>mix()</code> function. Typically, shaders interpolate between
+at least two colors representing the lighter earlywood and darker
+latewood bands:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> earlyWoodColor <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.85</span><span class="op">,</span> <span class="fl">0.65</span><span class="op">,</span> <span class="fl">0.45</span><span class="op">);</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> lateWoodColor  <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.50</span><span class="op">,</span> <span class="fl">0.30</span><span class="op">,</span> <span class="fl">0.15</span><span class="op">);</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Composite scalar computation</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> finalGrain <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>ringPattern <span class="op">+</span> fiberNoise <span class="op">*</span> <span class="fl">0.1</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> woodColor <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>earlyWoodColor<span class="op">,</span> lateWoodColor<span class="op">,</span> finalGrain<span class="op">);</span></span></code></pre></div>
+<h3 id="complete-implementation-example">Complete Implementation
+Example</h3>
+<p>The following GLSL function demonstrates the end-to-end integration
+of cylindrical distance, domain warping, and color interpolation:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Assumes a defined gradientNoise3D(vec3 p) function returning [-1.0, 1.0]</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">generateWood</span><span class="op">(</span><span class="dt">vec3</span> worldPos<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 1. Scale coordinates for trunk size and longitudinal stretch</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> p <span class="op">=</span> worldPos <span class="op">*</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">2.0</span><span class="op">,</span> <span class="fl">0.2</span><span class="op">,</span> <span class="fl">2.0</span><span class="op">);</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 2. Domain warp using noise</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> distortion <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">gradientNoise3D</span><span class="op">(</span>p<span class="op">),</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        <span class="fu">gradientNoise3D</span><span class="op">(</span>p <span class="op">+</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">43.12</span><span class="op">)),</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>        <span class="fu">gradientNoise3D</span><span class="op">(</span>p <span class="op">+</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">11.54</span><span class="op">))</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    p <span class="op">+=</span> distortion <span class="op">*</span> <span class="fl">0.35</span><span class="op">;</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 3. Cylindrical distance metric (distance from Y axis)</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> r <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>p<span class="op">.</span><span class="fu">xz</span><span class="op">);</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 4. Ring generation with asymmetric falloff</span></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> rings <span class="op">=</span> <span class="bu">fract</span><span class="op">(</span>r <span class="op">*</span> <span class="fl">8.0</span><span class="op">);</span></span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    rings <span class="op">=</span> <span class="bu">smoothstep</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.7</span><span class="op">,</span> rings<span class="op">)</span> <span class="op">-</span> <span class="bu">smoothstep</span><span class="op">(</span><span class="fl">0.7</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> rings<span class="op">);</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 5. High-frequency longitudinal fibers</span></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> fibers <span class="op">=</span> <span class="fu">gradientNoise3D</span><span class="op">(</span>worldPos <span class="op">*</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">40.0</span><span class="op">,</span> <span class="fl">2.0</span><span class="op">,</span> <span class="fl">40.0</span><span class="op">))</span> <span class="op">*</span> <span class="fl">0.08</span><span class="op">;</span></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 6. Color blending</span></span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> blendFactor <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>rings <span class="op">+</span> fibers<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> lightWood <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.76</span><span class="op">,</span> <span class="fl">0.58</span><span class="op">,</span> <span class="fl">0.38</span><span class="op">);</span></span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> darkWood  <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.42</span><span class="op">,</span> <span class="fl">0.24</span><span class="op">,</span> <span class="fl">0.12</span><span class="op">);</span></span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">mix</span><span class="op">(</span>lightWood<span class="op">,</span> darkWood<span class="op">,</span> blendFactor<span class="op">);</span></span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By controlling the origin of the XZ plane, the angle of the cutting
+surface, and the noise scales, this implementation can accurately
+represent different cuts of wood, such as quarter-sawn, flat-sawn, or
+end-grain lumber.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

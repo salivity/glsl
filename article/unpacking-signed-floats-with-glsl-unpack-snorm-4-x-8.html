@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unpacking Signed Floats with GLSL unpackSnorm4x8 - glsl</title>
+    <meta name="description" content="The unpackSnorm4x8 built-in function in the OpenGL Shading Language (GLSL) decodes a single 32-bit unsigned integer into a four-component floating-point vector (vec4) with values normalized between -1.0 and 1.0. This article breaks down the internal mech">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/unpacking-signed-floats-with-glsl-unpack-snorm-4-x-8">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Unpacking Signed Floats with GLSL unpackSnorm4x8 - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/unpacking-signed-floats-with-glsl-unpack-snorm-4-x-8" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The unpackSnorm4x8 built-in function in the OpenGL Shading Language (GLSL) decodes a single 32-bit unsigned integer into a four-component floating-point vector (vec4) with values normalized between -1.0 and 1.0. This article breaks down the internal mech" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="unpacking-signed-floats-with-glsl-unpacksnorm4x8">Unpacking
+Signed Floats with GLSL unpackSnorm4x8</h1>
+<p>The <code>unpackSnorm4x8</code> built-in function in the OpenGL
+Shading Language (GLSL) decodes a single 32-bit unsigned integer into a
+four-component floating-point vector (<code>vec4</code>) with values
+normalized between -1.0 and 1.0. This article breaks down the internal
+mechanism of <code>unpackSnorm4x8</code>, explaining how it segments raw
+32-bit integers, interprets individual 8-bit slices as signed values,
+and applies fixed-point normalization mathematics to restore coordinate
+data such as surface normals or tangent vectors.</p>
+<h3 id="1-bitwise-extraction">1. Bitwise Extraction</h3>
+<p>A GLSL <code>uint</code> consists of 32 contiguous bits. The
+<code>unpackSnorm4x8</code> function treats this integer as a packed
+sequence of four distinct 8-bit fields. The extraction sequence maps
+bits into the components of a <code>vec4</code> from lowest-order byte
+to highest-order byte:</p>
+<ul>
+<li><strong>Component X:</strong> Bits 0 through 7</li>
+<li><strong>Component Y:</strong> Bits 8 through 15</li>
+<li><strong>Component Z:</strong> Bits 16 through 23</li>
+<li><strong>Component W:</strong> Bits 24 through 31</li>
+</ul>
+<h3 id="2-signed-integer-interpretation">2. Signed Integer
+Interpretation</h3>
+<p>Each isolated 8-bit sequence is reinterpreted as a signed two's
+complement integer. In this format:</p>
+<ul>
+<li>Bit values range from <code>0x00</code> through <code>0xFF</code> in
+binary.</li>
+<li>Interpreted as signed 8-bit integers (<span
+class="math inline">\(c\)</span>), the numerical range extends from -128
+to 127.</li>
+<li>Values from <code>0x00</code> to <code>0x7F</code> represent
+<code>0</code> to <code>127</code>.</li>
+<li>Values from <code>0x80</code> to <code>0xFF</code> represent
+<code>-128</code> to <code>-1</code>.</li>
+</ul>
+<h3 id="3-normalization-formula">3. Normalization Formula</h3>
+<p>According to the OpenGL and GLSL specifications, signed normalized
+(<code>snorm</code>) values map to standard floating-point coordinates
+using division by <span class="math inline">\(2^{b-1} - 1\)</span>,
+where <span class="math inline">\(b\)</span> is the number of bits
+(<span class="math inline">\(8\)</span>). For 8-bit precision, this
+divisor is <span class="math inline">\(127.0\)</span>.</p>
+<p>The exact formula applied to each signed 8-bit integer <span
+class="math inline">\(c\)</span> is:</p>
+<p><span class="math display">\[f = \max\left(\frac{c}{127.0},
+-1.0\right)\]</span></p>
+<p>This formula performs the following mapping:</p>
+<ul>
+<li><strong>Positive Maximum:</strong> A value of <code>127</code>
+yields <span class="math inline">\(127 / 127.0 = 1.0\)</span>.</li>
+<li><strong>Zero Point:</strong> A value of <code>0</code> yields <span
+class="math inline">\(0 / 127.0 = 0.0\)</span>, guaranteeing an exact
+representation of zero.</li>
+<li><strong>Negative Base:</strong> A value of <code>-127</code> yields
+<span class="math inline">\(-127 / 127.0 = -1.0\)</span>.</li>
+<li><strong>Asymmetry Clamping:</strong> Because an 8-bit two's
+complement integer accommodates <code>-128</code>, the quotient <span
+class="math inline">\(-128 / 127.0 \approx -1.007874\)</span>. The
+<code>max</code> operation clamps this result to <span
+class="math inline">\(-1.0\)</span>. Both <code>-128</code> and
+<code>-127</code> evaluate to <span class="math inline">\(-1.0\)</span>,
+resolving the structural asymmetry of two's complement encoding.</li>
+</ul>
+<h3 id="output-and-applications">Output and Applications</h3>
+<p>After processing all four bytes, <code>unpackSnorm4x8</code> returns
+the completed <code>vec4(x, y, z, w)</code> where every component
+satisfies <span class="math inline">\(-1.0 \le \text{component} \le
+1.0\)</span>.</p>
+<p>This process allows graphics pipelines to pack 3D normal vectors (and
+an auxiliary scalar) into a single 32-bit attribute or uniform buffer
+entry, reducing vertex buffer memory footprint and memory bandwidth
+usage while preserving spatial coordinate accuracy upon shader
+execution.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

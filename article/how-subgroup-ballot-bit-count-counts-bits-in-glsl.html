@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How subgroupBallotBitCount Counts Bits in GLSL - glsl</title>
+    <meta name="description" content="This article explains how the subgroupBallotBitCount intrinsic function in GLSL evaluates a subgroup ballot to count active invocations. It covers the structure of the uvec4 ballot bitmask, the underlying population count operation executed across its co">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-subgroup-ballot-bit-count-counts-bits-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How subgroupBallotBitCount Counts Bits in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-subgroup-ballot-bit-count-counts-bits-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the subgroupBallotBitCount intrinsic function in GLSL evaluates a subgroup ballot to count active invocations. It covers the structure of the uvec4 ballot bitmask, the underlying population count operation executed across its co" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-subgroupballotbitcount-counts-bits-in-glsl">How
+subgroupBallotBitCount Counts Bits in GLSL</h1>
+<p>This article explains how the <code>subgroupBallotBitCount</code>
+intrinsic function in GLSL evaluates a subgroup ballot to count active
+invocations. It covers the structure of the <code>uvec4</code> ballot
+bitmask, the underlying population count operation executed across its
+components, and how this differs from prefix-based ballot counting
+functions.</p>
+<h2 id="understanding-the-subgroup-ballot-representation">Understanding
+the Subgroup Ballot Representation</h2>
+<p>In GLSL, subgroup ballot operations return a <code>uvec4</code>—a
+vector of four 32-bit unsigned integers, providing up to 128 bits. Each
+bit in this bitmask corresponds to a specific invocation within the
+subgroup, ordered by <code>gl_SubgroupInvocationID</code>.</p>
+<p>When an invocation evaluates a condition using
+<code>subgroupBallot(predicate)</code>, the hardware sets the bit
+corresponding to that invocation's index to <code>1</code> if the
+predicate is <code>true</code> and the invocation is active; otherwise,
+it is set to <code>0</code>. If a subgroup has fewer than 128
+invocations, the unused higher-order bits are set to <code>0</code>.</p>
+<h2 id="the-bit-counting-mechanism">The Bit Counting Mechanism</h2>
+<p>The <code>subgroupBallotBitCount(uvec4 value)</code> function takes
+an arbitrary ballot vector and returns the total number of set bits
+(<code>1</code>s) contained within it. The counting process functions as
+follows:</p>
+<ol type="1">
+<li><strong>Component-Wise Population Count:</strong> The hardware
+executes a population count (<code>popcnt</code>) operation on each
+32-bit component of the <code>uvec4</code> vector (<code>value.x</code>,
+<code>value.y</code>, <code>value.z</code>, and <code>value.w</code>).
+The population count determines the number of non-zero bits within each
+individual 32-bit integer.</li>
+<li><strong>Summation:</strong> The counts from all four components are
+summed together into a single scalar <code>uint</code>.</li>
+</ol>
+<p>Conceptually, the function evaluates to:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> totalBits <span class="op">=</span> <span class="bu">bitCount</span><span class="op">(</span>value<span class="op">.</span><span class="fu">x</span><span class="op">)</span> <span class="op">+</span> <span class="bu">bitCount</span><span class="op">(</span>value<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">+</span> <span class="bu">bitCount</span><span class="op">(</span>value<span class="op">.</span><span class="fu">z</span><span class="op">)</span> <span class="op">+</span> <span class="bu">bitCount</span><span class="op">(</span>value<span class="op">.</span><span class="fu">w</span><span class="op">);</span></span></code></pre></div>
+<p>Most modern GPUs implement dedicated hardware instructions for
+population counting, allowing the GPU to determine the number of set
+bits per 32-bit word in one or very few clock cycles.</p>
+<h2 id="scope-and-behavior">Scope and Behavior</h2>
+<ul>
+<li><strong>Global to the Ballot:</strong> Unlike
+<code>subgroupBallotInclusiveBitCount</code> and
+<code>subgroupBallotExclusiveBitCount</code>, which only sum bits up to
+the caller's <code>gl_SubgroupInvocationID</code>,
+<code>subgroupBallotBitCount</code> counts all active bits across the
+entire 128-bit mask regardless of which invocation calls it.</li>
+<li><strong>Uniform Result:</strong> If every invocation in a subgroup
+passes the same <code>uvec4</code> ballot to
+<code>subgroupBallotBitCount</code>, every invocation receives the exact
+same return value.</li>
+<li><strong>Arbitrary Inputs:</strong> While commonly used on the result
+of <code>subgroupBallot()</code>, the function works on any valid
+<code>uvec4</code> bitmask, functioning as a 128-bit population count
+utility.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

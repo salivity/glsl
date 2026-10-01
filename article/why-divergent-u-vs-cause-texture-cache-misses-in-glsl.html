@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why Divergent UVs Cause Texture Cache Misses in GLSL - glsl</title>
+    <meta name="description" content="Sampling large, mipmapped textures using divergent UV coordinates in GLSL leads to severe texture cache misses primarily due to broken spatial locality across parallel execution threads and chaotic level-of-detail (LOD) calculations. When neighboring thr">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/why-divergent-u-vs-cause-texture-cache-misses-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Why Divergent UVs Cause Texture Cache Misses in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/why-divergent-u-vs-cause-texture-cache-misses-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Sampling large, mipmapped textures using divergent UV coordinates in GLSL leads to severe texture cache misses primarily due to broken spatial locality across parallel execution threads and chaotic level-of-detail (LOD) calculations. When neighboring thr" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="why-divergent-uvs-cause-texture-cache-misses-in-glsl">Why
+Divergent UVs Cause Texture Cache Misses in GLSL</h1>
+<p>Sampling large, mipmapped textures using divergent UV coordinates in
+GLSL leads to severe texture cache misses primarily due to broken
+spatial locality across parallel execution threads and chaotic
+level-of-detail (LOD) calculations. When neighboring threads in a GPU
+warp or wavefront request texels from distant coordinates or different
+mipmap levels, the hardware's fixed-size texture cache cannot satisfy
+the disparate memory requests simultaneously. This article examines the
+architectural and mathematical reasons why UV divergence degrades
+texture sampling performance and explains the mechanisms that trigger
+these cache misses.</p>
+<h3 id="gpu-simt-execution-and-texture-cache-design">GPU SIMT Execution
+and Texture Cache Design</h3>
+<p>Modern GPUs process fragment shaders using Single Instruction,
+Multiple Threads (SIMT) grouped into units called warps (NVIDIA) or
+wavefronts (AMD), typically consisting of 32 to 64 threads. The hardware
+texture cache is optimized under the assumption of high spatial
+locality: neighboring fragment threads covering a 2x2 quad on screen are
+expected to sample texels that reside physically close to one another in
+GPU memory.</p>
+<p>When adjacent threads access texels that reside in the same memory
+cache line, a single fetch satisfies multiple threads. However,
+divergent UV coordinates break this model. If neighboring threads sample
+distant UV coordinates, each thread requests a distinct, non-contiguous
+block of texel data, saturating the L1 and L2 texture caches and forcing
+the GPU to fetch data from high-latency global VRAM.</p>
+<h3 id="implicit-derivatives-and-mipmap-calculation">Implicit
+Derivatives and Mipmap Calculation</h3>
+<p>When invoking the standard <code>texture()</code> function in GLSL,
+the GPU automatically selects a mipmap level based on implicit
+screen-space derivatives:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> dx <span class="op">=</span> <span class="bu">dFdx</span><span class="op">(</span>uv<span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> dy <span class="op">=</span> <span class="bu">dFdy</span><span class="op">(</span>uv<span class="op">);</span></span></code></pre></div>
+<p>The hardware evaluates UV differences across adjacent fragments in
+2x2 pixel quads. The magnitude of these derivatives determines the
+level-of-detail (<span class="math inline">\(\lambda\)</span>):</p>
+<p><span class="math display">\[\lambda = \log_2(\max(\|\frac{\partial
+uv}{\partial x}\|, \|\frac{\partial uv}{\partial y}\|))\]</span></p>
+<p>UV divergence directly undermines this calculation:</p>
+<ul>
+<li><strong>Derivative Spikes:</strong> Sharp, discontinuous changes in
+UVs between adjacent pixels generate massive derivative values. This
+causes the sampler to select a much lower resolution (coarser) mip level
+than intended.</li>
+<li><strong>Intra-Warp LOD Divergence:</strong> Threads within the same
+warp can calculate wildly different LOD values. While thread A might
+sample from mip level 0, adjacent thread B may sample from mip level 5.
+This forces the texture unit to fetch from completely different memory
+offsets corresponding to separate mip allocations, multiplying cache
+thrashing.</li>
+</ul>
+<h3 id="the-impact-of-large-texture-dimensions">The Impact of Large
+Texture Dimensions</h3>
+<p>As texture resolution increases (such as 4K or 8K textures), the
+physical memory stride between normalized UV coordinates widens. A
+normalized UV shift of <code>0.01</code> spans far more texels—and
+consequently more distinct memory pages—in an 8192×8192 texture than in
+a 512×512 texture.</p>
+<p>Consequently, even modest UV divergence across neighboring threads on
+high-resolution textures triggers memory fetches that fall completely
+outside the local texture cache line (typically 64 or 128 bytes). The
+working set of requested texels rapidly exceeds cache capacity, evicting
+newly loaded lines before neighboring operations can reuse them.</p>
+<h3 id="mitigating-divergence-induced-misses">Mitigating
+Divergence-Induced Misses</h3>
+<p>To resolve cache bottlenecks caused by divergent texture lookups,
+developers rely on specialized GLSL sampling methods:</p>
+<ul>
+<li><strong>Explicit Derivatives (<code>textureGrad</code>):</strong>
+Manually passing continuous analytical derivatives prevents the hardware
+from computing erratic mip levels across discontinuous geometry (such as
+UV seams or cube map edges):
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> color <span class="op">=</span> <span class="bu">textureGrad</span><span class="op">(</span>u_Texture<span class="op">,</span> uv<span class="op">,</span> continuousDx<span class="op">,</span> continuousDy<span class="op">);</span></span></code></pre></div></li>
+<li><strong>Explicit LOD Selection (<code>textureLod</code>):</strong>
+Forcing a fixed or procedurally smoothed LOD bypasses implicit
+derivative logic entirely, ensuring threads in a warp access predictable
+mip levels:
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> color <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>u_Texture<span class="op">,</span> uv<span class="op">,</span> targetMipLevel<span class="op">);</span></span></code></pre></div></li>
+<li><strong>Minimizing Fragment Divergence:</strong> Sorting or
+restructuring draw calls and geometric data ensures that fragments
+mapped to adjacent screen pixels maintain coherent texture coordinate
+flows.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

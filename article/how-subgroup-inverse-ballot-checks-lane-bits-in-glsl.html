@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How subgroupInverseBallot Checks Lane Bits in GLSL - glsl</title>
+    <meta name="description" content="In GLSL, the subgroupInverseBallot function determines whether the calling invocation's lane bit is set to true within a previously generated ballot bitmask. This article explains the underlying mechanics of subgroupInverseBallot, how it maps the current">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-subgroup-inverse-ballot-checks-lane-bits-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How subgroupInverseBallot Checks Lane Bits in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-subgroup-inverse-ballot-checks-lane-bits-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL, the subgroupInverseBallot function determines whether the calling invocation's lane bit is set to true within a previously generated ballot bitmask. This article explains the underlying mechanics of subgroupInverseBallot, how it maps the current" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-subgroupinverseballot-checks-lane-bits-in-glsl">How
+subgroupInverseBallot Checks Lane Bits in GLSL</h1>
+<p>In GLSL, the <code>subgroupInverseBallot</code> function determines
+whether the calling invocation's lane bit is set to true within a
+previously generated ballot bitmask. This article explains the
+underlying mechanics of <code>subgroupInverseBallot</code>, how it maps
+the current invocation to a 128-bit vector, and how the equivalent
+bitwise operations evaluate whether a specific lane is active.</p>
+<h3 id="the-purpose-of-subgroupinverseballot">The Purpose of
+subgroupInverseBallot</h3>
+<p>When working with subgroup operations in Vulkan or OpenGL compute
+shaders (via the <code>GL_KHR_shader_subgroup_ballot</code> extension),
+<code>subgroupBallot</code> collects a boolean condition across all
+active invocations in a subgroup and packs them into a 128-bit bitmask
+represented as a <code>uvec4</code>.</p>
+<p><code>subgroupInverseBallot</code> performs the reverse operation. It
+accepts a <code>uvec4</code> ballot result and returns a
+<code>bool</code> indicating whether the bit corresponding to the
+<strong>current invocation</strong> is <code>1</code> (true) or
+<code>0</code> (false).</p>
+<h3 id="underlying-bit-check-mechanism">Underlying Bit-Check
+Mechanism</h3>
+<p>Every invocation in a subgroup possesses a unique ID defined by the
+built-in variable <code>gl_SubgroupInvocationID</code>, ranging from
+<code>0</code> to <code>gl_SubgroupSize - 1</code>. Because subgroups
+can scale up to 128 invocations, the ballot result spans four 32-bit
+unsigned integers (<code>uvec4</code>).</p>
+<p>To determine if the current invocation's bit is active, the function
+performs three steps internally:</p>
+<ol type="1">
+<li><p><strong>Identifies the Vector Component</strong>: It determines
+which element of the <code>uvec4</code> (<code>x</code>, <code>y</code>,
+<code>z</code>, or <code>w</code>) holds the bit for the current
+invocation by dividing <code>gl_SubgroupInvocationID</code> by 32: <span
+class="math display">\[\text{Component Index} = \lfloor
+\text{gl\_SubgroupInvocationID} / 32 \rfloor\]</span></p></li>
+<li><p><strong>Calculates the Bit Offset</strong>: It calculates the
+exact bit position inside that 32-bit word using the modulo operator:
+<span class="math display">\[\text{Bit Offset} =
+\text{gl\_SubgroupInvocationID} \pmod{32}\]</span></p></li>
+<li><p><strong>Performs Bitwise Masking</strong>: It creates a bitmask
+by shifting <code>1u</code> to the left by the calculated offset,
+performs a bitwise AND against the selected component, and checks if the
+result is non-zero.</p></li>
+</ol>
+<h3 id="equivalent-glsl-implementation">Equivalent GLSL
+Implementation</h3>
+<p>The internal behavior of <code>subgroupInverseBallot(value)</code>
+can be directly expressed using standard GLSL arithmetic and bit
+manipulation:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> <span class="fu">manualSubgroupInverseBallot</span><span class="op">(</span><span class="dt">uvec4</span> value<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Determine which 32-bit chunk (0 to 3) contains this invocation&#39;s bit</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> componentIndex <span class="op">=</span> gl_SubgroupInvocationID <span class="op">/</span> <span class="dv">32</span>u<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Determine the bit index (0 to 31) within that chunk</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> bitIndex <span class="op">=</span> gl_SubgroupInvocationID <span class="op">%</span> <span class="dv">32</span>u<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Extract the component and test the bit</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> word <span class="op">=</span> value<span class="op">[</span>componentIndex<span class="op">];</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span>word <span class="op">&amp;</span> <span class="op">(</span><span class="dv">1</span>u <span class="op">&lt;&lt;</span> bitIndex<span class="op">))</span> <span class="op">!=</span> <span class="dv">0</span>u<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="checking-arbitrary-lanes-vs-current-lane">Checking Arbitrary
+Lanes vs. Current Lane</h3>
+<p><code>subgroupInverseBallot</code> is strictly scoped to the calling
+invocation's lane ID (<code>gl_SubgroupInvocationID</code>).</p>
+<p>If you need to query an arbitrary lane index rather than the calling
+thread's own lane, use
+<code>subgroupBallotBitExtract(uvec4 value, uint index)</code>. While
+<code>subgroupBallotBitExtract</code> allows dynamic indexing by any
+lane ID, <code>subgroupInverseBallot(value)</code> is functionally
+identical to:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">subgroupBallotBitExtract</span><span class="op">(</span>value<span class="op">,</span> gl_SubgroupInvocationID<span class="op">);</span></span></code></pre></div>
+<p>Hardware targets optimize <code>subgroupInverseBallot</code> into
+specialized single-instruction bit-test operations using hardware lane
+registers, avoiding general arithmetic overhead when reconstructing
+control flow from ballot masks.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

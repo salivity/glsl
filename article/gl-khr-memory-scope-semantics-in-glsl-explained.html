@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GL_KHR_memory_scope_semantics in GLSL Explained - glsl</title>
+    <meta name="description" content="This article provides an overview of the GLKHRmemoryscopesemantics extension and its critical role in modern GPU programming. By replacing coarse, implicit synchronization with granular memory scopes and acquire/release semantics, this extension aligns G">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gl-khr-memory-scope-semantics-in-glsl-explained">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GL_KHR_memory_scope_semantics in GLSL Explained - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gl-khr-memory-scope-semantics-in-glsl-explained" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of the GLKHRmemoryscopesemantics extension and its critical role in modern GPU programming. By replacing coarse, implicit synchronization with granular memory scopes and acquire/release semantics, this extension aligns G" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="gl_khr_memory_scope_semantics-in-glsl-explained">GL_KHR_memory_scope_semantics
+in GLSL Explained</h1>
+<p>This article provides an overview of the
+<code>GL_KHR_memory_scope_semantics</code> extension and its critical
+role in modern GPU programming. By replacing coarse, implicit
+synchronization with granular memory scopes and acquire/release
+semantics, this extension aligns GLSL with the Vulkan Memory Model. The
+following sections explore how this extension defines visibility and
+availability across execution boundaries, solves the limitations of
+legacy barriers, and guarantees coherent memory operations across queues
+and devices.</p>
+<h3 id="the-limits-of-legacy-glsl-synchronization">The Limits of Legacy
+GLSL Synchronization</h3>
+<p>Historically, GLSL relied on simple, coarse barrier primitives such
+as <code>memoryBarrier()</code>, <code>groupMemoryBarrier()</code>, and
+atomic operations without explicit memory models. These legacy
+constructs lacked formal definitions for memory ordering across
+different execution environments. While sufficient for simple
+single-dispatch compute tasks within a single workgroup or rendering
+pass, they failed to guarantee ordering or cache coherence across
+independent queues, hardware compute units, or discrete devices sharing
+memory.</p>
+<p>Without explicit scopes, developers were forced to rely on heavy,
+pipeline-level synchronization, driver-dependent behaviors, or host-side
+interventions to ensure that writes from one shader invocation became
+visible to another.</p>
+<h3 id="explicit-memory-scopes">Explicit Memory Scopes</h3>
+<p>The <code>GL_KHR_memory_scope_semantics</code> extension introduces
+explicit memory scopes to GLSL, allowing developers to target the exact
+boundary within which an operation must be synchronized. Instead of
+assuming a uniform memory space, operations specify one of several
+standardized scopes:</p>
+<ul>
+<li><strong>Subgroup (<code>gl_ScopeSubgroup</code>):</strong>
+Synchronizes invocations executing within the same hardware SIMD wave or
+warp.</li>
+<li><strong>Workgroup (<code>gl_ScopeWorkgroup</code>):</strong>
+Synchronizes all invocations within an individual compute
+workgroup.</li>
+<li><strong>Queue Family (<code>gl_ScopeQueueFamily</code>):</strong>
+Synchronizes operations across dispatches executed on the same Vulkan
+queue family.</li>
+<li><strong>Device (<code>gl_ScopeDevice</code>):</strong> Extends
+synchronization across all queues and execution units within the logical
+device.</li>
+</ul>
+<p>For multi-device or heterogeneous systems, these scopes provide the
+underlying language contract required to coordinate memory between
+separate hardware agents that share a unified address space.</p>
+<h3
+id="memory-semantics-acquire-release-availability-and-visibility">Memory
+Semantics: Acquire, Release, Availability, and Visibility</h3>
+<p>Memory access in modern GPUs relies on complex, multi-level cache
+hierarchies. A write to a buffer is not automatically broadcast to other
+processing units; it typically resides in a local L1 or L2 cache.</p>
+<p><code>GL_KHR_memory_scope_semantics</code> introduces formal
+acquire/release semantics along with two vital operations:</p>
+<ol type="1">
+<li><strong>Make Available:</strong> Pushes modified data from local
+private caches out to a shared scope (such as device-level cache or
+system memory).</li>
+<li><strong>Make Visible:</strong> Invalidates local caches so that
+subsequent read operations fetch the latest data from the target
+scope.</li>
+</ol>
+<p>By coupling these operations with acquire and release semantics:</p>
+<ul>
+<li>A <strong>Release</strong> barrier combined with a "Make Available"
+operation guarantees that prior writes by an invocation are committed
+and available to the specified scope.</li>
+<li>An <strong>Acquire</strong> barrier combined with a "Make Visible"
+operation ensures that subsequent reads by a separate invocation reflect
+writes made available to that scope.</li>
+</ul>
+<h3 id="cross-device-and-inter-queue-synchronization">Cross-Device and
+Inter-Queue Synchronization</h3>
+<p>In complex rendering engines and compute pipelines, tasks are
+distributed across asynchronous compute queues, transfer queues, and
+sometimes multiple physical GPUs.</p>
+<p>Through <code>GL_KHR_memory_scope_semantics</code>, GLSL shaders can
+directly participate in cross-queue and cross-device communication
+without requiring conservative, pipeline-wide stalls. When a shader
+writes to shared or external memory, it can execute an atomic or barrier
+instruction with <code>gl_ScopeDevice</code> (or host/system scope where
+supported) using Release and Make-Available semantics. A reader on
+another queue or connected device synchronizes by executing an Acquire
+and Make-Visible operation targeting the same scope.</p>
+<p>This mechanism ensures strict memory ordering: the consumer cannot
+read stale cache lines, nor can it observe memory writes out of
+order.</p>
+<h3 id="alignment-with-spir-v-and-the-vulkan-memory-model">Alignment
+with SPIR-V and the Vulkan Memory Model</h3>
+<p>Rather than introducing vendor-specific hacks,
+<code>GL_KHR_memory_scope_semantics</code> acts as the front-end GLSL
+representation for the core Vulkan Memory Model in SPIR-V. It maps
+directly to SPIR-V instructions such as <code>OpMemoryBarrier</code> and
+atomic instructions configured with <code>Memory Semantics</code> and
+<code>Scope</code> IDs.</p>
+<p>This standardization eliminates undefined compiler optimizations,
+prevents invalid instruction reordering by the GPU driver, and creates a
+mathematically sound framework for writing lock-free algorithms,
+inter-engine communication, and efficient cross-device data pipelines in
+modern graphics APIs.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GLSL Detects Total Internal Reflection - glsl</title>
+    <meta name="description" content="In GLSL shaders, total internal reflection (TIR) occurs during refraction calculations when light travels from a medium with a higher refractive index to one with a lower refractive index at an angle exceeding the critical angle. Rather than throwing an">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-glsl-detects-total-internal-reflection">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GLSL Detects Total Internal Reflection - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-glsl-detects-total-internal-reflection" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL shaders, total internal reflection (TIR) occurs during refraction calculations when light travels from a medium with a higher refractive index to one with a lower refractive index at an angle exceeding the critical angle. Rather than throwing an" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-glsl-detects-total-internal-reflection">How GLSL Detects
+Total Internal Reflection</h1>
+<p>In GLSL shaders, total internal reflection (TIR) occurs during
+refraction calculations when light travels from a medium with a higher
+refractive index to one with a lower refractive index at an angle
+exceeding the critical angle. Rather than throwing an error or halting
+execution, GLSL evaluates the underlying mathematics of Snell's Law and
+flags total internal reflection by returning a zero vector
+(<code>vec3(0.0)</code>) from the built-in <code>refract</code>
+function. Shaders detect this condition either by checking for a
+zero-length result or by manually calculating the refraction
+discriminant before computing the refracted vector.</p>
+<h3 id="the-mathematics-behind-glsl-refraction">The Mathematics Behind
+GLSL Refraction</h3>
+<p>The built-in GLSL function <code>refract(I, N, eta)</code> calculates
+the transmitted vector based on Snell's Law:</p>
+<p><span class="math display">\[n_1 \sin(\theta_1) = n_2
+\sin(\theta_2)\]</span></p>
+<p>Here, <code>I</code> is the normalized incident ray, <code>N</code>
+is the normalized surface normal, and <code>eta</code> (<span
+class="math inline">\(\eta\)</span>) represents the ratio of the indices
+of refraction (<span class="math inline">\(n_1 / n_2\)</span>).</p>
+<p>When translating this into vector mathematics, the direction of the
+refracted ray involves computing a term under a square root (the
+discriminant <span class="math inline">\(k\)</span>):</p>
+<p><span class="math display">\[k = 1.0 - \eta^2 \cdot (1.0 - (\vec{N}
+\cdot \vec{I})^2)\]</span></p>
+<p>Since <span class="math inline">\(\cos^2(\theta_1) = (\vec{N} \cdot
+\vec{I})^2\)</span> and <span class="math inline">\(\sin^2(\theta_1) =
+1.0 - \cos^2(\theta_1)\)</span>, this equation determines whether <span
+class="math inline">\(\sin(\theta_2)\)</span> remains valid:</p>
+<p><span class="math display">\[k = 1.0 - \eta^2
+\sin^2(\theta_1)\]</span></p>
+<p>If light travels into an optically less dense medium (<span
+class="math inline">\(\eta &gt; 1.0\)</span>) and the incident angle
+<span class="math inline">\(\theta_1\)</span> exceeds the critical
+angle, <span class="math inline">\(\eta^2 \sin^2(\theta_1)\)</span>
+becomes greater than <span class="math inline">\(1.0\)</span>.
+Consequently, <span class="math inline">\(k\)</span> becomes negative.
+Because taking the square root of a negative number produces an
+imaginary number, no physical refraction can occur.</p>
+<h3 id="detection-via-the-built-in-refract-function">Detection via the
+Built-in <code>refract</code> Function</h3>
+<p>According to the OpenGL Shading Language specification, if <span
+class="math inline">\(k &lt; 0.0\)</span>, the <code>refract</code>
+function returns a vector where all components are set to
+<code>0.0</code>. A shader detects total internal reflection by
+inspecting this return value:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> I <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>incidentRay<span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> N <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>surfaceNormal<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> eta <span class="op">=</span> n1 <span class="op">/</span> n2<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> R <span class="op">=</span> <span class="bu">refract</span><span class="op">(</span>I<span class="op">,</span> N<span class="op">,</span> eta<span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span><span class="bu">dot</span><span class="op">(</span>R<span class="op">,</span> R<span class="op">)</span> <span class="op">==</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Total Internal Reflection detected:</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Fall back to pure reflection</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    R <span class="op">=</span> <span class="bu">reflect</span><span class="op">(</span>I<span class="op">,</span> N<span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Using <code>dot(R, R) == 0.0</code> or <code>length(R) == 0.0</code>
+reliably confirms whether refraction failed due to total internal
+reflection.</p>
+<h3 id="manual-discriminant-detection">Manual Discriminant
+Detection</h3>
+<p>In high-performance rendering or complex physically-based shading
+models, developers often calculate the discriminant <span
+class="math inline">\(k\)</span> manually. Calculating <span
+class="math inline">\(k\)</span> directly avoids computing the full
+refraction vector when TIR occurs and allows conditional branching or
+smooth blending between reflection and refraction:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> cosTheta <span class="op">=</span> <span class="bu">dot</span><span class="op">(-</span>I<span class="op">,</span> N<span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> k <span class="op">=</span> <span class="fl">1.0</span> <span class="op">-</span> eta <span class="op">*</span> eta <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> cosTheta <span class="op">*</span> cosTheta<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>k <span class="op">&lt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Total Internal Reflection occurs</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> <span class="fu">calculateReflection</span><span class="op">(</span><span class="bu">reflect</span><span class="op">(</span>I<span class="op">,</span> N<span class="op">));</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Standard refraction occurs</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> refractedRay <span class="op">=</span> eta <span class="op">*</span> I <span class="op">+</span> <span class="op">(</span>eta <span class="op">*</span> cosTheta <span class="op">-</span> <span class="bu">sqrt</span><span class="op">(</span>k<span class="op">))</span> <span class="op">*</span> N<span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> <span class="fu">calculateRefraction</span><span class="op">(</span>refractedRay<span class="op">);</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By verifying whether <span class="math inline">\(k &lt; 0.0\)</span>
+or checking if <code>refract()</code> returns <code>vec3(0.0)</code>,
+GLSL shaders accurately isolate total internal reflection and switch
+from refraction rendering to standard specular reflection.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GL_EXT_shader_framebuffer_fetch Programmable Blending - glsl</title>
+    <meta name="description" content="This article explores the GLEXTshaderframebufferfetch extension in OpenGL and OpenGL ES, explaining its architectural purpose and implementation details. It covers the limitations of legacy fixed-function hardware blending, demonstrates how this extensio">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gl-ext-shader-framebuffer-fetch-programmable-blending">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GL_EXT_shader_framebuffer_fetch Programmable Blending - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gl-ext-shader-framebuffer-fetch-programmable-blending" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores the GLEXTshaderframebufferfetch extension in OpenGL and OpenGL ES, explaining its architectural purpose and implementation details. It covers the limitations of legacy fixed-function hardware blending, demonstrates how this extensio" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="gl_ext_shader_framebuffer_fetch-programmable-blending">GL_EXT_shader_framebuffer_fetch
+Programmable Blending</h1>
+<p>This article explores the
+<code>GL_EXT_shader_framebuffer_fetch</code> extension in OpenGL and
+OpenGL ES, explaining its architectural purpose and implementation
+details. It covers the limitations of legacy fixed-function hardware
+blending, demonstrates how this extension grants fragment shaders read
+access to existing framebuffer data, and details how developers can
+implement complex, single-pass programmable blending algorithms directly
+within GLSL shaders.</p>
+<h2 id="what-is-gl_ext_shader_framebuffer_fetch">What is
+GL_EXT_shader_framebuffer_fetch?</h2>
+<p>The <code>GL_EXT_shader_framebuffer_fetch</code> extension is an
+OpenGL and OpenGL ES feature that allows a fragment shader to read the
+current color, depth, or stencil data of the framebuffer at the exact
+pixel location currently being processed.</p>
+<p>Under standard rendering pipelines, the pipeline separates fragment
+shading from the framebuffer operations stage. A fragment shader
+computes an output color, and the hardware's fixed-function blending
+unit combines that output with the existing destination color in memory.
+Reading from the active render target while simultaneously writing to it
+is traditionally disallowed because it creates read-after-write hazards
+and pipeline stalls. <code>GL_EXT_shader_framebuffer_fetch</code>
+resolves this by exposing the destination pixel data directly to the
+fragment shader during execution.</p>
+<h2 id="the-limitations-of-fixed-function-blending">The Limitations of
+Fixed-Function Blending</h2>
+<p>Standard OpenGL uses fixed-function APIs such as
+<code>glBlendFunc</code> and <code>glBlendEquation</code> to handle
+transparency and composition. While computationally efficient, these
+fixed units support only a limited set of arithmetic operations:</p>
+<ul>
+<li>Linear combinations (add, subtract, reverse subtract)</li>
+<li>Component-wise minimum and maximum</li>
+<li>Basic source and destination factor scaling</li>
+</ul>
+<p>Complex blending equations—such as Photoshop-style blend modes
+(Multiply, Screen, Overlay, Soft Light), HDR tone mapping with
+destination values, or non-photorealistic rendering effects—cannot be
+expressed through these fixed formulas. Previously, developers had to
+resort to multipass rendering, ping-ponging textures back and forth via
+Framebuffer Objects (FBOs). This introduced significant memory bandwidth
+overhead, cache thrashing, and pipeline synchronization penalties.</p>
+<h2 id="how-the-extension-enables-programmable-blending">How the
+Extension Enables Programmable Blending</h2>
+<p><code>GL_EXT_shader_framebuffer_fetch</code> eliminates the need for
+multipass workarounds by turning the fragment shader itself into a
+programmable blending stage. It modifies GLSL to treat fragment outputs
+as readable inputs.</p>
+<h3 id="1-unified-read-and-write-access">1. Unified Read and Write
+Access</h3>
+<p>In modern GLSL (OpenGL ES 3.0+), the extension allows fragment output
+variables to be declared with the <code>inout</code> storage qualifier.
+In legacy GLSL (OpenGL ES 2.0), it provides read access to the built-in
+array <code>gl_LastFragData</code>.</p>
+<p>When the GPU executes a fragment:</p>
+<ol type="1">
+<li>The hardware populates the <code>inout</code> variable with the
+current color stored in the framebuffer at that fragment's coordinate
+before shader execution begins.</li>
+<li>The shader code reads this value (the destination color), performs
+custom mathematical operations combining it with the source color, and
+modifies the variable.</li>
+<li>Upon shader completion, the final value written to the
+<code>inout</code> variable replaces the framebuffer value directly,
+bypassing fixed-function blending.</li>
+</ol>
+<h3 id="2-glsl-implementation-example">2. GLSL Implementation
+Example</h3>
+<p>To implement programmable blending using this extension in GLSL ES
+3.00, declare the extension and define the fragment output as
+<code>inout</code>:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 300 es</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_shader_framebuffer_fetch : require</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">precision</span> <span class="dt">mediump</span> <span class="dt">float</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Declare the output variable as inout to read the existing framebuffer color</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">inout</span> <span class="dt">vec4</span> fragColor<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec4</span> uSourceColor<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// fragColor initially contains the destination color from the framebuffer</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> dstColor <span class="op">=</span> fragColor<span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> srcColor <span class="op">=</span> uSourceColor<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Example: Implementing an &quot;Overlay&quot; blend mode directly in the shader</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> blendedRGB<span class="op">;</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>dstColor<span class="op">[</span>i<span class="op">]</span> <span class="op">&lt;</span> <span class="fl">0.5</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>            blendedRGB<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="fl">2.0</span> <span class="op">*</span> dstColor<span class="op">[</span>i<span class="op">]</span> <span class="op">*</span> srcColor<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>            blendedRGB<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="fl">1.0</span> <span class="op">-</span> <span class="fl">2.0</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> dstColor<span class="op">[</span>i<span class="op">])</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> srcColor<span class="op">[</span>i<span class="op">]);</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Write back the final blended result</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>blendedRGB<span class="op">,</span> srcColor<span class="op">.</span><span class="fu">a</span><span class="op">);</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>When using this approach, fixed-function blending must be disabled
+via <code>glDisable(GL_BLEND)</code> to prevent the hardware from
+attempting to blend the final output a second time.</p>
+<h2 id="architecture-and-performance-advantages">Architecture and
+Performance Advantages</h2>
+<p>The extension is especially effective on Tile-Based Deferred
+Rendering (TBDR) architectures, which are standard in mobile GPUs (such
+as ARM Mali, Qualcomm Adreno, and Imagination PowerVR).</p>
+<p>In TBDR architectures, rendering operations occur inside ultra-fast,
+on-chip tile memory before being resolved to system RAM.
+<code>GL_EXT_shader_framebuffer_fetch</code> reads directly from this
+fast local cache rather than external memory. This allows complex color
+blending, deferred shading decoders, and custom compositing pipelines to
+run at native hardware speeds without incurring costly memory bandwidth
+and thermal overhead.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

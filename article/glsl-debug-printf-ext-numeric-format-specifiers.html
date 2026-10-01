@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL debugPrintfEXT Numeric Format Specifiers - glsl</title>
+    <meta name="description" content="The debugPrintfEXT intrinsic, provided by the GLEXTdebugprintf extension in GLSL and Vulkan, allows developers to output debugging messages directly from running shaders to the host console or validation layer output. For numeric data, it adopts a standa">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-debug-printf-ext-numeric-format-specifiers">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL debugPrintfEXT Numeric Format Specifiers - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-debug-printf-ext-numeric-format-specifiers" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The debugPrintfEXT intrinsic, provided by the GLEXTdebugprintf extension in GLSL and Vulkan, allows developers to output debugging messages directly from running shaders to the host console or validation layer output. For numeric data, it adopts a standa" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-debugprintfext-numeric-format-specifiers">GLSL
+debugPrintfEXT Numeric Format Specifiers</h1>
+<p>The <code>debugPrintfEXT</code> intrinsic, provided by the
+<code>GL_EXT_debug_printf</code> extension in GLSL and Vulkan, allows
+developers to output debugging messages directly from running shaders to
+the host console or validation layer output. For numeric data, it adopts
+a standard subset of the C99 <code>printf</code> specification,
+supporting various specifiers for signed integers, unsigned integers,
+and floating-point values along with standard length and precision
+modifiers.</p>
+<h3 id="signed-integer-specifiers">Signed Integer Specifiers</h3>
+<p>To output signed integer data (<code>int</code> or scalar signed
+values), <code>debugPrintfEXT</code> supports standard base-10
+conversion characters:</p>
+<ul>
+<li><strong><code>%d</code></strong>: Formats the value as a signed
+decimal integer.</li>
+<li><strong><code>%i</code></strong>: Identical to <code>%d</code>,
+formats the value as a signed decimal integer.</li>
+</ul>
+<h3 id="unsigned-integer-specifiers">Unsigned Integer Specifiers</h3>
+<p>For unsigned values (<code>uint</code>), <code>debugPrintfEXT</code>
+supports formatting across decimal, hexadecimal, and octal
+representations:</p>
+<ul>
+<li><strong><code>%u</code></strong>: Formats the value as an unsigned
+decimal integer.</li>
+<li><strong><code>%x</code></strong>: Formats the value as an unsigned
+hexadecimal integer using lowercase letters
+(<code>a</code>–<code>f</code>).</li>
+<li><strong><code>%X</code></strong>: Formats the value as an unsigned
+hexadecimal integer using uppercase letters
+(<code>A</code>–<code>F</code>).</li>
+<li><strong><code>%o</code></strong>: Formats the value as an unsigned
+octal integer.</li>
+</ul>
+<h3 id="floating-point-specifiers">Floating-Point Specifiers</h3>
+<p>For single-precision (<code>float</code>) and double-precision
+(<code>double</code>) types, <code>debugPrintfEXT</code> provides
+standard decimal and scientific output options:</p>
+<ul>
+<li><strong><code>%f</code></strong>: Formats a floating-point number in
+standard decimal notation (e.g., <code>12.345678</code>).</li>
+<li><strong><code>%F</code></strong>: Identical to <code>%f</code>, but
+outputs uppercase representations for special values like
+<code>INF</code> or <code>NAN</code>.</li>
+<li><strong><code>%e</code></strong>: Formats a floating-point number in
+exponential (scientific) notation using a lowercase <code>e</code>
+(e.g., <code>1.234568e+01</code>).</li>
+<li><strong><code>%E</code></strong>: Formats a floating-point number in
+exponential notation using an uppercase <code>E</code> (e.g.,
+<code>1.234568E+01</code>).</li>
+<li><strong><code>%g</code></strong>: Converts the value using either
+<code>%f</code> or <code>%e</code> depending on the magnitude and
+precision, omitting trailing zeros.</li>
+<li><strong><code>%G</code></strong>: Equivalent to <code>%g</code>, but
+uses uppercase <code>E</code> when exponential notation is
+selected.</li>
+<li><strong><code>%a</code></strong>: Formats a floating-point number as
+hexadecimal floating-point using lowercase letters and a lowercase
+<code>p</code> for the exponent.</li>
+<li><strong><code>%A</code></strong>: Formats a floating-point number as
+hexadecimal floating-point using uppercase letters and an uppercase
+<code>P</code> for the exponent.</li>
+</ul>
+<h3 id="64-bit-integer-modifiers">64-Bit Integer Modifiers</h3>
+<p>When working with 64-bit integers (<code>int64_t</code> or
+<code>uint64_t</code>), standard length modifiers must be prefixed to
+integer specifiers to prevent undefined output behavior:</p>
+<ul>
+<li><strong><code>%ld</code></strong> or
+<strong><code>%lld</code></strong>: Formats a 64-bit signed
+integer.</li>
+<li><strong><code>%lu</code></strong> or
+<strong><code>%llu</code></strong>: Formats a 64-bit unsigned
+integer.</li>
+<li><strong><code>%lx</code></strong> or
+<strong><code>%llx</code></strong>: Formats a 64-bit unsigned integer in
+hexadecimal.</li>
+</ul>
+<h3 id="flags-width-and-precision">Flags, Width, and Precision</h3>
+<p>The numeric specifiers in <code>debugPrintfEXT</code> fully support
+standard C99 sub-specifiers:</p>
+<ul>
+<li><strong>Width</strong>: Specifies a minimum number of characters to
+output (e.g., <code>%5d</code>).</li>
+<li><strong>Precision</strong>: Specifies the exact number of fractional
+digits for floats (e.g., <code>%.2f</code>) or the minimum number of
+digits for integers (e.g., <code>%.4u</code>).</li>
+<li><strong>Flags</strong>: Supports <code>0</code> for zero-padding
+(e.g., <code>%08x</code>), <code>-</code> for left-alignment,
+<code>+</code> to always show signs for signed values, and
+<code>#</code> for alternate forms (such as prefixing <code>0x</code>
+with <code>%#x</code>).</li>
+</ul>
+<h3 id="scalar-requirement">Scalar Requirement</h3>
+<p><code>debugPrintfEXT</code> does not support vector formats natively.
+When printing GLSL vector types (like <code>vec3</code> or
+<code>uvec4</code>), each vector component must be passed as an
+individual scalar argument paired with its own numeric format specifier
+(e.g.,
+<code>debugPrintfEXT("Position: (%f, %f, %f)\n", pos.x, pos.y, pos.z)</code>).</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Does gl_DrawID Represent in Multi-Draw Indirect? - glsl</title>
+    <meta name="description" content="In OpenGL shader programming, the built-in GLSL variable glDrawID represents the zero-based index of the specific draw command currently being executed within a multi-draw call, such as glMultiDrawArraysIndirect or glMultiDrawElementsIndirect. When rende">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-does-gl-draw-id-represent-in-multi-draw-indirect">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Does gl_DrawID Represent in Multi-Draw Indirect? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-does-gl-draw-id-represent-in-multi-draw-indirect" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL shader programming, the built-in GLSL variable glDrawID represents the zero-based index of the specific draw command currently being executed within a multi-draw call, such as glMultiDrawArraysIndirect or glMultiDrawElementsIndirect. When rende" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-does-gl_drawid-represent-in-multi-draw-indirect">What Does
+gl_DrawID Represent in Multi-Draw Indirect?</h1>
+<p>In OpenGL shader programming, the built-in GLSL variable
+<code>gl_DrawID</code> represents the zero-based index of the specific
+draw command currently being executed within a multi-draw call, such as
+<code>glMultiDrawArraysIndirect</code> or
+<code>glMultiDrawElementsIndirect</code>. When rendering scenes using
+indirect drawing, multiple distinct sub-commands are packed into a
+single buffer and submitted to the GPU together. <code>gl_DrawID</code>
+allows vertex shaders to identify exactly which batch or sub-draw is
+executing, enabling dynamic indexing into global descriptor arrays,
+material data, and transformation matrices for high-performance,
+single-call batch rendering.</p>
+<h2 id="understanding-multi-draw-indirect-rendering">Understanding
+Multi-Draw Indirect Rendering</h2>
+<p>Modern graphics rendering pipelines prioritize minimizing CPU-GPU
+synchronization bottlenecks. In traditional workflows, issuing
+individual draw calls like <code>glDrawElements</code> for hundreds or
+thousands of separate objects creates significant driver overhead.</p>
+<p>Multi-Draw Indirect (MDI) resolves this bottleneck by allowing
+applications to specify an array of draw parameters directly within a
+GPU buffer:</p>
+<ul>
+<li><strong>Draw Parameter Consolidation:</strong> Information such as
+vertex counts, instance counts, base vertex offsets, and index offsets
+are written to a Draw Indirect Buffer.</li>
+<li><strong>Single Dispatch:</strong> A single API call dispatches all
+the sub-draws sequentially on the GPU.</li>
+<li><strong>GPU-Driven Rendering:</strong> Culling and command
+generation can occur directly in compute shaders without round-trips
+back to the CPU.</li>
+</ul>
+<h2 id="the-role-of-gl_drawid">The Role of gl_DrawID</h2>
+<p>Because indirect commands pack dozens or thousands of individual draw
+operations into a single dispatch, shaders require a way to
+differentiate between these draws. This is where <code>gl_DrawID</code>
+functions:</p>
+<ul>
+<li><strong>Value Range:</strong> It starts at <code>0</code> for the
+very first draw command within the buffer and increments by
+<code>1</code> for each subsequent draw call up to
+<code>drawcount - 1</code>.</li>
+<li><strong>Scope:</strong> It is natively available in the Vertex
+Shader stage (via the <code>GL_ARB_shader_draw_parameters</code>
+extension or Core OpenGL 4.6 / SPIR-V equivalent).</li>
+<li><strong>Constant per Draw:</strong> Unlike
+<code>gl_InstanceID</code> or <code>gl_VertexID</code>, which change per
+instance or per vertex within a single command, <code>gl_DrawID</code>
+remains constant across all vertices and instances produced by the same
+draw sub-command.</li>
+</ul>
+<h2 id="practical-applications-in-modern-glsl">Practical Applications in
+Modern GLSL</h2>
+<p>The primary utility of <code>gl_DrawID</code> is indexing into
+unbounded arrays of resource data stored in Shader Storage Buffer
+Objects (SSBOs) or uniform buffers.</p>
+<h3 id="per-object-transformation-matrices">Per-Object Transformation
+Matrices</h3>
+<p>Instead of rebinding uniforms between draws, an application uploads
+all object transformation matrices into a single SSBO. Inside the vertex
+shader, <code>gl_DrawID</code> indexes directly into this buffer:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> ObjectData <span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> modelMatrices<span class="op">[];</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> inPosition<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> model <span class="op">=</span> modelMatrices<span class="op">[</span>gl_DrawID<span class="op">];</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> model <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>inPosition<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="material-and-texture-indexing">Material and Texture
+Indexing</h3>
+<p>In combination with bindless textures, <code>gl_DrawID</code> enables
+a single multi-draw dispatch to render objects with entirely different
+materials:</p>
+<ul>
+<li>Each sub-draw maps to a material definition stored in a structured
+buffer.</li>
+<li>Shaders use <code>gl_DrawID</code> to retrieve material properties,
+diffuse colors, and texture handles.</li>
+<li>Shaders can dynamically route texture lookups across thousands of
+disparate meshes in a single pipeline execution.</li>
+</ul>
+<h2
+id="differences-between-gl_drawid-gl_instanceid-and-gl_baseinstance">Differences
+Between gl_DrawID, gl_InstanceID, and gl_BaseInstance</h2>
+<p>Distinguishing <code>gl_DrawID</code> from instancing variables is
+critical when structuring multi-draw architectures:</p>
+<ul>
+<li><strong><code>gl_DrawID</code>:</strong> Identifies the index of the
+draw structure within the indirect command array.</li>
+<li><strong><code>gl_InstanceID</code>:</strong> Identifies the current
+instance index within a specific draw command, resetting to
+<code>0</code> for each sub-draw unless base-instance mechanics are
+explicitly configured.</li>
+<li><strong><code>gl_BaseInstance</code>:</strong> Represents the
+<code>baseInstance</code> parameter defined in the indirect command
+structure, often used as an alternative indexing offset when
+<code>gl_DrawID</code> is unavailable on legacy hardware.</li>
+</ul>
+<p>Using <code>gl_DrawID</code> eliminates the need to manually encode
+draw offsets into unused vertex attributes or instance offsets,
+simplifying GPU-driven rendering pipelines and maximizing batching
+efficiency.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

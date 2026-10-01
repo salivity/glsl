@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TAA Velocity Vectors in GLSL Vertex Shaders - glsl</title>
+    <meta name="description" content="Temporal Anti-Aliasing (TAA) velocity vectors—often referred to as motion vectors—serve as the mathematical link between past and present rendering frames. When calculated in GLSL vertex shaders, these 2D screen-space vectors determine the precise di">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/taa-velocity-vectors-in-glsl-vertex-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="TAA Velocity Vectors in GLSL Vertex Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/taa-velocity-vectors-in-glsl-vertex-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Temporal Anti-Aliasing (TAA) velocity vectors—often referred to as motion vectors—serve as the mathematical link between past and present rendering frames. When calculated in GLSL vertex shaders, these 2D screen-space vectors determine the precise di" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="taa-velocity-vectors-in-glsl-vertex-shaders">TAA Velocity
+Vectors in GLSL Vertex Shaders</h1>
+<p>Temporal Anti-Aliasing (TAA) velocity vectors—often referred to as
+motion vectors—serve as the mathematical link between past and present
+rendering frames. When calculated in GLSL vertex shaders, these 2D
+screen-space vectors determine the precise direction and distance a
+vertex has moved from the previous frame to the current one. By
+outputting this motion data, the rendering engine can accurately
+reproject and sample historical color buffers, eliminating edge
+aliasing, specular crawling, and geometric shimmering on moving geometry
+without introducing severe ghosting artifacts.</p>
+<h3 id="the-core-problem-taa-solves">The Core Problem TAA Solves</h3>
+<p>Standard supersampling techniques are computationally expensive
+because they require rendering a scene multiple times per frame at
+sub-pixel offsets. TAA achieves equivalent or superior edge smoothing at
+a fraction of the cost by spreading the sampling process over time. In
+each frame, the camera projection matrix is slightly shifted using a
+sub-pixel jitter pattern (such as a Halton sequence). The engine then
+blends the current jittered frame with previously rendered frames to
+accumulate samples.</p>
+<p>However, if an object or the camera moves, a pixel at coordinate
+<span class="math inline">\((x, y)\)</span> in the current frame does
+not correspond to the same physical world point at coordinate <span
+class="math inline">\((x, y)\)</span> in the previous frame. Without
+tracking this movement, blending frames results in heavy motion blur,
+smearing, and ghosting trails behind moving objects.</p>
+<h3 id="how-velocity-vectors-function-in-the-vertex-shader">How Velocity
+Vectors Function in the Vertex Shader</h3>
+<p>The vertex shader is the most efficient stage to calculate motion
+data because it has direct access to both current and historical
+transformation matrices before rasterization:</p>
+<ol type="1">
+<li><p><strong>Dual Transformations:</strong> For every vertex, the
+shader applies two separate matrix transformations:</p>
+<ul>
+<li>The <strong>current</strong> position using the current
+Model-View-Projection (MVP) matrix:<br />
+<span class="math display">\[\text{Pos}_{\text{current}} =
+\text{MVP}_{\text{current}} \times
+\text{Vertex}_{\text{current}}\]</span></li>
+<li>The <strong>previous</strong> position using the previous frame's
+MVP matrix:<br />
+<span class="math display">\[\text{Pos}_{\text{previous}} =
+\text{MVP}_{\text{previous}} \times
+\text{Vertex}_{\text{previous}}\]</span></li>
+</ul></li>
+<li><p><strong>Perspective Division and Screen Mapping:</strong> Both
+positions are converted from homogeneous clip space to normalized device
+coordinates (NDC) by dividing by their respective <span
+class="math inline">\(w\)</span> components.</p></li>
+<li><p><strong>Delta Calculation:</strong> The velocity vector is the
+difference between these two points:<br />
+<span class="math display">\[\mathbf{v} = \text{NDC}_{\text{current}} -
+\text{NDC}_{\text{previous}}\]</span></p></li>
+<li><p><strong>De-jittering:</strong> Because TAA applies a sub-pixel
+jitter to the current projection matrix, the vertex shader must subtract
+this jitter offset from the velocity vector to ensure that the vector
+represents purely physical motion, not synthetic camera jitter.</p></li>
+</ol>
+<p>The resulting 2D vector is passed as a varying attribute to the
+fragment shader, which writes it to a dedicated Velocity Buffer (or
+G-Buffer target).</p>
+<h3 id="key-advantages-of-vertex-stage-generation">Key Advantages of
+Vertex-Stage Generation</h3>
+<p>Calculating velocity vectors in the vertex shader provides distinct
+advantages:</p>
+<ul>
+<li><strong>Skeletal Animation and Morph Targets:</strong> Rigid-body
+transform matrices cannot account for internal surface deformation. By
+computing velocities per-vertex, the shader captures vertex-level
+changes driven by skinning weights, blend shapes, or wind simulation
+shaders before passing the interpolated values to fragments.</li>
+<li><strong>GPU Efficiency:</strong> Processing motion per-vertex
+leverages GPU hardware interpolation across polygons. This significantly
+reduces computation compared to evaluating world positions or matrix
+reconstructions entirely within full-screen fragment passes.</li>
+</ul>
+<h3 id="historical-reprojection-and-neighborhood-clamping">Historical
+Reprojection and Neighborhood Clamping</h3>
+<p>During the final TAA resolve pass, the pipeline uses the generated
+velocity vectors to look backward in time. For every screen pixel, the
+engine reads the velocity vector to fetch the corresponding color from
+the previous frame's history buffer.</p>
+<p>Once reprojected, the algorithm performs neighborhood clamping or
+clipping—comparing the historical color against the bounding box of
+neighboring pixels in the current frame. If the velocity vector
+accurately points to the previous surface location, the history color is
+validated and blended with the current frame. This mechanism eliminates
+aliasing on fast-moving meshes while keeping edges sharp and temporally
+stable.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

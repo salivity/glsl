@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Preprocessor Directives Does GLSL Support? - glsl</title>
+    <meta name="description" content="The OpenGL Shading Language (GLSL) features a built-in preprocessor closely modeled on the standard C/C++ preprocessor, used to control compilation conditionally, define macros, enforce language versions, and manage hardware extensions. While it supports">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-preprocessor-directives-does-glsl-support">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Preprocessor Directives Does GLSL Support? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-preprocessor-directives-does-glsl-support" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The OpenGL Shading Language (GLSL) features a built-in preprocessor closely modeled on the standard C/C++ preprocessor, used to control compilation conditionally, define macros, enforce language versions, and manage hardware extensions. While it supports" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-preprocessor-directives-does-glsl-support">What
+Preprocessor Directives Does GLSL Support?</h1>
+<p>The OpenGL Shading Language (GLSL) features a built-in preprocessor
+closely modeled on the standard C/C++ preprocessor, used to control
+compilation conditionally, define macros, enforce language versions, and
+manage hardware extensions. While it supports familiar operations like
+conditional branching and macro expansion, it includes GLSL-specific
+directives like <code>#version</code> and <code>#extension</code>, while
+omitting standard features like <code>#include</code> from the core
+specification.</p>
+<h2 id="macro-definition-and-undefinition">Macro Definition and
+Undefinition</h2>
+<p>GLSL allows basic macro replacement and parameterized macros across
+shader code.</p>
+<ul>
+<li><code>#define</code>: Defines a macro identifier or a function-like
+macro. Macro definitions do not evaluate types and perform direct token
+substitution.</li>
+<li><code>#undef</code>: Undefines an existing macro identifier,
+removing its definition from subsequent shader lines.</li>
+</ul>
+<p>GLSL also provides standard predefined macros, such as
+<code>__LINE__</code>, <code>__FILE__</code>, <code>__VERSION__</code>,
+and <code>GL_core_profile</code> (or <code>GL_es_profile</code>), which
+allow shaders to adapt dynamically to their execution context.</p>
+<h2 id="conditional-compilation">Conditional Compilation</h2>
+<p>Conditional directives enable shaders to include or exclude blocks of
+code based on macro definitions or integer constant expressions.</p>
+<ul>
+<li><code>#if</code>: Evaluates an integer constant expression. Non-zero
+evaluates to true.</li>
+<li><code>#ifdef</code>: Checks if a specific macro has been
+defined.</li>
+<li><code>#ifndef</code>: Checks if a specific macro has not been
+defined.</li>
+<li><code>#elif</code>: Short for "else if," evaluated if preceding
+<code>#if</code> or <code>#elif</code> conditions fail.</li>
+<li><code>#else</code>: Executes if all preceding condition branches
+evaluate to false.</li>
+<li><code>#endif</code>: Terminates a conditional compilation
+block.</li>
+<li><code>defined</code>: A preprocessor operator used inside
+<code>#if</code> or <code>#elif</code> expressions (e.g.,
+<code>defined(FEATURE_FLAG)</code>) to evaluate whether a macro name is
+defined.</li>
+</ul>
+<p>Floating-point operations and typecasts are not permitted within GLSL
+preprocessor conditional expressions; only integer constant expressions
+and operators (such as arithmetic, bitwise, and logical operators) are
+valid.</p>
+<h2 id="version-declaration-version">Version Declaration:
+<code>#version</code></h2>
+<p>The <code>#version</code> directive is mandatory for modern GLSL and
+informs the driver which specification version to use when parsing the
+shader.</p>
+<ul>
+<li><strong>Syntax:</strong> <code>#version number [profile]</code></li>
+<li><strong>Placement:</strong> Must be the first non-comment,
+non-whitespace statement in the shader source string.</li>
+<li><strong>Profiles:</strong> On desktop OpenGL 3.3 and higher, an
+optional profile argument can be specified (<code>core</code>,
+<code>compatibility</code>, or <code>es</code>).</li>
+</ul>
+<p>For example, <code>#version 330 core</code> specifies version 3.30
+using the core profile, whereas <code>#version 300 es</code> designates
+OpenGL ES 3.0.</p>
+<h2 id="extension-handling-extension">Extension Handling:
+<code>#extension</code></h2>
+<p>The <code>#extension</code> directive controls compiler behavior
+regarding optional or vendor-specific GLSL capabilities.</p>
+<ul>
+<li><strong>Syntax:</strong>
+<code>#extension extension_name : behavior</code></li>
+<li><strong>Target:</strong> <code>extension_name</code> can be a
+specific extension (e.g., <code>GL_ARB_gpu_shader5</code>) or
+<code>all</code> to apply a rule across all available extensions.</li>
+<li><strong>Behaviors:</strong></li>
+<li><code>require</code>: Fails compilation with an error if the
+extension is not supported.</li>
+<li><code>enable</code>: Enables the extension if supported; issues a
+warning if unsupported.</li>
+<li><code>warn</code>: Enables the extension if supported, but emits a
+compiler warning whenever the extension is used.</li>
+<li><code>disable</code>: Disables use of the extension and emits an
+error if any of its features are referenced.</li>
+</ul>
+<h2 id="diagnostic-and-line-control-directives">Diagnostic and Line
+Control Directives</h2>
+<p>GLSL includes directives to adjust compiler error tracking and report
+custom compilation errors.</p>
+<ul>
+<li><code>#error</code>: Halts compilation immediately and prints the
+supplied token message to the shader compilation info log.</li>
+<li><code>#line</code>: Resets the internal line number and optionally
+the source string index tracked by the compiler
+(<code>#line line_number [source_string_number]</code>). This is useful
+when host applications concatenate multiple source strings or generate
+code dynamically.</li>
+</ul>
+<h2 id="compiler-pragma-controls-pragma">Compiler Pragma Controls:
+<code>#pragma</code></h2>
+<p>The <code>#pragma</code> directive passes implementation-specific
+instructions to the shader compiler. Standard GLSL specifications define
+several reserved pragmas:</p>
+<ul>
+<li><code>#pragma STDGL</code>: Reserved for standard GLSL pragma
+configurations.</li>
+<li><code>#pragma optimize(on)</code> /
+<code>#pragma optimize(off)</code>: Directs the compiler to enable or
+disable optimization passes (primarily used for debugging).</li>
+<li><code>#pragma debug(on)</code> / <code>#pragma debug(off)</code>:
+Requests debug instrumentation from the driver to assist external shader
+debuggers.</li>
+<li><code>#pragma invariant(all)</code>: Forces all output variables in
+the shader stage to be treated with invariant qualification,
+guaranteeing identical calculations across different shaders.</li>
+</ul>
+<h2 id="omitted-directives">Omitted Directives</h2>
+<p>The core GLSL specification does not include a standard
+<code>#include</code> directive. Shader file composition, module
+management, and header inclusions must either be resolved on the CPU
+before passing the shader string to <code>glShaderSource</code>, or
+handled using specialized extensions like
+<code>GL_ARB_shading_language_include</code> or
+<code>GL_GOOGLE_include_directive</code> where driver and runtime
+support exist.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

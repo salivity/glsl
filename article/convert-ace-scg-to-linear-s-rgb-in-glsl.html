@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Convert ACEScg to Linear sRGB in GLSL - glsl</title>
+    <meta name="description" content="Converting color data from the ACEScg color space to linear sRGB is a common requirement in modern computer graphics pipelines, enabling wide-gamut rendered imagery to be displayed on standard monitors. This conversion is achieved through a standard $3 \">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/convert-ace-scg-to-linear-s-rgb-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Convert ACEScg to Linear sRGB in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/convert-ace-scg-to-linear-s-rgb-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Converting color data from the ACEScg color space to linear sRGB is a common requirement in modern computer graphics pipelines, enabling wide-gamut rendered imagery to be displayed on standard monitors. This conversion is achieved through a standard $3 \" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="convert-acescg-to-linear-srgb-in-glsl">Convert ACEScg to Linear
+sRGB in GLSL</h1>
+<p>Converting color data from the ACEScg color space to linear sRGB is a
+common requirement in modern computer graphics pipelines, enabling
+wide-gamut rendered imagery to be displayed on standard monitors. This
+conversion is achieved through a standard <span class="math inline">\(3
+\times 3\)</span> color matrix transformation that accounts for both the
+change in color primaries (AP1 to Rec. 709) and the chromatic adaptation
+between white points (D60 to D65).</p>
+<h3 id="the-transformation-matrix">The Transformation Matrix</h3>
+<p>The ACEScg color space uses AP1 primaries with an ACES white point
+(approximating CIE D60), while linear sRGB uses Rec. 709 primaries with
+a CIE D65 white point. Using the standard Bradford chromatic adaptation
+transform, the resulting <span class="math inline">\(3 \times 3\)</span>
+matrix is:</p>
+<p><span class="math display">\[
+\begin{bmatrix}
+1.705051 &amp; -0.621792 &amp; -0.083259 \\
+-0.100155 &amp;  1.140735 &amp; -0.040580 \\
+-0.023961 &amp; -0.128969 &amp;  1.152930
+\end{bmatrix}
+\]</span></p>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>Matrices in GLSL are column-major by default. When constructing a
+<code>mat3</code> in GLSL using column vectors, the coefficients must be
+passed column by column:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// ACEScg (AP1, D60) to Linear sRGB (Rec.709, D65)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">mat3</span> ACEScg_to_sRGB <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="fl">1.705051</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.100155</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.023961</span><span class="op">,</span> <span class="co">// Column 0</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>   <span class="op">-</span><span class="fl">0.621792</span><span class="op">,</span>  <span class="fl">1.140735</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.128969</span><span class="op">,</span> <span class="co">// Column 1</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>   <span class="op">-</span><span class="fl">0.083259</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.040580</span><span class="op">,</span>  <span class="fl">1.152930</span>  <span class="co">// Column 2</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">acescgToLinearSRGB</span><span class="op">(</span><span class="dt">vec3</span> acescgColor<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> ACEScg_to_sRGB <span class="op">*</span> acescgColor<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="important-considerations">Important Considerations</h3>
+<ol type="1">
+<li><strong>Matrix Multiplication Order</strong>: Multiplying the matrix
+on the left of the vector (<code>ACEScg_to_sRGB * acescgColor</code>)
+corresponds to standard linear algebra row-column dot products.</li>
+<li><strong>Negative Values and Gamut Clipping</strong>: ACEScg is a
+wider color gamut than sRGB. Highly saturated colors in ACEScg may yield
+negative color components when converted into sRGB space. Depending on
+the downstream pipeline, these values may need gamut mapping or standard
+clamping to the <span class="math inline">\([0.0, 1.0]\)</span>
+range.</li>
+<li><strong>Electro-Optical Transfer Function (EOTF)</strong>: This
+matrix only outputs <em>linear</em> sRGB. To present the result on an
+sRGB display, apply the sRGB OETF transfer function (gamma encoding)
+after this step.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Starfield Rendering with Hash Point Distribution - glsl</title>
+    <meta name="description" content="Rendering a realistic, procedural night sky starfield in GLSL relies on dividing space into a regular grid and applying deterministic hash functions to position and style stars within each cell. This article explains how hash-based point distribution ope">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-starfield-rendering-with-hash-point-distribution">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Starfield Rendering with Hash Point Distribution - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-starfield-rendering-with-hash-point-distribution" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Rendering a realistic, procedural night sky starfield in GLSL relies on dividing space into a regular grid and applying deterministic hash functions to position and style stars within each cell. This article explains how hash-based point distribution ope" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-starfield-rendering-with-hash-point-distribution">GLSL
+Starfield Rendering with Hash Point Distribution</h1>
+<p>Rendering a realistic, procedural night sky starfield in GLSL relies
+on dividing space into a regular grid and applying deterministic hash
+functions to position and style stars within each cell. This article
+explains how hash-based point distribution operates, covering coordinate
+space partitioning, pseudo-random value generation, neighboring cell
+boundary management, and visual enhancements such as brightness falloff,
+twinkling, and color variation.</p>
+<h2 id="spatial-partitioning">Spatial Partitioning</h2>
+<p>To generate an infinite starfield without memory-heavy particle
+systems or textures, screen-space UV coordinates or 3D celestial sphere
+directions are subdivided into a uniform grid.</p>
+<p>Using <code>floor()</code>, continuous space is segmented into
+discrete integer coordinates representing cell IDs. Using
+<code>fract()</code>, the local coordinate within each cell is
+extracted, running from <code>0.0</code> to <code>1.0</code>.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> gridId <span class="op">=</span> <span class="bu">floor</span><span class="op">(</span>uv <span class="op">*</span> scale<span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> gridUv <span class="op">=</span> <span class="bu">fract</span><span class="op">(</span>uv <span class="op">*</span> scale<span class="op">);</span></span></code></pre></div>
+<p>Each cell acts as an independent bounding area that contains one or
+more pseudo-randomly placed stars.</p>
+<h2 id="hash-functions-for-deterministic-randomness">Hash Functions for
+Deterministic Randomness</h2>
+<p>Standard GLSL lacks stateful random number generators. Instead,
+deterministic hash functions map the integer <code>gridId</code> to
+consistent pseudo-random values. A commonly used 2D-to-2D hash function
+leverages high-frequency trigonometric functions:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">hash22</span><span class="op">(</span><span class="dt">vec2</span> p<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> p3 <span class="op">=</span> <span class="bu">fract</span><span class="op">(</span><span class="dt">vec3</span><span class="op">(</span>p<span class="op">.</span><span class="fu">xyx</span><span class="op">)</span> <span class="op">*</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.1031</span><span class="op">,</span> <span class="fl">0.1030</span><span class="op">,</span> <span class="fl">0.0973</span><span class="op">));</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    p3 <span class="op">+=</span> <span class="bu">dot</span><span class="op">(</span>p3<span class="op">,</span> p3<span class="op">.</span><span class="fu">yzx</span> <span class="op">+</span> <span class="fl">33.33</span><span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">fract</span><span class="op">((</span>p3<span class="op">.</span><span class="fu">xx</span> <span class="op">+</span> p3<span class="op">.</span><span class="fu">yz</span><span class="op">)</span> <span class="op">*</span> p3<span class="op">.</span><span class="fu">zy</span><span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Passing the <code>gridId</code> into this function produces a fixed
+vector between <code>(0.0, 0.0)</code> and <code>(1.0, 1.0)</code>. This
+vector serves as the star’s offset within that cell, ensuring that the
+star remains locked to that coordinate frame across multiple frames.</p>
+<h2 id="neighbor-traversal-for-seamless-boundaries">Neighbor Traversal
+for Seamless Boundaries</h2>
+<p>If a star's randomized position lies near the edge of a cell, its
+circular glow will cross into neighboring cells. If a fragment only
+samples its own cell, the star will be clipped abruptly at the
+boundary.</p>
+<p>To resolve this, the shader iterates through a <span
+class="math inline">\(3 \times 3\)</span> grid of adjacent cells (or
+<span class="math inline">\(3 \times 3 \times 3\)</span> in 3D sphere
+mapping). For each neighboring offset:</p>
+<ol type="1">
+<li>The neighbor's <code>gridId</code> is calculated
+(<code>gridId + offset</code>).</li>
+<li>The neighbor's ID is hashed to determine the star’s position
+relative to the current fragment.</li>
+<li>The Euclidean distance from the fragment to that star is
+evaluated.</li>
+</ol>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> stars <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> y <span class="op">=</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span> y <span class="op">&lt;=</span> <span class="dv">1</span><span class="op">;</span> y<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">=</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span> x <span class="op">&lt;=</span> <span class="dv">1</span><span class="op">;</span> x<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span> <span class="dt">offset</span> <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="dt">float</span><span class="op">(</span>x<span class="op">),</span> <span class="dt">float</span><span class="op">(</span>y<span class="op">));</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span> starPos <span class="op">=</span> <span class="fu">hash22</span><span class="op">(</span>gridId <span class="op">+</span> <span class="dt">offset</span><span class="op">);</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Vector from current fragment to star center</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span> delta <span class="op">=</span> <span class="dt">offset</span> <span class="op">+</span> starPos <span class="op">-</span> gridUv<span class="op">;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> dist <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>delta<span class="op">);</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Star shape and intensity falloff</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        stars <span class="op">+=</span> <span class="bu">smoothstep</span><span class="op">(</span><span class="fl">0.05</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> dist<span class="op">);</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="intensity-falloff-and-glow">Intensity Falloff and Glow</h2>
+<p>A linear disc creates harsh, artificial dots. Real stars exhibit
+intense cores with rapid exponential or inverse-distance light
+decay.</p>
+<p>Light decay can be modeled using an inverse curve or smoothstep
+falloff:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> star <span class="op">=</span> <span class="fl">0.005</span> <span class="op">/</span> <span class="op">(</span>dist <span class="op">+</span> <span class="fl">0.001</span><span class="op">);</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>star <span class="op">=</span> <span class="bu">smoothstep</span><span class="op">(</span><span class="fl">0.8</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> star<span class="op">);</span></span></code></pre></div>
+<p>Alternatively, multiplying a sharp core
+(<code>smoothstep(radius, 0.0, dist)</code>) with a softer, wider
+falloff (<code>pow(max(1.0 - dist / glowRadius, 0.0), 3.0)</code>)
+creates a balanced balance between faint stars and prominent focal
+stars.</p>
+<h2 id="twinkle-and-color-modulation">Twinkle and Color Modulation</h2>
+<p>To add dynamism and celestial variety, additional hash values
+generated from the cell ID modulate brightness and tint:</p>
+<ul>
+<li><strong>Size and Brightness Variation:</strong> A single float hash
+scales the star radius and intensity, creating a natural mix of faint
+background stars and rare bright ones using power distributions (e.g.,
+<code>pow(hash.x, 8.0)</code>).</li>
+<li><strong>Twinkling:</strong> Modulate the output over time with a
+sinusoidal wave whose frequency and phase are offset by a hash:
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> twinkle <span class="op">=</span> <span class="bu">sin</span><span class="op">(</span>u_time <span class="op">*</span> <span class="op">(</span>starRand<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> <span class="fl">5.0</span> <span class="op">+</span> <span class="fl">2.0</span><span class="op">)</span> <span class="op">+</span> starRand<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> <span class="fl">6.2831</span><span class="op">);</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>intensity <span class="op">*=</span> <span class="fl">0.7</span> <span class="op">+</span> <span class="fl">0.3</span> <span class="op">*</span> twinkle<span class="op">;</span></span></code></pre></div></li>
+<li><strong>Color Temperature:</strong> Blending between blue, white,
+and red-orange based on another hash value replicates real-world
+spectral classifications.</li>
+</ul>
+<h2 id="layering-across-scales">Layering Across Scales</h2>
+<p>A single grid layer creates stars of uniform density. Realistic
+starfields combine two or three distinct layers at different scales:</p>
+<ol type="1">
+<li><strong>Dense, fine layer:</strong> High grid scale, small radii,
+faint intensities to simulate distant, unresolved star fields.</li>
+<li><strong>Medium layer:</strong> Balanced scale for standard visible
+constellations.</li>
+<li><strong>Sparse layer:</strong> Low grid scale, large stars with
+broad bloom profiles and prominent twinkle effects.</li>
+</ol>
+<p>Accumulating these layers produces a deep, non-repeating procedural
+night sky directly inside the fragment shader with minimal performance
+cost.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

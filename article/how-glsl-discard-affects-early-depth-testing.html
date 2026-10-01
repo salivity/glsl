@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GLSL Discard Affects Early Depth Testing - glsl</title>
+    <meta name="description" content="Using the discard keyword in a GLSL fragment shader disrupts the GPU's ability to perform early depth and stencil testing (commonly referred to as Early-Z), causing the pipeline to fall back to late fragment testing. Because the GPU cannot predict whethe">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-glsl-discard-affects-early-depth-testing">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GLSL Discard Affects Early Depth Testing - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-glsl-discard-affects-early-depth-testing" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Using the discard keyword in a GLSL fragment shader disrupts the GPU's ability to perform early depth and stencil testing (commonly referred to as Early-Z), causing the pipeline to fall back to late fragment testing. Because the GPU cannot predict whethe" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-glsl-discard-affects-early-depth-testing">How GLSL Discard
+Affects Early Depth Testing</h1>
+<p>Using the <code>discard</code> keyword in a GLSL fragment shader
+disrupts the GPU's ability to perform early depth and stencil testing
+(commonly referred to as Early-Z), causing the pipeline to fall back to
+late fragment testing. Because the GPU cannot predict whether a fragment
+will survive execution until the shader finishes, it must defer depth
+and stencil updates to avoid corrupting buffer data with discarded
+pixels. This overview explains the mechanics behind this behavior, its
+performance ramifications, and strategies to mitigate the resulting
+overhead.</p>
+<h3 id="the-purpose-of-early-depth-and-stencil-testing">The Purpose of
+Early Depth and Stencil Testing</h3>
+<p>In a standard rendering pipeline, fragment shading occurs before
+depth and stencil testing. However, modern GPUs implement an
+optimization called Early-Z. When enabled, the hardware evaluates depth
+and stencil values <em>before</em> invoking the fragment shader.</p>
+<p>If a fragment is determined to be occluded by previously rendered
+geometry, the GPU discards it immediately. This skips execution of the
+fragment shader entirely, saving significant processing power and memory
+bandwidth on complex lighting, texturing, and arithmetic
+calculations.</p>
+<h3 id="why-discard-breaks-early-depth-testing">Why <code>discard</code>
+Breaks Early Depth Testing</h3>
+<p>The <code>discard</code> keyword conditionally terminates a
+fragment's execution, preventing it from writing color, depth, or
+stencil data to the framebuffer. This introduces an architectural
+conflict:</p>
+<ol type="1">
+<li><strong>Depth Buffer Corruption:</strong> If the GPU performed early
+depth <em>writes</em>, a fragment that updates the depth buffer early
+and subsequently executes a <code>discard</code> would leave behind an
+invalid depth value. Any geometry rendered behind this discarded pixel
+would fail future depth tests, creating visual occlusion artifacts
+(invisible geometry).</li>
+<li><strong>Pipeline Fallback (Late-Z):</strong> To preserve rendering
+correctness, the GPU driver automatically disables early depth writes
+whenever a shader contains a <code>discard</code> statement. On most
+architectures, this causes both the depth test and depth write to shift
+to the end of the pipeline (Late-Z), running after the fragment shader
+finishes.</li>
+<li><strong>Partial Early-Z (Hierarchical-Z / Read-Only):</strong> Some
+modern GPUs can still perform an early depth <em>read</em> (testing
+without writing) to reject fragments occluded by existing geometry.
+However, if the fragment passes the depth test, the GPU must still
+execute the fragment shader to see if it discards before finally
+committing the depth write at the end of the stage.</li>
+</ol>
+<h3 id="impact-on-the-stencil-buffer">Impact on the Stencil Buffer</h3>
+<p>The stencil buffer behaves similarly to depth testing. When a
+fragment shader contains <code>discard</code>, any stencil
+operations—such as incrementing, replacing, or zeroing stencil
+values—cannot be committed prior to shader completion. If stencil
+operations depend on fragment survival, the stencil test must be
+postponed to the late testing stage, compounding pipeline stalls and
+disabling hardware-level stencil culling optimizations.</p>
+<h3 id="performance-consequences">Performance Consequences</h3>
+<p>Disabling early testing through <code>discard</code> leads to severe
+performance penalties, particularly regarding fill rate and
+overdraw:</p>
+<ul>
+<li><strong>Overdraw Overhead:</strong> In scenes with heavy overdraw
+(such as dense foliage, hair, or overlapping transparent cutouts), the
+GPU must execute full fragment shaders for fragments that may end up
+discarded or later overwritten.</li>
+<li><strong>Instruction Stalls:</strong> Branch divergence occurs when
+adjacent threads within a GPU warp or wavefront take different
+paths—some discarding while others continue—reducing overall SIMD
+execution efficiency.</li>
+</ul>
+<h3 id="mitigations-and-best-practices">Mitigations and Best
+Practices</h3>
+<p>To minimize the impact of <code>discard</code> on early depth
+testing, several techniques can be utilized:</p>
+<ul>
+<li><strong>Depth Pre-Pass (Z-Prepass):</strong> Render the scene's
+geometry to the depth buffer first using a minimal shader, then render
+the color pass with depth writes disabled and depth testing set to
+<code>GL_EQUAL</code> or <code>GL_LEQUAL</code>. This guarantees all
+occluded fragments are culled before the main color shader runs.</li>
+<li><strong>Front-to-Back Sorting:</strong> When rendering objects
+utilizing <code>discard</code> (such as alpha-tested foliage), sort draw
+calls strictly from front to back to maximize any partial early depth
+rejection capabilities available on the hardware.</li>
+<li><strong>Explicit Early Fragment Tests:</strong> In OpenGL 4.2 and
+higher, shaders can force early testing using the layout qualifier:
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">early_fragment_tests</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span></code></pre></div>
+This forces depth and stencil tests and writes to happen before shader
+execution. However, if <code>discard</code> is used inside this shader,
+the depth and stencil buffers will retain the fragment's values even if
+the fragment is discarded, which alters visual results unless the
+application explicitly accounts for it.</li>
+<li><strong>Alpha-to-Coverage:</strong> For multi-sampled anti-aliasing
+(MSAA), alpha-to-coverage converts fragment alpha into a sample mask.
+This enables perforated transparency effects without invoking
+<code>discard</code>, keeping early depth optimizations intact.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPIR-V OpTypeRuntimeArray for GLSL SSBO Unsized Arrays - glsl</title>
+    <meta name="description" content="In GLSL, Shader Storage Buffer Objects (SSBOs) frequently conclude with an unsized array whose dimension is resolved dynamically based on the bound buffer's memory allocation. In SPIR-V, this construct is represented using the OpTypeRuntimeArray type def">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/spir-v-op-type-runtime-array-for-glsl-ssbo-unsized-arrays">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="SPIR-V OpTypeRuntimeArray for GLSL SSBO Unsized Arrays - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/spir-v-op-type-runtime-array-for-glsl-ssbo-unsized-arrays" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL, Shader Storage Buffer Objects (SSBOs) frequently conclude with an unsized array whose dimension is resolved dynamically based on the bound buffer's memory allocation. In SPIR-V, this construct is represented using the OpTypeRuntimeArray type def" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="spir-v-optyperuntimearray-for-glsl-ssbo-unsized-arrays">SPIR-V
+OpTypeRuntimeArray for GLSL SSBO Unsized Arrays</h1>
+<p>In GLSL, Shader Storage Buffer Objects (SSBOs) frequently conclude
+with an unsized array whose dimension is resolved dynamically based on
+the bound buffer's memory allocation. In SPIR-V, this construct is
+represented using the <code>OpTypeRuntimeArray</code> type definition
+embedded as the final member of an <code>OpTypeStruct</code>. This
+article explains how SPIR-V declares and structures
+<code>OpTypeRuntimeArray</code>, the decorating rules required for
+memory layout, and how runtime sizing and indexing are handled via
+SPIR-V instructions.</p>
+<h3 id="declaring-the-runtime-array-type">Declaring the Runtime Array
+Type</h3>
+<p>In GLSL, a storage buffer with an unsized array is written as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> StorageBlock <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> count<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> values<span class="op">[];</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>In SPIR-V, fixed-size arrays rely on <code>OpTypeArray</code>, which
+pairs an element type with an <code>OpConstant</code> defining its
+length. Because an SSBO's trailing array has no compile-time size,
+SPIR-V uses <code>OpTypeRuntimeArray</code> instead.</p>
+<p>Its declaration syntax requires only an ID and the element type:</p>
+<pre class="spirv"><code>%float = OpTypeFloat 32
+%runtime_array = OpTypeRuntimeArray %float</code></pre>
+<p>Because the array length is omitted from the type definition, its
+size remains unbounded until the underlying buffer is mapped at
+runtime.</p>
+<h3 id="struct-integration-and-spir-v-rules">Struct Integration and
+SPIR-V Rules</h3>
+<p><code>OpTypeRuntimeArray</code> cannot exist as an independent
+variable or a function parameter; it must be wrapped inside a structure.
+SPIR-V and graphics API specifications (such as Vulkan) enforce strict
+architectural rules on its placement:</p>
+<ol type="1">
+<li><strong>Final Member Only:</strong> <code>OpTypeRuntimeArray</code>
+must appear strictly as the last member of an <code>OpTypeStruct</code>.
+Any struct containing a runtime array cannot contain additional fields
+after it.</li>
+<li><strong>No Nesting:</strong> A structure containing an
+<code>OpTypeRuntimeArray</code> cannot be embedded inside another array
+or another composite type.</li>
+<li><strong>Block Decoration:</strong> The enclosing structure must be
+decorated with <code>Block</code> (or <code>BufferBlock</code> in older
+SPIR-V/Vulkan environments) to indicate standard buffer-backed
+storage.</li>
+</ol>
+<p>The corresponding SPIR-V structure definition looks like:</p>
+<pre class="spirv"><code>%uint = OpTypeInt 32 0
+%StorageBlock = OpTypeStruct %uint %runtime_array</code></pre>
+<h3 id="layout-decorations-and-arraystride">Layout Decorations and
+ArrayStride</h3>
+<p>Hardware drivers require explicit byte-offset calculations to locate
+elements within memory. When <code>OpTypeRuntimeArray</code> is
+declared, it must be assigned an <code>ArrayStride</code> decoration via
+<code>OpDecorate</code>.</p>
+<pre class="spirv"><code>OpDecorate %runtime_array ArrayStride 4</code></pre>
+<p>The <code>ArrayStride</code> specifies the distance in bytes from the
+start of one array element to the start of the next. In an
+<code>std430</code> layout for scalar types like a 32-bit
+<code>float</code>, the stride is 4 bytes. For vector types such as
+<code>vec3</code> (12 bytes), <code>std430</code> alignment rules
+dictate an <code>ArrayStride</code> of 16 bytes.</p>
+<h3 id="querying-array-bounds-with-oparraylength">Querying Array Bounds
+with OpArrayLength</h3>
+<p>When GLSL code calls <code>values.length()</code>, the compiler
+translates this operation into the SPIR-V instruction
+<code>OpArrayLength</code>.</p>
+<p><code>OpArrayLength</code> does not inspect static metadata; instead,
+it determines the element count at runtime based on the actual memory
+bound to the descriptor:</p>
+<pre class="spirv"><code>%result = OpArrayLength %uint %block_pointer 1</code></pre>
+<ul>
+<li><code>%block_pointer</code> is an <code>OpVariable</code> pointing
+to the storage buffer structure.</li>
+<li>The literal integer <code>1</code> specifies the index of the
+structure member, pointing directly to the field using
+<code>OpTypeRuntimeArray</code>.</li>
+</ul>
+<p>The execution environment calculates the return value dynamically by
+taking the total byte size of the buffer bound to the descriptor,
+subtracting the byte offset of the runtime array within the struct, and
+dividing the remaining bytes by the specified
+<code>ArrayStride</code>.</p>
+<h3 id="accessing-array-elements">Accessing Array Elements</h3>
+<p>Reading from or writing to elements within an
+<code>OpTypeRuntimeArray</code> uses standard SPIR-V pointer navigation
+via <code>OpAccessChain</code> or <code>OpInBoundsAccessChain</code>.
+The instruction takes the base pointer of the SSBO struct, followed by
+the member index (e.g., <code>1</code>), and then the dynamic element
+index. SPIR-V yields a pointer directly to the requested element,
+permitting normal <code>OpLoad</code> and <code>OpStore</code>
+instructions.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

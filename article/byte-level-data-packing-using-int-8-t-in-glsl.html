@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Byte-Level Data Packing Using int8_t in GLSL - glsl</title>
+    <meta name="description" content="The GLEXTshaderexplicitarithmetictypesint8 extension introduces true 8-bit integer types to GLSL, allowing developers to manipulate and pack memory with single-byte granularity. This article explains how the introduction of int8t and uint8t eliminates ma">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/byte-level-data-packing-using-int-8-t-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Byte-Level Data Packing Using int8_t in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/byte-level-data-packing-using-int-8-t-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The GLEXTshaderexplicitarithmetictypesint8 extension introduces true 8-bit integer types to GLSL, allowing developers to manipulate and pack memory with single-byte granularity. This article explains how the introduction of int8t and uint8t eliminates ma" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="byte-level-data-packing-using-int8_t-in-glsl">Byte-Level Data
+Packing Using int8_t in GLSL</h1>
+<p>The <code>GL_EXT_shader_explicit_arithmetic_types_int8</code>
+extension introduces true 8-bit integer types to GLSL, allowing
+developers to manipulate and pack memory with single-byte granularity.
+This article explains how the introduction of <code>int8_t</code> and
+<code>uint8_t</code> eliminates manual bit-shifting overhead, enables
+native memory alignment in storage buffers, and optimizes bandwidth
+consumption through efficient byte-level data packing.</p>
+<h3 id="the-limitations-of-standard-glsl-types">The Limitations of
+Standard GLSL Types</h3>
+<p>Standard GLSL primarily relies on 32-bit types (<code>int</code>,
+<code>uint</code>, <code>float</code>). When working with compact data
+formats—such as vertex attributes, quantized neural network weights, or
+compressed textures—developers historically had to store multiple 8-bit
+values inside a single 32-bit register.</p>
+<p>Accessing individual bytes required manual bitwise manipulation:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Traditional extraction without int8 support</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> packedData <span class="op">=</span> <span class="kw">buffer</span><span class="op">.</span><span class="fu">data</span><span class="op">[</span><span class="dt">index</span><span class="op">];</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> byte0 <span class="op">=</span> <span class="op">(</span>packedData      <span class="op">)</span> <span class="op">&amp;</span> <span class="bn">0xFF</span>u<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> byte1 <span class="op">=</span> <span class="op">(</span>packedData <span class="op">&gt;&gt;</span>  <span class="dv">8</span><span class="op">)</span> <span class="op">&amp;</span> <span class="bn">0xFF</span>u<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> byte2 <span class="op">=</span> <span class="op">(</span>packedData <span class="op">&gt;&gt;</span> <span class="dv">16</span><span class="op">)</span> <span class="op">&amp;</span> <span class="bn">0xFF</span>u<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> byte3 <span class="op">=</span> <span class="op">(</span>packedData <span class="op">&gt;&gt;</span> <span class="dv">24</span><span class="op">)</span> <span class="op">&amp;</span> <span class="bn">0xFF</span>u<span class="op">;</span></span></code></pre></div>
+<p>While packing intrinsics like <code>pack32</code> and
+<code>unpack32</code> exist, the underlying hardware registers and
+operations still treated data as 32-bit quantities. This introduced
+extra arithmetic logic unit (ALU) instructions for bitfield extraction
+and insertion, while complicating buffer layout designs.</p>
+<h3 id="enabling-native-8-bit-arithmetic-and-types">Enabling Native
+8-Bit Arithmetic and Types</h3>
+<p>Enabling the
+<code>GL_EXT_shader_explicit_arithmetic_types_int8</code> extension
+provides explicit 8-bit scalar and vector types: <code>int8_t</code>,
+<code>uint8_t</code>, <code>i8vec2</code> through <code>i8vec4</code>,
+and <code>u8vec2</code> through <code>u8vec4</code>.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require</span></span></code></pre></div>
+<p>With these types enabled, the compiler recognizes 8-bit memory
+storage and scalar operations directly, bypassing the requirement to
+widen every integer value to 32 bits before performing operations.</p>
+<h3 id="direct-memory-mapping-in-storage-buffers">Direct Memory Mapping
+in Storage Buffers</h3>
+<p>The primary mechanism by which <code>int8_t</code> enables byte-level
+data packing is through direct memory mapping in Shader Storage Buffer
+Objects (SSBOs). When combined with layouts such as <code>scalar</code>
+(via <code>GL_EXT_scalar_block_layout</code>), structures can be packed
+tightly without 32-bit padding:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> CompactBuffer <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    uint8_t  flags<span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    i8vec3   normal_quantized<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    uint8_t  indices<span class="op">[</span><span class="dv">4</span><span class="op">];</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> instances<span class="op">[];</span></span></code></pre></div>
+<p>In this layout:</p>
+<ul>
+<li><code>flags</code> occupies exactly 1 byte.</li>
+<li><code>normal_quantized</code> occupies 3 contiguous bytes.</li>
+<li><code>indices</code> is an array of 4 contiguous bytes.</li>
+</ul>
+<p>Each instance occupies a total of 8 bytes without requiring padding
+or explicit bitfield packing. Hardware can load and store exact byte
+offsets directly, reducing memory bandwidth requirements up to fourfold
+compared to standard 32-bit integer structures.</p>
+<h3 id="elimination-of-alu-packing-overhead">Elimination of ALU Packing
+Overhead</h3>
+<p>Because <code>int8_t</code> and <code>uint8_t</code> vector types
+(<code>u8vec4</code>, <code>i8vec4</code>) are first-class types,
+components are individually addressable through standard swizzling:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>u8vec4 packedVal <span class="op">=</span> <span class="kw">buffer</span><span class="op">.</span><span class="fu">vectors</span><span class="op">[</span><span class="dt">index</span><span class="op">];</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>uint8_t firstComponent <span class="op">=</span> packedVal<span class="op">.</span><span class="fu">x</span><span class="op">;</span></span></code></pre></div>
+<p>This access does not generate masking (<code>&amp; 0xFF</code>) or
+shifting (<code>&gt;&gt;</code>) instructions in the compiled
+intermediate representation (SPIR-V). Instead, the compiler emits native
+byte-load instructions (such as <code>OpLoad</code> targeting an 8-bit
+integer type) or sub-dword vector extraction instructions, saving ALU
+cycles.</p>
+<h3 id="byte-level-reinterpretation-and-unpacking">Byte-Level
+Reinterpretation and Unpacking</h3>
+<p>The extension works alongside conversion routines, allowing
+developers to pack fractional data into bytes and perform calculations
+directly:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Quantized dot product with 8-bit inputs</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>i8vec4 a <span class="op">=</span> bufferA<span class="op">.</span><span class="fu">data</span><span class="op">[</span><span class="dt">index</span><span class="op">];</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>i8vec4 b <span class="op">=</span> bufferB<span class="op">.</span><span class="fu">data</span><span class="op">[</span><span class="dt">index</span><span class="op">];</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Direct conversion to wider types for arithmetic accumulation</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="dt">ivec4</span> widenedA <span class="op">=</span> <span class="dt">ivec4</span><span class="op">(</span>a<span class="op">);</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="dt">ivec4</span> widenedB <span class="op">=</span> <span class="dt">ivec4</span><span class="op">(</span>b<span class="op">);</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> result <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>widenedA<span class="op">,</span> widenedB<span class="op">);</span></span></code></pre></div>
+<p>Hardware architectures with native INT8 support (such as modern GPUs
+with specialized DP4A or tensor operations) can map these explicit 8-bit
+dot products and vector operations directly to single-instruction SIMD
+operations, maximizing throughput for machine learning inference and
+high-density geometric processing.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

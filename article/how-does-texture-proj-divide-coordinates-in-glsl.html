@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does textureProj Divide Coordinates in GLSL? - glsl</title>
+    <meta name="description" content="GLSL provides the textureProj function to simplify projective texture mapping by automatically dividing the texture coordinate vector's directional components by its final component before sampling. This article explains the underlying mathematics of pro">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-texture-proj-divide-coordinates-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does textureProj Divide Coordinates in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-texture-proj-divide-coordinates-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="GLSL provides the textureProj function to simplify projective texture mapping by automatically dividing the texture coordinate vector's directional components by its final component before sampling. This article explains the underlying mathematics of pro" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-textureproj-divide-coordinates-in-glsl">How Does
+textureProj Divide Coordinates in GLSL?</h1>
+<p>GLSL provides the <code>textureProj</code> function to simplify
+projective texture mapping by automatically dividing the texture
+coordinate vector's directional components by its final component before
+sampling. This article explains the underlying mathematics of projective
+texture division, details how GLSL handles different sampler dimensions,
+highlights hardware execution benefits, and contrasts
+<code>textureProj</code> with manual coordinate division.</p>
+<h2 id="the-mathematics-of-projective-texture-division">The Mathematics
+of Projective Texture Division</h2>
+<p>Projective texturing simulates a slide projector casting an image
+onto 3D geometry. When geometry is transformed by a projector's
+view-projection matrix, vertex positions end up in homogeneous clip
+space <span class="math inline">\((x, y, z, w)\)</span>. To map these
+coordinates onto a standard normalized texture space <span
+class="math inline">\([0, 1]\)</span>, the perspective distortion must
+be normalized via perspective division.</p>
+<p>In GLSL, <code>textureProj</code> performs this division
+intrinsically before evaluating the texture lookup. Given a coordinate
+vector <span class="math inline">\(P\)</span>, the hardware divides the
+initial coordinate components by the last component:</p>
+<p><span class="math display">\[\text{Projected Coordinates} =
+\frac{P_{0 \dots n-1}}{P_{\text{last}}}\]</span></p>
+<p>Depending on the dimensionality of the sampler and the type of the
+coordinate vector passed to <code>textureProj</code>, the specific
+components used in the division adapt accordingly.</p>
+<h2 id="vector-handling-across-sampler-types">Vector Handling Across
+Sampler Types</h2>
+<p>The GLSL specification defines overloads of <code>textureProj</code>
+for 1D, 2D, 3D, and shadow textures. The division behavior shifts based
+on the vector dimensionality:</p>
+<h3 id="1d-textures-sampler1d">1D Textures (<code>sampler1D</code>)</h3>
+<ul>
+<li><strong><code>vec2</code> input:</strong> Divides the single texture
+coordinate <span class="math inline">\(s\)</span> by the divisor <span
+class="math inline">\(t\)</span>:</li>
+</ul>
+<p><span class="math display">\[\text{coord} =
+\frac{P.x}{P.y}\]</span></p>
+<ul>
+<li><strong><code>vec4</code> input:</strong> Divides <span
+class="math inline">\(s\)</span> by the homogeneous scale factor <span
+class="math inline">\(q\)</span>:</li>
+</ul>
+<p><span class="math display">\[\text{coord} =
+\frac{P.x}{P.w}\]</span></p>
+<h3 id="2d-textures-sampler2d">2D Textures (<code>sampler2D</code>)</h3>
+<ul>
+<li><strong><code>vec3</code> input:</strong> Common when transforming
+coordinates using a <span class="math inline">\(3 \times 3\)</span>
+projective matrix. Divides the <span class="math inline">\((s,
+t)\)</span> coordinates by the projection scale component <span
+class="math inline">\(r\)</span>:</li>
+</ul>
+<p><span class="math display">\[\text{coord} = \left(\frac{P.x}{P.z},
+\frac{P.y}{P.z}\right)\]</span></p>
+<ul>
+<li><strong><code>vec4</code> input:</strong> Standard for 3D projective
+transformations using <span class="math inline">\(4 \times 4\)</span>
+matrices. Divides <span class="math inline">\((s, t)\)</span> by
+homogeneous component <span class="math inline">\(q\)</span>:</li>
+</ul>
+<p><span class="math display">\[\text{coord} = \left(\frac{P.x}{P.w},
+\frac{P.y}{P.w}\right)\]</span></p>
+<h3 id="3d-textures-sampler3d">3D Textures (<code>sampler3D</code>)</h3>
+<ul>
+<li><strong><code>vec4</code> input:</strong> Divides the volumetric
+<span class="math inline">\((s, t, r)\)</span> coordinates by the
+homogeneous scale factor <span class="math inline">\(q\)</span>:</li>
+</ul>
+<p><span class="math display">\[\text{coord} = \left(\frac{P.x}{P.w},
+\frac{P.y}{P.w}, \frac{P.z}{P.w}\right)\]</span></p>
+<h3 id="shadow-maps-sampler2dshadow">Shadow Maps
+(<code>sampler2DShadow</code>)</h3>
+<ul>
+<li><strong><code>vec4</code> input:</strong> In shadow mapping, the
+third component represents the reference depth value to compare against
+the depth buffer. <code>textureProj</code> scales both the UV
+coordinates and the reference comparison value by <span
+class="math inline">\(w\)</span>:</li>
+</ul>
+<p><span class="math display">\[\text{lookup} = \left(\frac{P.x}{P.w},
+\frac{P.y}{P.w}\right), \quad \text{compare\_depth} =
+\frac{P.z}{P.w}\]</span></p>
+<h2 id="hardware-execution-and-derivative-calculation">Hardware
+Execution and Derivative Calculation</h2>
+<p>When manual division is performed in a fragment shader—such as
+calling <code>texture(tex, coord.xy / coord.w)</code>—the division
+happens explicitly in shader arithmetic logic units (ALUs). The
+automatic partial derivatives (<code>dFdx</code> and <code>dFdy</code>)
+needed for mipmap level-of-detail (LOD) calculations are subsequently
+evaluated on the post-division values <span
+class="math inline">\(\frac{P.xy}{P.w}\)</span>. Across triangle
+silhouettes or near <span class="math inline">\(P.w \approx 0\)</span>,
+rapid coordinate variations can cause extreme derivative spikes,
+resulting in incorrect mipmap selection and visual blur or seam
+artifacts.</p>
+<p>Using <code>textureProj</code> delegates perspective division to the
+dedicated texture mapping unit (TMU) hardware on modern GPUs:</p>
+<ol type="1">
+<li>The raw homogeneous coordinates interpolate across the primitive via
+standard perspective-correct barycentric interpolation.</li>
+<li>The TMU computes derivatives from the unprojected coordinates prior
+to division or uses dedicated projection sampling pipelines.</li>
+<li>The hardware divides the coordinates and fetches the sample in an
+optimized hardware pipeline stage.</li>
+</ol>
+<h2 id="practical-code-example">Practical Code Example</h2>
+<p>In applications such as shadow mapping or spotlight projection,
+homogeneous projective coordinates are passed from the vertex shader to
+the fragment shader.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Fragment Shader</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec4</span> vProjTexCoord<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> spotlightTexture<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2DShadow</span> shadowMap<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> fragColor<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Samples 2D color projection using automatic (x/w, y/w) division</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> projectedColor <span class="op">=</span> <span class="bu">textureProj</span><span class="op">(</span>spotlightTexture<span class="op">,</span> vProjTexCoord<span class="op">);</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Performs depth comparison with (z/w) at coordinates (x/w, y/w)</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> shadowFactor <span class="op">=</span> <span class="bu">textureProj</span><span class="op">(</span>shadowMap<span class="op">,</span> vProjTexCoord<span class="op">);</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> projectedColor <span class="op">*</span> shadowFactor<span class="op">;</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By encapsulating both coordinate normalization and perspective
+division in a single intrinsic function, <code>textureProj</code> keeps
+shader code concise, minimizes manual ALU instructions, and maintains
+consistent hardware-accelerated sampling behavior.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

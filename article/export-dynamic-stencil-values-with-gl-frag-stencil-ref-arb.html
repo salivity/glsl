@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Export Dynamic Stencil Values with gl_FragStencilRefARB - glsl</title>
+    <meta name="description" content="The glFragStencilRefARB built-in variable allows fragment shaders to dynamically generate and export per-fragment stencil reference values directly to the OpenGL stencil buffer. Traditionally, stencil reference values are immutable across an entire draw">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/export-dynamic-stencil-values-with-gl-frag-stencil-ref-arb">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Export Dynamic Stencil Values with gl_FragStencilRefARB - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/export-dynamic-stencil-values-with-gl-frag-stencil-ref-arb" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The glFragStencilRefARB built-in variable allows fragment shaders to dynamically generate and export per-fragment stencil reference values directly to the OpenGL stencil buffer. Traditionally, stencil reference values are immutable across an entire draw" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="export-dynamic-stencil-values-with-gl_fragstencilrefarb">Export
+Dynamic Stencil Values with gl_FragStencilRefARB</h1>
+<p>The <code>gl_FragStencilRefARB</code> built-in variable allows
+fragment shaders to dynamically generate and export per-fragment stencil
+reference values directly to the OpenGL stencil buffer. Traditionally,
+stencil reference values are immutable across an entire draw call, set
+globally by the host application via API functions like
+<code>glStencilFunc</code>. By enabling the
+<code>GL_ARB_shader_stencil_export</code> extension, developers gain
+programmatic control over the stencil reference value per fragment,
+bypassing static CPU-bound constraints to support advanced rendering
+techniques like dynamic masking, deferred shading tagging, and
+procedural stencil generation.</p>
+<h3 id="the-limitation-of-static-reference-values">The Limitation of
+Static Reference Values</h3>
+<p>In standard OpenGL pipelines, the stencil test compares a static
+reference value against the current value in the stencil buffer using a
+specified comparison function:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>glStencilFunc<span class="op">(</span>GL_EQUAL<span class="op">,</span> refValue<span class="op">,</span> mask<span class="op">);</span></span></code></pre></div>
+<p>Because <code>refValue</code> is set on the CPU, every fragment
+rasterized during that draw call shares the exact same reference value.
+To update the stencil buffer with multiple distinct IDs or mask regions,
+an application historically had to issue separate draw calls for each
+unique stencil value, introducing substantial CPU overhead and draw call
+batching inefficiencies.</p>
+<h3 id="enabling-shader-stencil-export">Enabling Shader Stencil
+Export</h3>
+<p>To use dynamic stencil reference export in GLSL, the application must
+confirm hardware support for the
+<code>GL_ARB_shader_stencil_export</code> extension. Inside the fragment
+shader, the extension must be explicitly declared before use:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_ARB_shader_stencil_export : require</span></span></code></pre></div>
+<p>When enabled, the compiler exposes the output variable
+<code>gl_FragStencilRefARB</code>.</p>
+<h3 id="syntax-and-declaration">Syntax and Declaration</h3>
+<p><code>gl_FragStencilRefARB</code> is an implicitly declared, built-in
+output variable with an integer type:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">int</span> gl_FragStencilRefARB<span class="op">;</span></span></code></pre></div>
+<p>In the fragment shader, an integer value can be assigned to
+<code>gl_FragStencilRefARB</code> during execution. This value serves as
+the replacement reference value for subsequent stencil operations
+applied to that specific fragment:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_ARB_shader_stencil_export : require</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec2</span> vTexCoord<span class="op">;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> fragColor<span class="op">;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> uMaskTexture<span class="op">;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute a dynamic stencil value per-fragment</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> dynamicID <span class="op">=</span> <span class="dt">int</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>uMaskTexture<span class="op">,</span> vTexCoord<span class="op">).</span><span class="fu">r</span> <span class="op">*</span> <span class="fl">255.0</span><span class="op">);</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Export to the stencil test</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    gl_FragStencilRefARB <span class="op">=</span> dynamicID<span class="op">;</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="pipeline-integration-and-stencil-operations">Pipeline
+Integration and Stencil Operations</h3>
+<p>When <code>gl_FragStencilRefARB</code> is written:</p>
+<ol type="1">
+<li><strong>Comparison Test:</strong> If the stencil test evaluates
+against the reference value (e.g., using <code>GL_EQUAL</code>,
+<code>GL_LESS</code>), the per-fragment exported value replaces the
+static reference value defined by <code>glStencilFunc</code>.</li>
+<li><strong>Buffer Write:</strong> If the stencil test passes and the
+stencil operation specifies an action using the reference value (e.g.,
+<code>glStencilOp(..., ..., GL_REPLACE)</code>), the value written into
+the stencil buffer is the value assigned to
+<code>gl_FragStencilRefARB</code>.</li>
+</ol>
+<p>If the shader executes but conditionally omits writing to
+<code>gl_FragStencilRefARB</code>, or if the fragment is discarded using
+<code>discard</code>, standard stencil rules or discard logic apply.</p>
+<h3 id="performance-considerations">Performance Considerations</h3>
+<p>Exporting stencil values from the fragment shader can impact graphics
+pipeline optimizations. Standard OpenGL implementations often leverage
+"Early Stencil" tests, which execute stencil and depth operations prior
+to running the fragment shader to eliminate occluded pixels early.
+Writing dynamic stencil values inside the fragment shader introduces a
+data dependency, generally forcing the GPU to execute the fragment
+shader first and delay stencil operations to the late fragment test
+stage.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

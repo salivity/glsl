@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding nonuniformEXT in GLSL Texture Arrays - glsl</title>
+    <meta name="description" content="This article provides an overview of the nonuniformEXT qualifier in GLSL, explaining its role when indexing arrays of textures or descriptors. You will learn why GPUs require this keyword for dynamically divergent texture indexing within a subgroup, what">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-nonuniform-ext-in-glsl-texture-arrays">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding nonuniformEXT in GLSL Texture Arrays - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-nonuniform-ext-in-glsl-texture-arrays" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of the nonuniformEXT qualifier in GLSL, explaining its role when indexing arrays of textures or descriptors. You will learn why GPUs require this keyword for dynamically divergent texture indexing within a subgroup, what" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="understanding-nonuniformext-in-glsl-texture-arrays">Understanding
+nonuniformEXT in GLSL Texture Arrays</h1>
+<p>This article provides an overview of the <code>nonuniformEXT</code>
+qualifier in GLSL, explaining its role when indexing arrays of textures
+or descriptors. You will learn why GPUs require this keyword for
+dynamically divergent texture indexing within a subgroup, what problems
+occur when it is omitted, and how modern graphics drivers generate code
+differently to handle per-thread resource access safely.</p>
+<h3 id="the-purpose-of-nonuniformext">The Purpose of
+<code>nonuniformEXT</code></h3>
+<p>The <code>nonuniformEXT</code> keyword explicitly informs the
+compiler and GPU that an array index used to access a resource (such as
+a texture or buffer descriptor) can vary across invocations within the
+same execution wave or subgroup.</p>
+<p>In modern APIs like Vulkan and Direct3D 12, dynamic resource
+indexing—commonly used in "bindless" rendering architectures—allows
+shaders to select different textures from an array at runtime. However,
+GPUs optimize descriptor loads under the assumption that all threads in
+a wave will access the exact same descriptor. When that assumption is
+false, <code>nonuniformEXT</code> tells the compiler to emit special
+instructions to handle divergent execution paths safely.</p>
+<h3 id="hardware-execution-and-the-uniformity-requirement">Hardware
+Execution and the Uniformity Requirement</h3>
+<p>Modern GPUs run shader threads in lockstep groups, known as warps on
+NVIDIA hardware or wavefronts on AMD hardware. By default, resource
+descriptors (such as sampler and texture pointers) are fetched using
+scalar units designed to load a single descriptor once for the entire
+warp:</p>
+<ul>
+<li><strong>Dynamically Uniform:</strong> A value is dynamically uniform
+if it evaluates to the same value across all active invocations within
+an execution wave. Under this condition, the GPU can load a single
+descriptor into shared registers, saving memory bandwidth and execution
+cycles.</li>
+<li><strong>Non-Uniform:</strong> A value is non-uniform if different
+threads in the same wave compute different values. For example, if two
+adjacent pixels rendered simultaneously use different materials, their
+texture array indices will diverge.</li>
+</ul>
+<p>Without <code>nonuniformEXT</code>, passing a divergent index into a
+texture array violates the dynamic uniformity rule. This results in
+undefined behavior, which often manifests as screen tearing, rendering
+the wrong texture, GPU hangs, or memory access faults.</p>
+<h3 id="what-nonuniformext-does-under-the-hood">What
+<code>nonuniformEXT</code> Does Under the Hood</h3>
+<p>When an index is marked with <code>nonuniformEXT</code>, the compiler
+cannot assume scalar access. Instead, it generates divergence-handling
+code to read the descriptors properly for each thread.</p>
+<p>Depending on the underlying GPU architecture, the compiler typically
+resolves divergence in one of two ways:</p>
+<ol type="1">
+<li><strong>Scalar Looping (Waterfall Loop):</strong> The GPU creates an
+internal loop over the unique indices present in the wave. In each
+iteration, it runs the descriptor load only for the subset of threads
+sharing that specific index, repeating until all threads have completed
+their respective texture fetches.</li>
+<li><strong>Vector Descriptor Loads:</strong> If the hardware supports
+reading descriptors directly via vector registers, the compiler utilizes
+vector instructions to load distinct descriptors per thread without
+requiring a scalar loop.</li>
+</ol>
+<h3 id="how-to-use-nonuniformext-in-glsl">How to Use
+<code>nonuniformEXT</code> in GLSL</h3>
+<p>To use the qualifier, you must enable the
+<code>GL_EXT_nonuniform_qualifier</code> extension (or target a modern
+Vulkan environment where it is supported by default) and wrap the
+dynamic index where the resource array is sampled:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_nonuniform_qualifier : require</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">sampler2D</span> textures<span class="op">[];</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">flat</span> <span class="dt">int</span> inTextureIndex<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec2</span> inUV<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> outColor<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Wrap the dynamic index with nonuniformEXT</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    outColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>textures<span class="op">[</span><span class="fu">nonuniformEXT</span><span class="op">(</span>inTextureIndex<span class="op">)],</span> inUV<span class="op">);</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="performance-considerations">Performance Considerations</h3>
+<p>While <code>nonuniformEXT</code> makes per-thread resource indexing
+safe, it introduces a performance cost compared to uniform descriptor
+access. If adjacent pixels routinely fetch from different textures, the
+resulting divergent loops will serialize execution, reducing SIMD
+efficiency. To maintain high performance, group draw calls or mesh
+primitives by material wherever possible to maximize uniformity across
+waves.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

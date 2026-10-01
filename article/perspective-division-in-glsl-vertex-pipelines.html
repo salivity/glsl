@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perspective Division in GLSL Vertex Pipelines - glsl</title>
+    <meta name="description" content="This article examines the consequences of altering perspective division within OpenGL Shading Language (GLSL) vertex pipelines. In standard GPU rasterization, perspective division is a fixed-function hardware step that divides clip-space coordinates by t">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/perspective-division-in-glsl-vertex-pipelines">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Perspective Division in GLSL Vertex Pipelines - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/perspective-division-in-glsl-vertex-pipelines" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article examines the consequences of altering perspective division within OpenGL Shading Language (GLSL) vertex pipelines. In standard GPU rasterization, perspective division is a fixed-function hardware step that divides clip-space coordinates by t" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="perspective-division-in-glsl-vertex-pipelines">Perspective
+Division in GLSL Vertex Pipelines</h1>
+<p>This article examines the consequences of altering perspective
+division within OpenGL Shading Language (GLSL) vertex pipelines. In
+standard GPU rasterization, perspective division is a fixed-function
+hardware step that divides clip-space coordinates by their homogeneous
+component (<span class="math inline">\(w\)</span>) to produce normalized
+device coordinates (NDC). Attempting to bypass, preempt, or modify this
+process inside the vertex shader alters depth calculation, disables
+perspective-correct attribute interpolation, and breaks frustum
+clipping, leading to distinct rendering artifacts.</p>
+<h2 id="the-standard-perspective-pipeline">The Standard Perspective
+Pipeline</h2>
+<p>In a standard GLSL pipeline, the vertex shader outputs coordinates to
+the built-in output variable:</p>
+<p><span class="math display">\[\text{gl\_Position} = (x_c, y_c, z_c,
+w_c)\]</span></p>
+<p>Under normal operation, the vertex shader terminates in clip space.
+The GPU’s fixed-function hardware then performs two critical steps
+before rasterization:</p>
+<ol type="1">
+<li><strong>Frustum Clipping:</strong> The hardware clips geometric
+primitives against the view volume defined by <span
+class="math inline">\(-w_c \le x_c, y_c, z_c \le w_c\)</span>.</li>
+<li><strong>Perspective Division:</strong> The hardware computes
+Normalized Device Coordinates (NDC) by dividing the clip-space
+components by <span class="math inline">\(w_c\)</span>:</li>
+</ol>
+<p><span class="math display">\[(x_{ndc}, y_{ndc}, z_{ndc}) =
+\left(\frac{x_c}{w_c}, \frac{y_c}{w_c},
+\frac{z_c}{w_c}\right)\]</span></p>
+<p>When developers alter this handling—such as manually dividing by
+<span class="math inline">\(w\)</span> inside the vertex shader and
+setting <span class="math inline">\(w=1.0\)</span>—they fundamentally
+break how the rasterizer processes geometry.</p>
+<h2 id="loss-of-perspective-correct-attribute-interpolation">Loss of
+Perspective-Correct Attribute Interpolation</h2>
+<p>The most visible consequence of manual perspective division in GLSL
+is the failure of perspective-correct interpolation across surface
+attributes (texture coordinates, normals, and colors).</p>
+<p>Modern rasterizers interpolate varying variables across a triangle by
+interpolating <span
+class="math inline">\(\frac{\text{attribute}}{w}\)</span> in screen
+space, along with <span class="math inline">\(\frac{1}{w}\)</span>, and
+performing a per-fragment division to recover the true value.</p>
+<p>If you divide coordinates by <span class="math inline">\(w\)</span>
+in the vertex shader and set the final <span
+class="math inline">\(w\)</span> component to <span
+class="math inline">\(1.0\)</span>:</p>
+<ul>
+<li>The hardware treats <span class="math inline">\(w\)</span> as a
+constant <span class="math inline">\(1.0\)</span> during
+rasterization.</li>
+<li>Attributes are interpolated linearly in screen space (affine
+mapping) rather than hyperbolically in 3D space.</li>
+<li><strong>Visual Effect:</strong> Textures warp, bend, and shear
+depending on camera distance and angle, producing a distorted appearance
+similar to rendering on legacy consoles like the Sony PlayStation
+1.</li>
+</ul>
+<h2 id="frustum-clipping-failures">Frustum Clipping Failures</h2>
+<p>Frustum clipping occurs strictly in homogeneous clip space
+<em>before</em> the hardware perspective divide occurs. This step
+prevents division by zero and rejects geometry located behind the camera
+plane (<span class="math inline">\(w \le 0\)</span>).</p>
+<p>Preemptively dividing by <span class="math inline">\(w\)</span> in
+the vertex shader introduces several clipping bugs:</p>
+<ul>
+<li><strong>Behind-Camera Inversion:</strong> Geometry located behind
+the near plane can have a negative <span
+class="math inline">\(w\)</span> value. Dividing by a negative <span
+class="math inline">\(w\)</span> inverts the sign of <span
+class="math inline">\((x, y)\)</span>, causing vertices behind the
+viewer to project upside-down and backwards onto the screen.</li>
+<li><strong>Division by Zero:</strong> Triangles spanning the <span
+class="math inline">\(w = 0\)</span> plane cause divide-by-zero
+operations in the shader, resulting in <code>NaN</code> or
+<code>Infinity</code> coordinates that cause primitives to violently
+stretch or disappear.</li>
+<li><strong>Incorrect Edge Clipping:</strong> Because the hardware
+assumes the output is still in clip space, setting <span
+class="math inline">\(w = 1.0\)</span> causes the clipping unit to test
+<span class="math inline">\((x_{ndc}, y_{ndc}, z_{ndc})\)</span> against
+<span class="math inline">\([-1, 1]\)</span> directly without the proper
+geometric boundary calculation, leading to clipped geometry popping in
+and out of view at viewport borders.</li>
+</ul>
+<h2 id="depth-precision-and-non-linear-z-distribution">Depth Precision
+and Non-Linear Z Distribution</h2>
+<p>The perspective divide accounts for the non-linear distribution of
+the depth buffer, where precision is concentrated near the near
+plane.</p>
+<p>When modifying perspective division manually:</p>
+<ul>
+<li>The fixed-function pipeline will still divide the components by
+whatever value is left in <span
+class="math inline">\(\text{gl\_Position.w}\)</span>. If you manually
+divide <span class="math inline">\(z\)</span> by <span
+class="math inline">\(w\)</span> and leave the original <span
+class="math inline">\(w\)</span> intact, <span
+class="math inline">\(z\)</span> will be divided twice.</li>
+<li>If <span class="math inline">\(w\)</span> is overwritten with an
+incorrect value, depth buffer mapping between <span
+class="math inline">\([0.0, 1.0]\)</span> (or <span
+class="math inline">\([-1.0, 1.0]\)</span> in older OpenGL contexts)
+fails, leading to depth fighting (Z-fighting), reversed occlusion, or
+models prematurely clipping out of the depth buffer.</li>
+</ul>
+<h2 id="valid-applications-of-perspective-component-manipulation">Valid
+Applications of Perspective Component Manipulation</h2>
+<p>While performing the complete perspective divide in the vertex shader
+causes breaking issues, intentionally modifying individual components of
+the projection calculation is common for specific rendering
+techniques:</p>
+<ul>
+<li><strong>Infinite Far Planes:</strong> Manipulating the projection
+matrix to produce <span class="math inline">\(w_c = -z_{view}\)</span>
+and a fixed <span class="math inline">\(z_c\)</span> allows rendering
+skyboxes or shadows extending to infinity without floating-point
+overflow during hardware division.</li>
+<li><strong>Orthographic Overrides:</strong> Setting <span
+class="math inline">\(w_c = 1.0\)</span> natively via the projection
+matrix (rather than post-divide) creates orthographic projections where
+parallel lines remain parallel and screen-space interpolation is
+intended to be linear.</li>
+<li><strong>Logarithmic Depth Buffers:</strong> Modifying the relation
+between <span class="math inline">\(z_c\)</span> and <span
+class="math inline">\(w_c\)</span> directly in vertex code allows
+massive scale shifts in space simulations while leaving the final
+division step to the rasterizer.</li>
+</ul>
+<p>Perspective division relies on coordinated interaction between GLSL
+vertex code, dedicated clipping units, and the rasterizer. To ensure
+correct attribute interpolation, view-frustum clipping, and depth
+testing, the final division by <span class="math inline">\(w\)</span>
+must remain in the domain of the GPU's fixed-function hardware.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

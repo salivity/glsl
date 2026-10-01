@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU Register Spilling and Compute Shader Throughput - glsl</title>
+    <meta name="description" content="Register spilling occurs in GLSL compute shaders when an invocation requires more general-purpose registers (GPRs) than the hardware can allocate, forcing the compiler to offload excess variable data to thread-local GPU memory. This mechanism severely de">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gpu-register-spilling-and-compute-shader-throughput">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GPU Register Spilling and Compute Shader Throughput - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gpu-register-spilling-and-compute-shader-throughput" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Register spilling occurs in GLSL compute shaders when an invocation requires more general-purpose registers (GPRs) than the hardware can allocate, forcing the compiler to offload excess variable data to thread-local GPU memory. This mechanism severely de" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="gpu-register-spilling-and-compute-shader-throughput">GPU
+Register Spilling and Compute Shader Throughput</h1>
+<p>Register spilling occurs in GLSL compute shaders when an invocation
+requires more general-purpose registers (GPRs) than the hardware can
+allocate, forcing the compiler to offload excess variable data to
+thread-local GPU memory. This mechanism severely degrades compute
+throughput by substituting single-cycle register access with
+high-latency memory transactions, evicting critical cache lines, and
+reducing warp or wavefront occupancy across the GPU's execution units.
+Understanding how register pressure translates into memory spills is
+vital for maintaining peak execution speed in high-performance graphics
+and computational workloads.</p>
+<h3 id="the-mechanism-of-register-spilling">The Mechanism of Register
+Spilling</h3>
+<p>Modern GPUs execute compute shaders using thousands of concurrent
+threads divided into hardware scheduling units, such as warps on NVIDIA
+architectures or wavefronts on AMD architectures. The Streaming
+Multiprocessors (SMs) or Compute Units (CUs) feature a fixed-size,
+ultra-fast register file dynamically shared among active threads.</p>
+<p>When a GLSL shader contains complex control flow, large numbers of
+live variables, or extensive loop unrolling, the compiler calculates the
+register requirement per thread. If this requirement exceeds hardware
+allocation limits, or if fulfilling it would reduce execution
+concurrency below a viable threshold, the compiler generates
+instructions to store these overflow values in "local memory."</p>
+<p>Despite its name in graphics programming, thread-local memory is not
+on-chip memory; it resides in off-chip VRAM backed by the GPU’s L1 and
+L2 cache hierarchies.</p>
+<h3 id="direct-latency-penalties">Direct Latency Penalties</h3>
+<p>Register files provide data access with virtually zero latency (often
+1–2 clock cycles) and massive aggregate bandwidth. In contrast, spilled
+variables transferred to local memory must travel through the memory
+subsystem:</p>
+<ul>
+<li><strong>L1 Cache Hits:</strong> Incur tens of cycles of
+latency.</li>
+<li><strong>L2 Cache Hits:</strong> Incur hundreds of cycles.</li>
+<li><strong>VRAM Fallbacks:</strong> Incur several hundred to over a
+thousand clock cycles if cache misses occur.</li>
+</ul>
+<p>Every time a spilled variable is read or written, the shader compiler
+must emit explicit load and store instructions. These memory operations
+create pipeline stalls, forcing the hardware scheduler to pause the
+affected thread until the requested data arrives.</p>
+<h3 id="cache-thrashing-and-bandwidth-contention">Cache Thrashing and
+Bandwidth Contention</h3>
+<p>Local memory shares the same on-chip L1 data caches and L2 cache
+slices as general compute data buffers (<code>buffer</code> blocks or
+Uniform Buffer Objects). Register spilling floods these caches with
+private, per-thread data:</p>
+<ol type="1">
+<li><strong>Eviction of Shared Data:</strong> Spilled thread data
+constantly evicts texture lines, global buffers, and frequently used
+read-only data, degrading the efficiency of other pipeline
+operations.</li>
+<li><strong>Coalescing Difficulties:</strong> Although modern compilers
+attempt to coalesce spilled memory loads and stores across contiguous
+threads within a warp, divergence in data access patterns can cause
+redundant cache line fetches, saturating the internal crossbar and
+memory buses.</li>
+</ol>
+<h3 id="reduced-hardware-occupancy">Reduced Hardware Occupancy</h3>
+<p>The GPU hides memory latency through occupancy—keeping enough active
+warps or wavefronts in flight so the scheduler can immediately switch to
+an unblocked thread while others wait on memory.</p>
+<p>To prevent spilling, the driver's GLSL compiler may restrict a
+shader's register usage to a maximum cap. However, if register
+allocation is prioritized to avoid spilling entirely, the hardware can
+allocate fewer warps per SM/CU due to register exhaustion. Conversely,
+if the compiler permits spilling to keep occupancy high, the sheer
+volume of memory stalls overwhelms the scheduler's ability to hide
+latency. In either scenario, effective throughput collapses.</p>
+<h3 id="identifying-and-mitigating-spills-in-glsl">Identifying and
+Mitigating Spills in GLSL</h3>
+<p>To diagnose and resolve register spills:</p>
+<ul>
+<li><strong>Reduce Variable Lifetimes:</strong> Declare variables close
+to their point of use rather than grouping them at the beginning of a
+GLSL block, allowing the compiler to reuse physical registers.</li>
+<li><strong>Limit Dynamic Array Indexing:</strong> Indexing into local
+arrays using dynamic variables often prevents registers from being
+allocated, instantly forcing arrays into local memory.</li>
+<li><strong>Avoid Over-Unrolling Loops:</strong> Using excessive
+<code>#pragma optionNV(unroll, all)</code> directives dramatically
+increases the number of simultaneously live variables.</li>
+<li><strong>Utilize Compute Shader Shared Memory:</strong> Explicitly
+move large, reusable structures to <code>shared</code> memory blocks,
+which reside in dedicated on-chip SRAM rather than the dynamic register
+file or external VRAM.</li>
+<li><strong>Adjust Workgroup Dimensions:</strong> Lowering
+<code>local_size_x/y/z</code> can alleviate resource allocation pressure
+per multiprocessor, giving remaining threads access to a larger pool of
+registers.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

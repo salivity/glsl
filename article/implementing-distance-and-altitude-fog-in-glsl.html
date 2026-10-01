@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Implementing Distance and Altitude Fog in GLSL - glsl</title>
+    <meta name="description" content="This article explains how to compute realistic aerial perspective fog in GLSL as a coupled function of distance and altitude. By modeling an atmosphere where particle density decays exponentially with height, you can analytically integrate atmospheric ex">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/implementing-distance-and-altitude-fog-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Implementing Distance and Altitude Fog in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/implementing-distance-and-altitude-fog-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to compute realistic aerial perspective fog in GLSL as a coupled function of distance and altitude. By modeling an atmosphere where particle density decays exponentially with height, you can analytically integrate atmospheric ex" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="implementing-distance-and-altitude-fog-in-glsl">Implementing
+Distance and Altitude Fog in GLSL</h1>
+<p>This article explains how to compute realistic aerial perspective fog
+in GLSL as a coupled function of distance and altitude. By modeling an
+atmosphere where particle density decays exponentially with height, you
+can analytically integrate atmospheric extinction along any view ray
+without expensive numerical raymarching. The following sections break
+down the underlying mathematical formulation, provide an optimized GLSL
+implementation, and detail how to integrate the resulting transmittance
+into your lighting pipeline.</p>
+<h2 id="the-mathematical-model">The Mathematical Model</h2>
+<p>Standard distance fog assumes constant atmospheric density, yielding
+an extinction factor determined solely by distance (<span
+class="math inline">\(d\)</span>):</p>
+<p><span class="math display">\[\tau = \sigma \cdot d\]</span></p>
+<p>Real-world atmospheres, however, decrease in density as altitude
+increases. Assuming an exponential distribution, atmospheric density
+<span class="math inline">\(\rho\)</span> at height <span
+class="math inline">\(y\)</span> is defined as:</p>
+<p><span class="math display">\[\rho(y) = \rho_0 \cdot e^{-b \cdot
+y}\]</span></p>
+<p>where:</p>
+<ul>
+<li><span class="math inline">\(\rho_0\)</span> is the base density at
+sea level (<span class="math inline">\(y = 0\)</span>).</li>
+<li><span class="math inline">\(b\)</span> is the height falloff
+coefficient (controlling how rapidly density drops with altitude).</li>
+</ul>
+<p>To evaluate fog between the camera position <span
+class="math inline">\(\mathbf{C} = (C_x, C_y, C_z)\)</span> and a
+surface point <span class="math inline">\(\mathbf{P} = (P_x, P_y,
+P_z)\)</span>, calculate the optical depth <span
+class="math inline">\(\tau\)</span> along the ray <span
+class="math inline">\(\mathbf{r}(t) = \mathbf{C} + t\mathbf{v}\)</span>,
+where <span class="math inline">\(\mathbf{v} = \mathbf{P} -
+\mathbf{C}\)</span> and <span class="math inline">\(t \in [0,
+1]\)</span>:</p>
+<p><span class="math display">\[\tau = \int_0^1 \rho(C_y + t \cdot v_y)
+\cdot \|\mathbf{v}\| \, dt = \|\mathbf{v}\| \cdot \rho_0 \cdot e^{-b
+\cdot C_y} \int_0^1 e^{-b \cdot v_y \cdot t} \, dt\]</span></p>
+<p>Evaluating this integral yields the closed-form equation:</p>
+<p><span class="math display">\[\tau = \|\mathbf{v}\| \cdot \rho_0 \cdot
+e^{-b \cdot C_y} \cdot \left( \frac{1 - e^{-b \cdot v_y}}{b \cdot v_y}
+\right)\]</span></p>
+<p>When the ray is completely horizontal (<span
+class="math inline">\(v_y \approx 0\)</span>), the fraction approaches
+<span class="math inline">\(1\)</span>, simplifying the optical depth
+to:</p>
+<p><span class="math display">\[\tau = \|\mathbf{v}\| \cdot \rho_0 \cdot
+e^{-b \cdot C_y}\]</span></p>
+<p>Once <span class="math inline">\(\tau\)</span> is determined, the
+transmittance <span class="math inline">\(T\)</span> (the fraction of
+light reaching the camera from the surface) follows the Beer-Lambert
+law:</p>
+<p><span class="math display">\[T = e^{-\tau}\]</span></p>
+<p>The fog blend factor is then <span class="math inline">\(1.0 -
+T\)</span>.</p>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>Below is a GLSL function that computes the fog transmittance and
+inscattering blend factor given the camera position, world-space
+fragment position, and atmospheric parameters.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Computes aerial perspective fog factor</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">// Returns a value between 0.0 (no fog) and 1.0 (full fog)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">evaluateFog</span><span class="op">(</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> cameraPos<span class="op">,</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> fragPos<span class="op">,</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> fogDensity<span class="op">,</span>     <span class="co">// Base density at y = 0</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> heightFalloff   <span class="co">// Controls exponential decrease with height</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> viewDir <span class="op">=</span> fragPos <span class="op">-</span> cameraPos<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> dist <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>viewDir<span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> deltaY <span class="op">=</span> viewDir<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Optical depth base evaluation</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cameraDensity <span class="op">=</span> fogDensity <span class="op">*</span> <span class="bu">exp</span><span class="op">(-</span>heightFalloff <span class="op">*</span> cameraPos<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> opticalDepth<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Handle near-zero vertical delta to avoid division by zero</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">abs</span><span class="op">(</span>deltaY<span class="op">)</span> <span class="op">&lt;</span> <span class="fl">0.0001</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        opticalDepth <span class="op">=</span> dist <span class="op">*</span> cameraDensity<span class="op">;</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> heightFactor <span class="op">=</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> <span class="bu">exp</span><span class="op">(-</span>heightFalloff <span class="op">*</span> deltaY<span class="op">))</span> <span class="op">/</span> <span class="op">(</span>heightFalloff <span class="op">*</span> deltaY<span class="op">);</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>        opticalDepth <span class="op">=</span> dist <span class="op">*</span> cameraDensity <span class="op">*</span> heightFactor<span class="op">;</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Transmittance via Beer-Lambert law</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> transmittance <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>opticalDepth<span class="op">);</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">clamp</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> transmittance<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="applying-fog-in-the-fragment-shader">Applying Fog in the
+Fragment Shader</h2>
+<p>In your fragment shader, apply the evaluated fog factor by blending
+the shaded geometry color with the ambient atmospheric color:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> surfaceColor <span class="op">=</span> <span class="fu">computeLighting</span><span class="op">();</span> <span class="co">// Standard PBR/Lambertian shading</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> fogColor <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.6</span><span class="op">,</span> <span class="fl">0.7</span><span class="op">,</span> <span class="fl">0.85</span><span class="op">);</span>   <span class="co">// Atmospheric haze color</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Fog configuration</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> fogBaseDensity <span class="op">=</span> <span class="fl">0.005</span><span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> fogHeightFalloff <span class="op">=</span> <span class="fl">0.05</span><span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> fogFactor <span class="op">=</span> <span class="fu">evaluateFog</span><span class="op">(</span>u_CameraPosition<span class="op">,</span> v_WorldPosition<span class="op">,</span> fogBaseDensity<span class="op">,</span> fogHeightFalloff<span class="op">);</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> finalColor <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>surfaceColor<span class="op">,</span> fogColor<span class="op">,</span> fogFactor<span class="op">);</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>finalColor<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="directional-inscattering-sun-glow">Directional Inscattering (Sun
+Glow)</h2>
+<p>To account for directional sunlight scattering (Mie scattering),
+modify <code>fogColor</code> by taking the dot product between the
+normalized view vector and the directional light vector:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> viewDirNorm <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>v_WorldPosition <span class="op">-</span> u_CameraPosition<span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> sunDot <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>viewDirNorm<span class="op">,</span> u_SunDirection<span class="op">),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> sunGlow <span class="op">=</span> u_SunColor <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span>sunDot<span class="op">,</span> <span class="fl">8.0</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> finalFogColor <span class="op">=</span> fogColor <span class="op">+</span> sunGlow<span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> finalColor <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>surfaceColor<span class="op">,</span> finalFogColor<span class="op">,</span> fogFactor<span class="op">);</span></span></code></pre></div>
+<p>This method produces deep valleys shrouded in heavy ground fog, clear
+mountain peaks at higher altitudes, and realistic optical attenuation
+across long viewing distances without sampling textures or executing
+iterative loops.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

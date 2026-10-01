@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Does gl_WorkGroupID Do in GLSL Compute Shaders? - glsl</title>
+    <meta name="description" content="In GLSL compute shaders, glWorkGroupID is a built-in input variable that identifies the specific work group currently executing the shader invocation. Compute shaders execute across a hierarchical domain divided into global dispatches, work groups, and i">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-does-gl-work-group-id-do-in-glsl-compute-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Does gl_WorkGroupID Do in GLSL Compute Shaders? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-does-gl-work-group-id-do-in-glsl-compute-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL compute shaders, glWorkGroupID is a built-in input variable that identifies the specific work group currently executing the shader invocation. Compute shaders execute across a hierarchical domain divided into global dispatches, work groups, and i" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-does-gl_workgroupid-do-in-glsl-compute-shaders">What Does
+gl_WorkGroupID Do in GLSL Compute Shaders?</h1>
+<p>In GLSL compute shaders, <code>gl_WorkGroupID</code> is a built-in
+input variable that identifies the specific work group currently
+executing the shader invocation. Compute shaders execute across a
+hierarchical domain divided into global dispatches, work groups, and
+individual invocations. This article covers the exact data type and
+structure of <code>gl_WorkGroupID</code>, how it relates to host-side
+dispatch calls, its distinction from other built-in coordinate
+variables, and how developers use it to calculate global indices and
+partition memory workloads.</p>
+<h2 id="type-definition-and-coordinate-space">Type Definition and
+Coordinate Space</h2>
+<p><code>gl_WorkGroupID</code> is defined by the OpenGL Shading Language
+specification as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">uvec3</span> <span class="bu">gl_WorkGroupID</span><span class="op">;</span></span></code></pre></div>
+<p>It is a three-dimensional vector of unsigned integers
+(<code>uvec3</code>) representing the three-dimensional index of the
+current work group within the overall dispatch grid:</p>
+<ul>
+<li><code>gl_WorkGroupID.x</code>: The index along the X-dimension,
+ranging from <code>0</code> to <code>gl_NumWorkGroups.x - 1</code>.</li>
+<li><code>gl_WorkGroupID.y</code>: The index along the Y-dimension,
+ranging from <code>0</code> to <code>gl_NumWorkGroups.y - 1</code>.</li>
+<li><code>gl_WorkGroupID.z</code>: The index along the Z-dimension,
+ranging from <code>0</code> to <code>gl_NumWorkGroups.z - 1</code>.</li>
+</ul>
+<p>Even if a compute workload is one-dimensional or two-dimensional,
+<code>gl_WorkGroupID</code> remains a three-component vector. Unused
+dimensions default to an index of <code>0</code>.</p>
+<h2 id="origin-in-host-api-calls">Origin in Host API Calls</h2>
+<p>The values stored in <code>gl_WorkGroupID</code> directly correlate
+with the parameters passed when launching the compute operation from the
+host application. In OpenGL, compute shaders are typically launched
+using the <code>glDispatchCompute</code> API call:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>glDispatchCompute<span class="op">(</span>num_groups_x<span class="op">,</span> num_groups_y<span class="op">,</span> num_groups_z<span class="op">);</span></span></code></pre></div>
+<p>When this call executes, the GPU driver schedules
+<code>num_groups_x * num_groups_y * num_groups_z</code> total work
+groups. For any given invocation, <code>gl_WorkGroupID</code> provides
+the zero-based <code>(x, y, z)</code> location of the work group within
+that launched grid.</p>
+<h2 id="relationship-to-other-compute-built-ins">Relationship to Other
+Compute Built-ins</h2>
+<p>Understanding <code>gl_WorkGroupID</code> requires distinguishing it
+from complementary built-in variables provided by GLSL:</p>
+<ul>
+<li><strong><code>gl_LocalInvocationID</code>
+(<code>uvec3</code>):</strong> The relative coordinate of an invocation
+<em>inside</em> its local work group.</li>
+<li><strong><code>gl_WorkGroupSize</code> (<code>uvec3</code>):</strong>
+The compile-time fixed dimensions of the local work group declared via
+the <code>layout(local_size_x = ..., ...)</code> qualifier.</li>
+<li><strong><code>gl_NumWorkGroups</code> (<code>uvec3</code>):</strong>
+The total number of work groups dispatched across each dimension.</li>
+<li><strong><code>gl_GlobalInvocationID</code>
+(<code>uvec3</code>):</strong> The absolute, global coordinate of the
+current invocation across the entire dispatch.</li>
+</ul>
+<p>The mathematical relationship between these variables is defined
+as:</p>
+<p><span class="math display">\[\text{gl\_GlobalInvocationID} =
+\text{gl\_WorkGroupID} \times \text{gl\_WorkGroupSize} +
+\text{gl\_LocalInvocationID}\]</span></p>
+<h2 id="practical-use-cases">Practical Use Cases</h2>
+<p>Developers use <code>gl_WorkGroupID</code> primarily for tile-based
+resource distribution, shared memory coordination, and coarse-grained
+memory offsets.</p>
+<h3 id="tile-based-image-processing-and-spatial-partitioning">Tile-Based
+Image Processing and Spatial Partitioning</h3>
+<p>When processing large textures or framebuffers, compute workloads are
+often broken into rectangular tiles (such as 16x16 pixels). Each work
+group processes one tile. <code>gl_WorkGroupID</code> indicates which
+tile is being handled, allowing shaders to compute base memory offsets
+or tile bounding boxes before individual threads read local pixels.</p>
+<h3 id="managing-work-group-level-resources">Managing Work-Group-Level
+Resources</h3>
+<p>Resources such as <code>shared</code> memory variables exist per work
+group rather than per invocation. While
+<code>gl_LocalInvocationID</code> indexes elements inside shared memory
+buffers, <code>gl_WorkGroupID</code> determines which slice of global
+memory or Shader Storage Buffer Object (SSBO) data is copied into that
+shared memory bank.</p>
+<h3 id="custom-work-queues-and-coarse-indexing">Custom Work Queues and
+Coarse Indexing</h3>
+<p>In multi-pass algorithms or indirect rendering pipelines,
+<code>gl_WorkGroupID</code> can index directly into global descriptor
+arrays, dispatch argument buffers, or per-tile light lists, ensuring
+that work is grouped efficiently according to hardware scheduling
+capabilities.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voxel Clipmap Updating in GLSL Compute Shaders - glsl</title>
+    <meta name="description" content="This article explores how voxel clipmap updates are coordinated across moving camera volumes using GLSL compute shaders. Voxel clipmaps maintain a sequence of concentric, nested 3D grids centered around a viewpoint to achieve multi-resolution terrain or">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/voxel-clipmap-updating-in-glsl-compute-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Voxel Clipmap Updating in GLSL Compute Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/voxel-clipmap-updating-in-glsl-compute-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores how voxel clipmap updates are coordinated across moving camera volumes using GLSL compute shaders. Voxel clipmaps maintain a sequence of concentric, nested 3D grids centered around a viewpoint to achieve multi-resolution terrain or" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="voxel-clipmap-updating-in-glsl-compute-shaders">Voxel Clipmap
+Updating in GLSL Compute Shaders</h1>
+<p>This article explores how voxel clipmap updates are coordinated
+across moving camera volumes using GLSL compute shaders. Voxel clipmaps
+maintain a sequence of concentric, nested 3D grids centered around a
+viewpoint to achieve multi-resolution terrain or volumetric
+representation. Efficiently moving these grids with the camera requires
+eliminating full-volume copies through toroidal addressing, isolating
+dirty regions into directional slabs, and issuing targeted compute
+shader dispatches that stream updated voxel geometry or signed distance
+fields directly on the GPU.</p>
+<h2 id="snapping-and-lod-grid-alignment">Snapping and LOD Grid
+Alignment</h2>
+<p>A voxel clipmap represents continuous space as a series of <span
+class="math inline">\(N\)</span> nested cubic grids, where each
+subsequent Level of Detail (LOD) doubles in world-space extents and
+voxel cell size. To prevent visual aliasing and continuous rebuilding,
+the center of each clipmap level does not smoothly track the camera.
+Instead, each level snaps to its own world-space voxel grid:</p>
+<p><span class="math display">\[\text{SnappedPos} = \lfloor
+\frac{\text{CameraPos}}{\text{VoxelSize}_L} \rfloor \times
+\text{VoxelSize}_L\]</span></p>
+<p>Because outer levels feature larger voxels, their snapped origins
+update less frequently than inner levels. The camera's displacement is
+evaluated per LOD level on the CPU or an orchestration compute pass,
+producing a discrete integer translation vector <span
+class="math inline">\(\Delta \mathbf{v} = (\Delta x, \Delta y, \Delta
+z)\)</span> measured in grid cells.</p>
+<h2 id="toroidal-addressing-via-modular-arithmetic">Toroidal Addressing
+via Modular Arithmetic</h2>
+<p>Moving a <span class="math inline">\(D \times D \times D\)</span> 3D
+texture in VRAM via block memory transfers is computationally
+prohibitive. Instead, clipmaps treat the backing 3D texture or SSBO as a
+cyclic ring buffer across all three spatial dimensions.</p>
+<p>When a grid shifts by <span class="math inline">\(\Delta
+\mathbf{v}\)</span>, the underlying texture coordinates do not shift
+physically; instead, coordinate access maps world space to storage space
+using a modulo operation:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">ivec3</span> <span class="fu">WorldToStorage</span><span class="op">(</span><span class="dt">ivec3</span> worldVoxelCoord<span class="op">,</span> <span class="dt">int</span> clipmapResolution<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span>worldVoxelCoord <span class="op">%</span> clipmapResolution <span class="op">+</span> clipmapResolution<span class="op">)</span> <span class="op">%</span> clipmapResolution<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This ensures that the physical memory stays anchored, while the
+logical representation translates infinitely in world space.</p>
+<h2 id="invalidation-and-dirty-region-identification">Invalidation and
+Dirty Region Identification</h2>
+<p>When an LOD level moves by <span class="math inline">\(\Delta
+\mathbf{v}\)</span>, voxels in the direction of movement leave the
+clipping volume, and new world regions enter. Rather than regenerating
+the entire grid, only newly exposed regions—often referred to as update
+slabs—are marked as dirty.</p>
+<p>For a displacement vector <span class="math inline">\((\Delta x,
+\Delta y, \Delta z)\)</span>, the newly exposed volume is partitioned
+into up to three non-overlapping axis-aligned bounding boxes:</p>
+<ol type="1">
+<li><strong>X-Slab:</strong> A volume of thickness <span
+class="math inline">\(|\Delta x|\)</span> covering the exposed face
+along the X-axis.</li>
+<li><strong>Y-Slab:</strong> A volume of thickness <span
+class="math inline">\(|\Delta y|\)</span> covering the remaining exposed
+region along the Y-axis.</li>
+<li><strong>Z-Slab:</strong> A volume of thickness <span
+class="math inline">\(|\Delta z|\)</span> covering the remaining exposed
+region along the Z-axis.</li>
+</ol>
+<p>If <span class="math inline">\(|\Delta \mathbf{v}|\)</span> along any
+axis meets or exceeds the grid dimension <span
+class="math inline">\(D\)</span>, the entire level is marked dirty and
+regenerated completely.</p>
+<h2 id="orchestrating-the-compute-dispatch">Orchestrating the Compute
+Dispatch</h2>
+<p>Once dirty bounding volumes are identified, GLSL compute shaders
+update the underlying data structures. This pipeline generally consists
+of two distinct compute stages:</p>
+<h3 id="1-invalidation-and-clearing">1. Invalidation and Clearing</h3>
+<p>Before writing new data, the regions of storage memory mapping to the
+dirty slabs are cleared or initialized to empty states. A compute shader
+takes the bounds of each slab and invokes <code>imageStore()</code> to
+clear voxel occupancy, density, or material handles.</p>
+<h3 id="2-voxel-generation--sampling">2. Voxel Generation /
+Sampling</h3>
+<p>A generation compute shader generates procedural data (e.g., 3D
+noise, Signed Distance Fields) or injects dynamic geometry into the
+newly cleared voxel storage.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">8</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">8</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">8</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> r32f<span class="op">)</span> <span class="kw">uniform</span> <span class="dt">writeonly</span> <span class="dt">image3D</span> u_VoxelTexture<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">ivec3</span> u_SlabMinWorld<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">ivec3</span> u_SlabSize<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">int</span> u_ClipmapResolution<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_VoxelSize<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> localID <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">xyz</span><span class="op">);</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">any</span><span class="op">(</span><span class="bu">greaterThanEqual</span><span class="op">(</span>localID<span class="op">,</span> u_SlabSize<span class="op">)))</span> <span class="op">{</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> worldVoxel <span class="op">=</span> u_SlabMinWorld <span class="op">+</span> localID<span class="op">;</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> worldPos <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span>worldVoxel<span class="op">)</span> <span class="op">*</span> u_VoxelSize<span class="op">;</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Generate voxel data (e.g., terrain density)</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> density <span class="op">=</span> <span class="fu">EvaluateTerrainSDF</span><span class="op">(</span>worldPos<span class="op">);</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Map world voxel position to physical storage via toroidal wrapping</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> storageCoord <span class="op">=</span> <span class="op">(</span>worldVoxel <span class="op">%</span> u_ClipmapResolution <span class="op">+</span> u_ClipmapResolution<span class="op">)</span> <span class="op">%</span> u_ClipmapResolution<span class="op">;</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="bu">imageStore</span><span class="op">(</span>u_VoxelTexture<span class="op">,</span> storageCoord<span class="op">,</span> <span class="dt">vec4</span><span class="op">(</span>density<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">));</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Dispatches use indirect compute buffers
+(<code>glDispatchComputeIndirect</code>) so that the host can upload
+multiple slab dimensions dynamically, or a lightweight management
+compute shader can calculate the dispatch parameters directly on the GPU
+based on camera position changes.</p>
+<h2 id="synchronization-and-lod-cascading">Synchronization and LOD
+Cascading</h2>
+<p>When parent and child clipmap levels update simultaneously, race
+conditions and visual seams can appear at level boundaries.</p>
+<ul>
+<li><strong>Memory Barriers:</strong> To prevent read-after-write
+conflicts, compute passes are delineated with
+<code>glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT)</code>.</li>
+<li><strong>Coarse-to-Fine Seeding:</strong> If fine levels use
+downsampled data from coarser levels (or vice versa for mipmapping),
+parent compute dispatches must complete before child dispatches
+execute.</li>
+<li><strong>Blend Boundaries:</strong> During rendering, shaders blend
+the outermost ring of voxels in level <span
+class="math inline">\(L\)</span> with the corresponding voxels in level
+<span class="math inline">\(L+1\)</span>. To avoid edge flickering
+during movement, the compute shader enforces consistent generation
+evaluation along shared boundaries.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

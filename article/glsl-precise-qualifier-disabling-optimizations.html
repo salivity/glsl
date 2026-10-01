@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Precise Qualifier: Disabling Optimizations - glsl</title>
+    <meta name="description" content="The precise qualifier in the OpenGL Shading Language (GLSL) enforces strict evaluation rules on floating-point expressions to guarantee consistent numerical results. By default, GPU optimizing compilers aggressively transform math expressions to maximize">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-precise-qualifier-disabling-optimizations">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Precise Qualifier: Disabling Optimizations - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-precise-qualifier-disabling-optimizations" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The precise qualifier in the OpenGL Shading Language (GLSL) enforces strict evaluation rules on floating-point expressions to guarantee consistent numerical results. By default, GPU optimizing compilers aggressively transform math expressions to maximize" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-precise-qualifier-disabling-optimizations">GLSL Precise
+Qualifier: Disabling Optimizations</h1>
+<p>The <code>precise</code> qualifier in the OpenGL Shading Language
+(GLSL) enforces strict evaluation rules on floating-point expressions to
+guarantee consistent numerical results. By default, GPU optimizing
+compilers aggressively transform math expressions to maximize
+performance, often leading to slight rounding variations. This article
+explains how the <code>precise</code> qualifier halts algebraic
+reordering, prevents unwanted fused multiply-add contractions, and
+ensures algorithmic invariance across different shaders and pipeline
+stages.</p>
+<h3 id="default-compiler-optimizations-in-glsl">Default Compiler
+Optimizations in GLSL</h3>
+<p>GPU compilers standardly treat floating-point arithmetic as if it
+follows the laws of pure algebra, assuming associativity and
+distributivity:</p>
+<ul>
+<li><strong>Associativity:</strong> <code>(a + b) + c</code> is treated
+as equivalent to <code>a + (b + c)</code>.</li>
+<li><strong>Distributivity:</strong> <code>a * (b + c)</code> is treated
+as equivalent to <code>a * b + a * c</code>.</li>
+</ul>
+<p>In IEEE 754 floating-point arithmetic, these identities do not
+strictly hold due to finite precision and intermediate rounding steps.
+However, compilers frequently reorder these operations or merge separate
+additions and multiplications into a single Fused Multiply-Add
+(<code>fma</code>) instruction to minimize instruction count and
+register pressure.</p>
+<p>While advantageous for performance, this reordering introduces
+variations in the least significant bits of floating-point values
+depending on instruction scheduling.</p>
+<h3 id="how-precise-inhibits-reordering">How <code>precise</code>
+Inhibits Reordering</h3>
+<p>Applying the <code>precise</code> qualifier to a variable or function
+return value alters the compiler’s Intermediate Representation (IR)
+generation and instruction-selection phases:</p>
+<ol type="1">
+<li><strong>Enforcing Strict Operator Associativity:</strong> The
+compiler is prohibited from applying associative or distributive
+transformations. The syntax tree of the expression is evaluated strictly
+in the order dictated by operator precedence and parentheses. For
+example, in the expression <code>r = (a + b) + c</code>, the compiler
+cannot evaluate <code>b + c</code> first, even if doing so would reduce
+latency or reuse a cached value.</li>
+<li><strong>Preventing Unintended Fused Multiply-Add (FMA)
+Operations:</strong> A standard multiplication followed by an addition
+(<code>a * b + c</code>) calculates an intermediate rounded product
+before adding <code>c</code>. An <code>fma</code> instruction computes
+<code>(a * b) + c</code> with infinite precision before rounding once at
+the end. Because this yields a different bit-level result than two
+separate operations, the <code>precise</code> qualifier forbids the
+automatic contraction of distinct multiply and add operations into an
+<code>fma</code>, unless the developer explicitly calls the
+<code>fma()</code> built-in function.</li>
+<li><strong>Backward Dependency Propagation:</strong> The restriction is
+not limited merely to the final assignment. The <code>precise</code>
+rule propagates backward through the entire expression graph
+contributing to the qualified variable. Any sub-expression that
+determines the value of a <code>precise</code> target must also be
+evaluated strictly as written without algebraic reassociation.</li>
+</ol>
+<h3 id="use-cases-and-significance">Use Cases and Significance</h3>
+<p>The primary purpose of disabling these optimizations is invariance.
+In graphics pipelines, subtle differences in rounding can lead to visual
+artifacts:</p>
+<ul>
+<li><strong>Tessellation and Seams:</strong> If two adjacent patches
+evaluate shared edge coordinates using expressions that are
+algebraically equivalent but scheduled differently by the compiler,
+cracks or gaps can appear along the boundary.</li>
+<li><strong>Multi-Pass Rendering:</strong> Re-rendering geometry in
+separate passes (such as a depth pre-pass followed by a lighting pass)
+requires exact bit-level depth reproduction to prevent z-fighting.</li>
+</ul>
+<p>By placing <code>precise</code> on key output variables, developers
+force the compiler to generate identical machine code sequences for
+common calculations, guaranteeing bit-exact invariance across distinct
+shader stages at the cost of minor performance optimizations.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

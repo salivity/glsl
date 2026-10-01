@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hierarchical Z-Buffer Occlusion Culling in GLSL - glsl</title>
+    <meta name="description" content="This article explains the algorithm for implementing hierarchical Z-buffer (Hi-Z) occlusion culling of bounding boxes within a GLSL compute shader. Hi-Z culling accelerates rendering pipelines by testing the projected screen-space bounding box of an obje">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/hierarchical-z-buffer-occlusion-culling-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Hierarchical Z-Buffer Occlusion Culling in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/hierarchical-z-buffer-occlusion-culling-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains the algorithm for implementing hierarchical Z-buffer (Hi-Z) occlusion culling of bounding boxes within a GLSL compute shader. Hi-Z culling accelerates rendering pipelines by testing the projected screen-space bounding box of an obje" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="hierarchical-z-buffer-occlusion-culling-in-glsl">Hierarchical
+Z-Buffer Occlusion Culling in GLSL</h1>
+<p>This article explains the algorithm for implementing hierarchical
+Z-buffer (Hi-Z) occlusion culling of bounding boxes within a GLSL
+compute shader. Hi-Z culling accelerates rendering pipelines by testing
+the projected screen-space bounding box of an object against a
+pre-generated depth mipmap pyramid, allowing the GPU to reject fully
+occluded instances before submitting them to the rasterizer.</p>
+<h2 id="overview-of-the-hi-z-pipeline">Overview of the Hi-Z
+Pipeline</h2>
+<p>Hi-Z occlusion culling runs in a compute pass prior to the main
+geometry rendering. It consists of two primary phases:</p>
+<ol type="1">
+<li><strong>Hi-Z Depth Pyramid Construction:</strong> The depth buffer
+from the previous frame (or an early-Z prepass) is downsampled into a
+mipmap chain. Each downsampled texel stores the conservative depth value
+of its corresponding <span class="math inline">\(2 \times 2\)</span>
+texels in the higher-resolution level (the maximum depth for standard
+<span class="math inline">\([0, 1]\)</span> depth, or minimum depth for
+reverse-Z).</li>
+<li><strong>Compute Cull Pass:</strong> A compute shader processes an
+array of candidate bounding boxes, transforms them into screen space,
+determines the appropriate mip level based on their screen-space size,
+samples the Hi-Z pyramid, and writes visible instance indices into an
+indirect draw buffer.</li>
+</ol>
+<hr />
+<h2 id="the-culling-algorithm-steps">The Culling Algorithm Steps</h2>
+<h3 id="1-transform-the-bounding-box-to-clip-space">1. Transform the
+Bounding Box to Clip Space</h3>
+<p>Given an Axis-Aligned Bounding Box (AABB) defined by its minimum and
+maximum object-space coordinates, transform all eight vertices by the
+Model-View-Projection (MVP) matrix into homogeneous clip space.</p>
+<pre><code>P_clip = MVP * P_obj</code></pre>
+<p>If any point has <span class="math inline">\(W \le 0\)</span>, clip
+against the near plane or mark the box as visible to prevent projection
+artifacts.</p>
+<h3 id="2-project-to-normalized-device-coordinates-ndc">2. Project to
+Normalized Device Coordinates (NDC)</h3>
+<p>Perform the perspective divide for all 8 vertices:</p>
+<p><span class="math display">\[\mathbf{P}_{ndc} =
+\frac{\mathbf{P}_{clip}.xyz}{\mathbf{P}_{clip}.w}\]</span></p>
+<p>Convert the NDC coordinates (<span class="math inline">\([-1,
+1]\)</span>) into screen-space UV coordinates (<span
+class="math inline">\([0, 1]\)</span>):</p>
+<p><span class="math display">\[\mathbf{P}_{uv} = \mathbf{P}_{ndc}.xy
+\times 0.5 + 0.5\]</span></p>
+<h3 id="3-compute-the-screen-space-2d-aabb">3. Compute the Screen-Space
+2D AABB</h3>
+<p>Find the axis-aligned min and max in UV space, clamped to the screen
+boundaries:</p>
+<p><span class="math display">\[\mathbf{UV}_{min} =
+\text{clamp}(\min(\mathbf{P}_{uv}), 0.0, 1.0)\]</span> <span
+class="math display">\[\mathbf{UV}_{max} =
+\text{clamp}(\max(\mathbf{P}_{uv}), 0.0, 1.0)\]</span></p>
+<p>Find the minimum depth (closest point to the camera) of the bounding
+box:</p>
+<p><span class="math display">\[Z_{min} =
+\min(\mathbf{P}_{ndc}.z)\]</span></p>
+<p><em>(Note: In a standard depth buffer where 0 is near and 1 is far,
+<span class="math inline">\(Z_{min}\)</span> represents the closest
+geometry. In reverse-Z, you query the maximum value.)</em></p>
+<h3 id="4-select-the-hi-z-mip-level">4. Select the Hi-Z Mip Level</h3>
+<p>Calculate the size of the 2D bounding box in pixels:</p>
+<p><span class="math display">\[\text{Size}_{px} = (\mathbf{UV}_{max} -
+\mathbf{UV}_{min}) \times \text{ViewportDimensions}\]</span></p>
+<p>Select a mip level where the 2D bounding box covers a footprint of
+approximately <span class="math inline">\(2 \times 2\)</span>
+texels:</p>
+<p><span class="math display">\[\text{mip} =
+\text{ceil}\left(\log_2\left(\max(\text{Size}_{px}.x,
+\text{Size}_{px}.y)\right)\right)\]</span></p>
+<p>Sampling at this mipmap level guarantees that a small number of
+samples (typically <span class="math inline">\(2 \times 2\)</span>
+texels) covers the entire screen footprint of the bounding box.</p>
+<h3 id="5-fetch-depth-from-the-hi-z-buffer">5. Fetch Depth from the Hi-Z
+Buffer</h3>
+<p>Sample the selected mip level across the footprint. Using a <span
+class="math inline">\(2 \times 2\)</span> grid covering the corners of
+the UV bounding box ensures no occluders inside the region are
+missed:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> d0 <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>u_HiZBuffer<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>uvMin<span class="op">.</span><span class="fu">x</span><span class="op">,</span> uvMin<span class="op">.</span><span class="fu">y</span><span class="op">),</span> mip<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> d1 <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>u_HiZBuffer<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>uvMax<span class="op">.</span><span class="fu">x</span><span class="op">,</span> uvMin<span class="op">.</span><span class="fu">y</span><span class="op">),</span> mip<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> d2 <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>u_HiZBuffer<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>uvMin<span class="op">.</span><span class="fu">x</span><span class="op">,</span> uvMax<span class="op">.</span><span class="fu">y</span><span class="op">),</span> mip<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> d3 <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>u_HiZBuffer<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>uvMax<span class="op">.</span><span class="fu">x</span><span class="op">,</span> uvMax<span class="op">.</span><span class="fu">y</span><span class="op">),</span> mip<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span></code></pre></div>
+<p>Find the conservative depth value across the four samples:</p>
+<ul>
+<li><strong>Standard Depth (<span class="math inline">\([0, 1]\)</span>,
+0 is near):</strong> <span class="math inline">\(Z_{hiz} = \max(d0,
+\max(d1, \max(d2, d3)))\)</span></li>
+<li><strong>Reverse-Z (<span class="math inline">\([1, 0]\)</span>, 1 is
+near):</strong> <span class="math inline">\(Z_{hiz} = \min(d0, \min(d1,
+\min(d2, d3)))\)</span></li>
+</ul>
+<h3 id="6-perform-the-depth-test">6. Perform the Depth Test</h3>
+<p>Compare the bounding box depth to the Hi-Z depth:</p>
+<ul>
+<li><strong>Standard Depth:</strong> If <span
+class="math inline">\(Z_{min} &gt; Z_{hiz}\)</span>, the bounding box is
+strictly behind the geometry represented in the Hi-Z buffer and is
+<strong>occluded</strong>.</li>
+<li><strong>Reverse-Z:</strong> If <span class="math inline">\(Z_{max}
+&lt; Z_{hiz}\)</span>, the bounding box is
+<strong>occluded</strong>.</li>
+</ul>
+<p>If visible, append the instance index into the draw buffer using
+atomic counters.</p>
+<hr />
+<h2 id="glsl-compute-implementation">GLSL Compute Implementation</h2>
+<p>The following compute shader demonstrates the core culling routine
+for standard <span class="math inline">\([0, 1]\)</span> depth.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460 core</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">64</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> InstanceData <span class="op">{</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> modelMatrix<span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> aabbMin<span class="op">;</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> aabbMax<span class="op">;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> InstanceBuffer <span class="op">{</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    InstanceData instances<span class="op">[];</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">writeonly</span> <span class="kw">buffer</span> VisibleBuffer <span class="op">{</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> visibleIndices<span class="op">[];</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">atomic_uint</span> u_VisibleCount<span class="op">;</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">sampler2D</span> u_HiZBuffer<span class="op">;</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> u_ViewProjection<span class="op">;</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec2</span> u_ViewportSize<span class="op">;</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">uint</span> u_TotalInstances<span class="op">;</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> id <span class="op">=</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>id <span class="op">&gt;=</span> u_TotalInstances<span class="op">)</span> <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>    InstanceData inst <span class="op">=</span> instances<span class="op">[</span>id<span class="op">];</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> mvp <span class="op">=</span> u_ViewProjection <span class="op">*</span> inst<span class="op">.</span><span class="fu">modelMatrix</span><span class="op">;</span></span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> boxCorners<span class="op">[</span><span class="dv">8</span><span class="op">]</span> <span class="op">=</span> <span class="dt">vec3</span><span class="op">[</span><span class="dv">8</span><span class="op">](</span></span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span><span class="op">(</span>inst<span class="op">.</span><span class="fu">aabbMin</span><span class="op">.</span><span class="fu">x</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMin</span><span class="op">.</span><span class="fu">y</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMin</span><span class="op">.</span><span class="fu">z</span><span class="op">),</span></span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span><span class="op">(</span>inst<span class="op">.</span><span class="fu">aabbMax</span><span class="op">.</span><span class="fu">x</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMin</span><span class="op">.</span><span class="fu">y</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMin</span><span class="op">.</span><span class="fu">z</span><span class="op">),</span></span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span><span class="op">(</span>inst<span class="op">.</span><span class="fu">aabbMin</span><span class="op">.</span><span class="fu">x</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMax</span><span class="op">.</span><span class="fu">y</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMin</span><span class="op">.</span><span class="fu">z</span><span class="op">),</span></span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span><span class="op">(</span>inst<span class="op">.</span><span class="fu">aabbMax</span><span class="op">.</span><span class="fu">x</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMax</span><span class="op">.</span><span class="fu">y</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMin</span><span class="op">.</span><span class="fu">z</span><span class="op">),</span></span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span><span class="op">(</span>inst<span class="op">.</span><span class="fu">aabbMin</span><span class="op">.</span><span class="fu">x</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMin</span><span class="op">.</span><span class="fu">y</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMax</span><span class="op">.</span><span class="fu">z</span><span class="op">),</span></span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span><span class="op">(</span>inst<span class="op">.</span><span class="fu">aabbMax</span><span class="op">.</span><span class="fu">x</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMin</span><span class="op">.</span><span class="fu">y</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMax</span><span class="op">.</span><span class="fu">z</span><span class="op">),</span></span>
+<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span><span class="op">(</span>inst<span class="op">.</span><span class="fu">aabbMin</span><span class="op">.</span><span class="fu">x</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMax</span><span class="op">.</span><span class="fu">y</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMax</span><span class="op">.</span><span class="fu">z</span><span class="op">),</span></span>
+<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span><span class="op">(</span>inst<span class="op">.</span><span class="fu">aabbMax</span><span class="op">.</span><span class="fu">x</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMax</span><span class="op">.</span><span class="fu">y</span><span class="op">,</span> inst<span class="op">.</span><span class="fu">aabbMax</span><span class="op">.</span><span class="fu">z</span><span class="op">)</span></span>
+<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> minNDC <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> maxNDC <span class="op">=</span> <span class="dt">vec3</span><span class="op">(-</span><span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> behindNearPlane <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">8</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec4</span> clipPos <span class="op">=</span> mvp <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>boxCorners<span class="op">[</span>i<span class="op">],</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb3-52"><a href="#cb3-52" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>clipPos<span class="op">.</span><span class="fu">w</span> <span class="op">&lt;=</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-53"><a href="#cb3-53" aria-hidden="true" tabindex="-1"></a>            behindNearPlane <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb3-54"><a href="#cb3-54" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> ndc <span class="op">=</span> clipPos<span class="op">.</span><span class="fu">xyz</span> <span class="op">/</span> clipPos<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a>        minNDC <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>minNDC<span class="op">,</span> ndc<span class="op">);</span></span>
+<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a>        maxNDC <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>maxNDC<span class="op">,</span> ndc<span class="op">);</span></span>
+<span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Conservative visibility: if any vertex intersects or is behind the near plane</span></span>
+<span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>behindNearPlane<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>        <span class="dt">uint</span> slot <span class="op">=</span> <span class="bu">atomicCounterIncrement</span><span class="op">(</span>u_VisibleCount<span class="op">);</span></span>
+<span id="cb3-64"><a href="#cb3-64" aria-hidden="true" tabindex="-1"></a>        visibleIndices<span class="op">[</span>slot<span class="op">]</span> <span class="op">=</span> id<span class="op">;</span></span>
+<span id="cb3-65"><a href="#cb3-65" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb3-66"><a href="#cb3-66" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-67"><a href="#cb3-67" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-68"><a href="#cb3-68" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Frustum cull</span></span>
+<span id="cb3-69"><a href="#cb3-69" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">any</span><span class="op">(</span><span class="bu">lessThan</span><span class="op">(</span>maxNDC<span class="op">,</span> <span class="dt">vec3</span><span class="op">(-</span><span class="fl">1.0</span><span class="op">)))</span> <span class="op">||</span> <span class="bu">any</span><span class="op">(</span><span class="bu">greaterThan</span><span class="op">(</span>minNDC<span class="op">,</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">))))</span> <span class="op">{</span></span>
+<span id="cb3-70"><a href="#cb3-70" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb3-71"><a href="#cb3-71" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-72"><a href="#cb3-72" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-73"><a href="#cb3-73" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Convert NDC to UV [0, 1]</span></span>
+<span id="cb3-74"><a href="#cb3-74" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> minUV <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>minNDC<span class="op">.</span><span class="fu">xy</span> <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-75"><a href="#cb3-75" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> maxUV <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>maxNDC<span class="op">.</span><span class="fu">xy</span> <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-76"><a href="#cb3-76" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> boxMinZ <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>minNDC<span class="op">.</span><span class="fu">z</span> <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-77"><a href="#cb3-77" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-78"><a href="#cb3-78" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute mip level matching the screen-space bounding box size</span></span>
+<span id="cb3-79"><a href="#cb3-79" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> sizeUV <span class="op">=</span> <span class="op">(</span>maxUV <span class="op">-</span> minUV<span class="op">)</span> <span class="op">*</span> u_ViewportSize<span class="op">;</span></span>
+<span id="cb3-80"><a href="#cb3-80" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> maxDim <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>sizeUV<span class="op">.</span><span class="fu">x</span><span class="op">,</span> sizeUV<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb3-81"><a href="#cb3-81" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> mip <span class="op">=</span> <span class="bu">ceil</span><span class="op">(</span><span class="bu">log2</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>maxDim<span class="op">,</span> <span class="fl">1.0</span><span class="op">)));</span></span>
+<span id="cb3-82"><a href="#cb3-82" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-83"><a href="#cb3-83" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Sample the 4 corners of the bounding box footprint at the selected mip level</span></span>
+<span id="cb3-84"><a href="#cb3-84" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d0 <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>u_HiZBuffer<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>minUV<span class="op">.</span><span class="fu">x</span><span class="op">,</span> minUV<span class="op">.</span><span class="fu">y</span><span class="op">),</span> mip<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb3-85"><a href="#cb3-85" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d1 <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>u_HiZBuffer<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>maxUV<span class="op">.</span><span class="fu">x</span><span class="op">,</span> minUV<span class="op">.</span><span class="fu">y</span><span class="op">),</span> mip<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb3-86"><a href="#cb3-86" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d2 <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>u_HiZBuffer<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>minUV<span class="op">.</span><span class="fu">x</span><span class="op">,</span> maxUV<span class="op">.</span><span class="fu">y</span><span class="op">),</span> mip<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb3-87"><a href="#cb3-87" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d3 <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>u_HiZBuffer<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>maxUV<span class="op">.</span><span class="fu">x</span><span class="op">,</span> maxUV<span class="op">.</span><span class="fu">y</span><span class="op">),</span> mip<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb3-88"><a href="#cb3-88" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-89"><a href="#cb3-89" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Conservative max depth in Hi-Z for standard depth buffer</span></span>
+<span id="cb3-90"><a href="#cb3-90" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> maxHiZ <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>d0<span class="op">,</span> d1<span class="op">),</span> <span class="bu">max</span><span class="op">(</span>d2<span class="op">,</span> d3<span class="op">));</span></span>
+<span id="cb3-91"><a href="#cb3-91" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-92"><a href="#cb3-92" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Occlusion check</span></span>
+<span id="cb3-93"><a href="#cb3-93" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>boxMinZ <span class="op">&lt;=</span> maxHiZ<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-94"><a href="#cb3-94" aria-hidden="true" tabindex="-1"></a>        <span class="dt">uint</span> slot <span class="op">=</span> <span class="bu">atomicCounterIncrement</span><span class="op">(</span>u_VisibleCount<span class="op">);</span></span>
+<span id="cb3-95"><a href="#cb3-95" aria-hidden="true" tabindex="-1"></a>        visibleIndices<span class="op">[</span>slot<span class="op">]</span> <span class="op">=</span> id<span class="op">;</span></span>
+<span id="cb3-96"><a href="#cb3-96" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-97"><a href="#cb3-97" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

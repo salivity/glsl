@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why Older GLSL Forbade Array Equality Comparisons - glsl</title>
+    <meta name="description" content="In early versions of the OpenGL Shading Language (GLSL), developers were prohibited from comparing entire arrays using the equality (==) and inequality (!=) operators. This article explains why the restriction existed, focusing on early graphics hardware">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/why-older-glsl-forbade-array-equality-comparisons">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Why Older GLSL Forbade Array Equality Comparisons - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/why-older-glsl-forbade-array-equality-comparisons" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In early versions of the OpenGL Shading Language (GLSL), developers were prohibited from comparing entire arrays using the equality (==) and inequality (!=) operators. This article explains why the restriction existed, focusing on early graphics hardware" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="why-older-glsl-forbade-array-equality-comparisons">Why Older
+GLSL Forbade Array Equality Comparisons</h1>
+<p>In early versions of the OpenGL Shading Language (GLSL), developers
+were prohibited from comparing entire arrays using the equality
+(<code>==</code>) and inequality (<code>!=</code>) operators. This
+article explains why the restriction existed, focusing on early graphics
+hardware constraints, performance considerations regarding deep value
+comparisons, compiler complexity across varied GPU drivers, and the
+historical classification of arrays as second-class types in early
+shading pipelines.</p>
+<h3 id="early-gpu-architecture-and-instruction-constraints">Early GPU
+Architecture and Instruction Constraints</h3>
+<p>Early graphics processors were fundamentally vector processors built
+to process floats, vectors, and matrices with direct instruction
+mapping. Operations like adding a 4-component vector or taking a dot
+product corresponded to single-cycle assembly instructions.</p>
+<p>Arrays, conversely, do not have dedicated single-cycle comparison
+instructions in GPU instruction set architectures (ISAs). Evaluating
+whether two arrays are equal requires evaluating every element
+sequentially or via unrolled comparison chains. Early hardware lacked
+sophisticated branch prediction, unified shader cores, and unified
+memory subsystems, making bulk multi-register operations inefficient to
+implement at the hardware level.</p>
+<h3 id="prevention-of-costly-implicit-operations">Prevention of Costly
+Implicit Operations</h3>
+<p>Shading languages prioritize real-time performance and predictable
+execution times. In GLSL, an operation like <code>a == b</code> for
+primitive types (such as <code>float</code>, <code>vec3</code>, or
+<code>mat4</code>) executes quickly with minimal machine
+instructions.</p>
+<p>If array comparisons were supported natively, evaluating
+<code>arrayA == arrayB</code> on large arrays would require:</p>
+<ul>
+<li>Full unrolling of comparisons across all indices.</li>
+<li>Extensive temporary register allocation to hold intermediate boolean
+flags.</li>
+<li>Substantial instruction cache expansion.</li>
+</ul>
+<p>By omitting native array equality, the Khronos Group prevented
+developers from unknowingly introducing massive register pressure or
+instruction stalls through what appeared syntactically to be a single,
+lightweight operation.</p>
+<h3 id="arrays-as-second-class-citizens">Arrays as Second-Class
+Citizens</h3>
+<p>In older specifications (such as GLSL 1.10, 1.20, and GLSL ES 1.00),
+arrays were treated as second-class data structures rather than
+first-class types. They were subject to severe syntactic and semantic
+limitations:</p>
+<ul>
+<li>Arrays could not be returned from functions.</li>
+<li>Dynamic indexing was heavily restricted, often requiring constant or
+loop-index-only access depending on whether the array was a uniform or
+temporary variable.</li>
+<li>Whole-array assignments were either forbidden or inconsistently
+supported across hardware vendors.</li>
+</ul>
+<p>Because arrays lacked full type parity with basic GLSL data types,
+operators that relied on value-level identity—such as <code>==</code>
+and <code>!=</code>—were naturally excluded from the language
+grammar.</p>
+<h3 id="compiler-and-driver-complexity">Compiler and Driver
+Complexity</h3>
+<p>In the early eras of programmable shaders, GPU vendors shipped their
+own GLSL compilers embedded directly inside the graphics driver.
+Divergent interpretations of ambiguous specifications frequently led to
+driver crashes, compile failures, or platform-specific rendering
+artifacts.</p>
+<p>Requiring drivers to generate control flow or unroll logic for deep
+component-wise array comparisons added significant complexity to driver
+compiler front-ends. Restricting array equality kept the specification
+simple and minimized the surface area for compiler bugs on fragmented
+hardware targets.</p>
+<h3 id="evolution-in-later-specifications">Evolution in Later
+Specifications</h3>
+<p>As graphics pipelines transitioned to fully unified, compute-capable
+architectures, the hardware limitations that originally justified the
+restriction disappeared. Starting with GLSL 1.30 (desktop) and later
+GLSL ES revisions, the language elevated arrays to first-class types.
+Arrays gained support for implicit copying, passing and returning from
+functions, and equality checking, executing deep component-wise
+comparisons automatically.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

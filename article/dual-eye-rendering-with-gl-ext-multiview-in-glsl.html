@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dual-Eye Rendering with GL_EXT_multiview in GLSL - glsl</title>
+    <meta name="description" content="Rendering stereoscopic scenes for virtual and augmented reality requires presenting slightly offset perspectives for each eye, a process that traditionally doubles CPU draw calls and state changes. The GLEXTmultiview OpenGL extension solves this bottlene">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/dual-eye-rendering-with-gl-ext-multiview-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Dual-Eye Rendering with GL_EXT_multiview in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/dual-eye-rendering-with-gl-ext-multiview-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Rendering stereoscopic scenes for virtual and augmented reality requires presenting slightly offset perspectives for each eye, a process that traditionally doubles CPU draw calls and state changes. The GLEXTmultiview OpenGL extension solves this bottlene" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="dual-eye-rendering-with-gl_ext_multiview-in-glsl">Dual-Eye
+Rendering with GL_EXT_multiview in GLSL</h1>
+<p>Rendering stereoscopic scenes for virtual and augmented reality
+requires presenting slightly offset perspectives for each eye, a process
+that traditionally doubles CPU draw calls and state changes. The
+<code>GL_EXT_multiview</code> OpenGL extension solves this bottleneck by
+allowing a single draw call to dispatch geometry simultaneously to
+multiple render targets. By integrating with GLSL through dedicated
+built-in variables and layout qualifiers, this extension shifts the
+burden of multi-perspective duplication to the GPU hardware,
+streamlining the stereoscopic rendering pipeline and significantly
+lowering latency and CPU overhead.</p>
+<h3 id="the-problem-with-traditional-dual-eye-rendering">The Problem
+with Traditional Dual-Eye Rendering</h3>
+<p>Conventional VR pipelines render a scene by executing two full
+rendering passes: one for the left eye and one for the right eye. This
+approach forces the CPU to prepare, record, and dispatch commands twice
+for every mesh, doubling uniform updates and driver validation overhead.
+While instanced rendering can batch these operations, it still incurs
+per-instance processing costs and can introduce pipeline synchronization
+delays.</p>
+<h3 id="how-gl_ext_multiview-solves-the-overhead">How GL_EXT_multiview
+Solves the Overhead</h3>
+<p><code>GL_EXT_multiview</code> enables the GPU to draw primitives to
+multiple layers of a 2D texture array simultaneously within a single
+draw call. Instead of binding separate framebuffers or dispatching
+separate passes, the application binds a multiview framebuffer with two
+layers. The graphics pipeline then broadcasts the geometry to both eye
+targets, duplicating the work at the hardware level where view-dependent
+differences occur.</p>
+<h3 id="integration-in-glsl">Integration in GLSL</h3>
+<p>The extension exposes key mechanisms directly in GLSL shaders,
+primarily within the vertex shader:</p>
+<ol type="1">
+<li><p><strong>View Count Declaration:</strong> Shaders declare the
+number of simultaneous views using an input layout qualifier. For stereo
+rendering, this is set to two views:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_multiview : enable</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>num_views <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span></code></pre></div></li>
+<li><p><strong>The <code>gl_ViewID_OVR</code> Input:</strong> The driver
+injects an internal integer variable, <code>gl_ViewID_OVR</code>, which
+specifies the target view currently being processed (typically
+<code>0</code> for the left eye and <code>1</code> for the right
+eye).</p></li>
+<li><p><strong>Per-View Transformations:</strong> Rather than relying on
+a single Model-View-Projection (MVP) matrix, the shader defines an array
+of matrices for the respective views:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> u_ViewProjection<span class="op">[</span><span class="dv">2</span><span class="op">];</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> mvp <span class="op">=</span> u_ViewProjection<span class="op">[</span>gl_ViewID_OVR<span class="op">]</span> <span class="op">*</span> u_Model<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> mvp <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>a_Position<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></li>
+</ol>
+<h3 id="hardware-execution-and-optimization">Hardware Execution and
+Optimization</h3>
+<p>When <code>GL_EXT_multiview</code> is active, the GPU processes the
+view separation intelligently:</p>
+<ul>
+<li><strong>Single Pipeline Setup:</strong> Primitives are submitted
+once. View-invariant operations (such as skinning, physics, or early
+object-space transforms) can be computed once, while only the projection
+and view transforms are evaluated per <code>gl_ViewID_OVR</code>.</li>
+<li><strong>Hardware Geometry Routing:</strong> Modern GPUs route the
+resulting primitives to the corresponding layer of the render target
+array based on the view index. Fixed-function hardware handles viewport
+transformations, scissoring, and primitive clipping independently per
+view.</li>
+<li><strong>Tile-Based Deferred Renderers (TBDR):</strong> On mobile VR
+architectures, multiview allows binning and tiling steps to occur once
+for both views, conserving memory bandwidth and avoiding redundant
+rasterizer state setup.</li>
+</ul>
+<p>By eliminating redundant API commands on the CPU and parallelizing
+stereoscopic projection on the GPU, <code>GL_EXT_multiview</code> serves
+as a fundamental building block for low-latency, high-frame-rate
+rendering in modern GLSL pipelines.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

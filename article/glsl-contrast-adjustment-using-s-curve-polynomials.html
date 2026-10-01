@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Contrast Adjustment Using S-Curve Polynomials - glsl</title>
+    <meta name="description" content="Evaluating color contrast adjustment via S-curve polynomial functions in GLSL involves analyzing mathematical formulations, shader performance, color space selection, and visual continuity. S-curves enhance perceived contrast by stretching midtones while">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-contrast-adjustment-using-s-curve-polynomials">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Contrast Adjustment Using S-Curve Polynomials - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-contrast-adjustment-using-s-curve-polynomials" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Evaluating color contrast adjustment via S-curve polynomial functions in GLSL involves analyzing mathematical formulations, shader performance, color space selection, and visual continuity. S-curves enhance perceived contrast by stretching midtones while" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-contrast-adjustment-using-s-curve-polynomials">GLSL
+Contrast Adjustment Using S-Curve Polynomials</h1>
+<p>Evaluating color contrast adjustment via S-curve polynomial functions
+in GLSL involves analyzing mathematical formulations, shader
+performance, color space selection, and visual continuity. S-curves
+enhance perceived contrast by stretching midtones while smoothly
+compressing shadows and highlights to prevent harsh clipping. In
+real-time rendering, selecting the appropriate polynomial—ranging from
+cubic Hermite interpolations to customizable higher-order
+equations—requires balancing GPU arithmetic instruction costs against
+the risk of color distortion, dynamic range loss, and banding
+artifacts.</p>
+<h3 id="mathematical-formulations-of-s-curves">Mathematical Formulations
+of S-Curves</h3>
+<p>An S-curve maps normalized input values <span
+class="math inline">\([0.0, 1.0]\)</span> back to <span
+class="math inline">\([0.0, 1.0]\)</span> with an inflection point
+typically situated at the midtone value <span
+class="math inline">\(0.5\)</span>. The derivative of the function
+determines the contrast: a first derivative greater than <span
+class="math inline">\(1.0\)</span> at the inflection point increases
+contrast, while values less than <span
+class="math inline">\(1.0\)</span> decrease it.</p>
+<h4 id="standard-cubic-hermite-smoothstep">Standard Cubic Hermite
+(Smoothstep)</h4>
+<p>The most common hardware-accelerated polynomial in GLSL is the cubic
+Hermite curve:</p>
+<p><span class="math display">\[f(x) = 3x^2 - 2x^3\]</span></p>
+<p>In GLSL, this is natively evaluated using
+<code>smoothstep(0.0, 1.0, x)</code>. It provides <span
+class="math inline">\(C^1\)</span> continuity, meaning its first
+derivative equals zero at both <span class="math inline">\(x =
+0\)</span> and <span class="math inline">\(x = 1\)</span>, ensuring a
+seamless transition into full black and full white.</p>
+<h4 id="quintic-polynomial-smootherstep">Quintic Polynomial
+(Smootherstep)</h4>
+<p>To prevent subtle visual discontinuities at the boundaries caused by
+a non-zero second derivative, Ken Perlin’s quintic polynomial can be
+used:</p>
+<p><span class="math display">\[f(x) = 6x^5 - 15x^4 + 10x^3\]</span></p>
+<p>This yields <span class="math inline">\(C^2\)</span> continuity (both
+first and second derivatives equal zero at <span class="math inline">\(x
+= 0\)</span> and <span class="math inline">\(x = 1\)</span>),
+eliminating abrupt changes in the rate of color compression at the
+dynamic range extremes.</p>
+<h4 id="parameterized-contrast-polynomial">Parameterized Contrast
+Polynomial</h4>
+<p>When contrast needs to be adjusted dynamically via a uniform,
+standard fixed curves must be replaced by parameterized functions. A
+common cubic formulation centered at <span
+class="math inline">\(0.5\)</span> is:</p>
+<p><span class="math display">\[f(x, k) = 0.5 + 4^{k-1} \cdot (x - 0.5)
+\cdot |2x - 1|^{k-1}\]</span></p>
+<p>Alternatively, a lightweight controllable polynomial blends between a
+linear pass-through and a cubic S-curve:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">adjustContrast</span><span class="op">(</span><span class="dt">vec3</span> color<span class="op">,</span> <span class="dt">float</span> contrast<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// contrast range: 0.0 (flat) to 1.0 (normal) to &gt;1.0 (high contrast)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> cubic <span class="op">=</span> color <span class="op">*</span> color <span class="op">*</span> <span class="op">(</span><span class="fl">3.0</span> <span class="op">-</span> <span class="fl">2.0</span> <span class="op">*</span> color<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">mix</span><span class="op">(</span>color<span class="op">,</span> cubic<span class="op">,</span> contrast<span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="color-space-considerations">Color Space Considerations</h3>
+<p>Applying polynomial curves directly to raw non-linear sRGB values
+leads to severe hue shifts and unnatural over-saturation, as the RGB
+channels are modified independently. Contrast evaluation must account
+for the color space in which the curve is executed:</p>
+<ol type="1">
+<li><strong>Per-Channel RGB:</strong> Modifying <span
+class="math inline">\(R\)</span>, <span
+class="math inline">\(G\)</span>, and <span
+class="math inline">\(B\)</span> individually is computationally cheap
+but shifts hues because color balance changes unevenly across
+channels.</li>
+<li><strong>Luminance Extraction:</strong> Extracting luminance via
+standard colorimetric coefficients (e.g., Rec. 709: <span
+class="math inline">\(Y = 0.2126R + 0.7152G + 0.0722B\)</span>),
+applying the S-curve polynomial to <span
+class="math inline">\(Y\)</span>, and scaling the original RGB channels
+preserves hue: <span class="math display">\[\text{Color}_{\text{out}} =
+\text{Color}_{\text{in}} \cdot
+\left(\frac{Y_{\text{new}}}{Y_{\text{old}} +
+\epsilon}\right)\]</span></li>
+<li><strong>Perceptual Spaces (Oklab / CIELAB):</strong> Transforming to
+a perceptual space such as Oklab allows the S-curve to be applied
+strictly to the <span class="math inline">\(L\)</span> (lightness)
+channel, ensuring perceptual uniformity and minimizing chromatic
+drift.</li>
+</ol>
+<h3 id="gpu-execution-and-arithmetic-efficiency">GPU Execution and
+Arithmetic Efficiency</h3>
+<p>Evaluating polynomials on the GPU requires measuring Instruction
+Level Parallelism (ILP) and instruction count. Polynomials are favored
+over trigonometric functions (<span class="math inline">\(\sin\)</span>,
+<span class="math inline">\(\tanh\)</span>) or logarithmic functions
+because GPUs can execute them via Fused Multiply-Add (FMA)
+instructions.</p>
+<ul>
+<li><strong>Cubic Evaluation:</strong> A curve such as <span
+class="math inline">\(3x^2 - 2x^3\)</span> can be factored into <span
+class="math inline">\(x \cdot x \cdot (3.0 - 2.0 \cdot x)\)</span>.
+Modern GPU architectures compute this in two cycle-efficient FMA
+operations per component.</li>
+<li><strong>Native <code>smoothstep</code>:</strong> While often
+compiled into a dedicated hardware instruction or optimized FMA
+sequence, custom parameterized polynomials allow runtime variability
+without branching.</li>
+<li><strong>Vectorization:</strong> GLSL executes polynomial evaluations
+on <code>vec3</code> or <code>vec4</code> data types across SIMD lanes
+simultaneously, ensuring that luminance-based or per-channel
+calculations saturate the execution pipeline efficiently.</li>
+</ul>
+<h3 id="evaluating-visual-artifacts-and-dynamic-range">Evaluating Visual
+Artifacts and Dynamic Range</h3>
+<p>Evaluating an S-curve implementation also requires verifying how the
+polynomial behaves across non-standard data ranges:</p>
+<ul>
+<li><strong>Black and White Clipping:</strong> Polynomials that exceed
+the <span class="math inline">\([0.0, 1.0]\)</span> bounds due to
+incorrect coefficients cause harsh clamping. Proper functions must
+strictly maintain <span class="math inline">\(f(0) = 0\)</span> and
+<span class="math inline">\(f(1) = 1\)</span>.</li>
+<li><strong>High Dynamic Range (HDR):</strong> Standard polynomial
+S-curves are fundamentally designed for Standard Dynamic Range (SDR)
+bounded inputs. In HDR pipelines, inputs greater than <span
+class="math inline">\(1.0\)</span> will diverge rapidly to infinity if
+evaluated with standard polynomials, necessitating input normalization,
+Reinhard-style pre-tonemapping, or rational polynomial approximations
+(e.g., Michaelis-Menten kinetics) to ensure an asymptotic shoulder.</li>
+<li><strong>Quantization and Banding:</strong> Steep polynomial slopes
+in high-contrast configurations amplify quantization errors in
+8-bit-per-channel buffers. Evaluating the curve within an intermediate
+16-bit floating-point (<code>RGBA16F</code>) framebuffer prevents
+posterization artifacts before presentation.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

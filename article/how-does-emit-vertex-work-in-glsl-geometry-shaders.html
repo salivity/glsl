@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does EmitVertex Work in GLSL Geometry Shaders? - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), EmitVertex() is a built-in function that allows geometry shaders to dynamically generate and output vertex data to the graphics pipeline. Unlike vertex shaders, which process a single incoming vertex and produce a s">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-emit-vertex-work-in-glsl-geometry-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does EmitVertex Work in GLSL Geometry Shaders? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-emit-vertex-work-in-glsl-geometry-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), EmitVertex() is a built-in function that allows geometry shaders to dynamically generate and output vertex data to the graphics pipeline. Unlike vertex shaders, which process a single incoming vertex and produce a s" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-emitvertex-work-in-glsl-geometry-shaders">How Does
+EmitVertex Work in GLSL Geometry Shaders?</h1>
+<p>In the OpenGL Shading Language (GLSL), <code>EmitVertex()</code> is a
+built-in function that allows geometry shaders to dynamically generate
+and output vertex data to the graphics pipeline. Unlike vertex shaders,
+which process a single incoming vertex and produce a single outgoing
+vertex, geometry shaders operate on entire primitives and can output a
+variable number of vertices. This makes <code>EmitVertex()</code>
+essential for procedural geometry generation, particle expansion,
+billboarding, and custom silhouette extrusion.</p>
+<h2 id="the-role-of-emitvertex-in-the-graphics-pipeline">The Role of
+EmitVertex in the Graphics Pipeline</h2>
+<p>The geometry shader stage resides between primitive assembly (or
+tessellation evaluation) and rasterization. It takes an entire input
+primitive—such as a point, line, or triangle—and produces output
+primitives.</p>
+<p>The output primitives are not returned as an array or returned
+directly from <code>main()</code>. Instead, GLSL employs a stream-based
+emission model. Every time the shader calls <code>EmitVertex()</code>,
+the GPU takes the current values of <code>gl_Position</code> and any
+user-defined <code>out</code> variables, snapshots them, and sends a
+completed vertex to the current primitive assembly stream.</p>
+<h2 id="output-state-and-variable-latching">Output State and Variable
+Latching</h2>
+<p>When calling <code>EmitVertex()</code>, all output variables defined
+in the geometry shader behave like state registers:</p>
+<ul>
+<li><strong>Position Assignment:</strong> Setting
+<code>gl_Position = vec4(...)</code> updates the internal position
+register.</li>
+<li><strong>Varying Attributes:</strong> Setting custom output variables
+(e.g., <code>out vec2 texCoord</code>, <code>out vec3 normal</code>)
+updates their respective registers.</li>
+<li><strong>Latching:</strong> Invoking <code>EmitVertex()</code>
+captures the values currently assigned to these registers. Modifying an
+output variable after emitting a vertex does not affect the already
+emitted vertex; it only affects subsequent calls to
+<code>EmitVertex()</code>.</li>
+</ul>
+<p>Because attribute states persist across calls unless explicitly
+reassigned, failing to update an output variable before the next
+<code>EmitVertex()</code> call causes the subsequent vertex to reuse the
+previous value.</p>
+<h2 id="pairing-emitvertex-with-endprimitive">Pairing EmitVertex with
+EndPrimitive</h2>
+<p>Geometry shaders typically emit connected topologies using strip
+layouts, such as <code>points</code>, <code>line_strip</code>, or
+<code>triangle_strip</code>.</p>
+<ul>
+<li><strong><code>EmitVertex()</code></strong> adds a vertex to the
+current strip. For example, three successive calls in a
+<code>triangle_strip</code> output layout form a single triangle. A
+fourth call appends a second triangle sharing an edge with the
+first.</li>
+<li><strong><code>EndPrimitive()</code></strong> signals the GPU that
+the current strip is complete. Any subsequent <code>EmitVertex()</code>
+call starts a brand-new, disconnected primitive. If
+<code>EndPrimitive()</code> is not called explicitly before the shader
+completes, the hardware invokes it implicitly at the end of the shader
+execution for any active primitive.</li>
+</ul>
+<h2 id="example-glsl-geometry-shader-implementation">Example GLSL
+Geometry Shader Implementation</h2>
+<p>The following example demonstrates how a geometry shader takes a
+single point primitive and expands it into a screen-aligned quad (two
+triangles using a <code>triangle_strip</code>):</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">points</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">triangle_strip</span><span class="op">,</span> <span class="dt">max_vertices</span> <span class="op">=</span> <span class="dv">4</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> VS_OUT <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> color<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> gs_in<span class="op">[];</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec3</span> fColor<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    fColor <span class="op">=</span> gs_in<span class="op">[</span><span class="dv">0</span><span class="op">].</span><span class="fu">color</span><span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Bottom-Left</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> <span class="va">gl_in</span><span class="op">[</span><span class="dv">0</span><span class="op">].</span><span class="fu">gl_Position</span> <span class="op">+</span> <span class="dt">vec4</span><span class="op">(-</span><span class="fl">0.1</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.1</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="bu">EmitVertex</span><span class="op">();</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Bottom-Right</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> <span class="va">gl_in</span><span class="op">[</span><span class="dv">0</span><span class="op">].</span><span class="fu">gl_Position</span> <span class="op">+</span> <span class="dt">vec4</span><span class="op">(</span> <span class="fl">0.1</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.1</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="bu">EmitVertex</span><span class="op">();</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Top-Left</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> <span class="va">gl_in</span><span class="op">[</span><span class="dv">0</span><span class="op">].</span><span class="fu">gl_Position</span> <span class="op">+</span> <span class="dt">vec4</span><span class="op">(-</span><span class="fl">0.1</span><span class="op">,</span>  <span class="fl">0.1</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="bu">EmitVertex</span><span class="op">();</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Top-Right</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> <span class="va">gl_in</span><span class="op">[</span><span class="dv">0</span><span class="op">].</span><span class="fu">gl_Position</span> <span class="op">+</span> <span class="dt">vec4</span><span class="op">(</span> <span class="fl">0.1</span><span class="op">,</span>  <span class="fl">0.1</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="bu">EmitVertex</span><span class="op">();</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="bu">EndPrimitive</span><span class="op">();</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>In this code, four sequential calls to <code>EmitVertex()</code>
+generate four vertices that form a quad via <code>triangle_strip</code>.
+<code>EndPrimitive()</code> closes the quad.</p>
+<h2 id="practical-considerations-and-constraints">Practical
+Considerations and Constraints</h2>
+<ul>
+<li><strong><code>max_vertices</code> Declaration:</strong> Every
+geometry shader must specify a <code>max_vertices = N</code> layout
+qualifier. The shader cannot call <code>EmitVertex()</code> more times
+than this declared limit per invocation. Emitting more vertices than
+declared results in undefined behavior or dropped geometry.</li>
+<li><strong>Performance Impact:</strong> Hardware allocates fixed buffer
+space for every invocation based on the declared
+<code>max_vertices</code> and total output attribute size. Keeping
+<code>max_vertices</code> as small as possible ensures higher GPU thread
+occupancy and better rendering performance.</li>
+<li><strong>Discarding Geometry:</strong> A geometry shader is not
+required to call <code>EmitVertex()</code>. Exiting <code>main()</code>
+without calling <code>EmitVertex()</code> discards the incoming
+primitive entirely, serving as a dynamic primitive-culling
+mechanism.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

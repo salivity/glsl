@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculating SDF Normals with Central Differences in GLSL - glsl</title>
+    <meta name="description" content="In raymarching, Signed Distance Fields (SDFs) mathematically describe 3D volumes rather than explicit polygonal geometry. Because there are no predefined polygonal mesh faces or vertex attributes, lighting and shading require dynamically deriving the sur">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/calculating-sdf-normals-with-central-differences-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Calculating SDF Normals with Central Differences in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/calculating-sdf-normals-with-central-differences-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In raymarching, Signed Distance Fields (SDFs) mathematically describe 3D volumes rather than explicit polygonal geometry. Because there are no predefined polygonal mesh faces or vertex attributes, lighting and shading require dynamically deriving the sur" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="calculating-sdf-normals-with-central-differences-in-glsl">Calculating
+SDF Normals with Central Differences in GLSL</h1>
+<p>In raymarching, Signed Distance Fields (SDFs) mathematically describe
+3D volumes rather than explicit polygonal geometry. Because there are no
+predefined polygonal mesh faces or vertex attributes, lighting and
+shading require dynamically deriving the surface normal at the point of
+ray intersection. This article explains how the surface normal
+corresponds to the gradient of the distance field, how the central
+differences method numerically approximates this gradient in GLSL, and
+how to implement the calculation efficiently in a shader.</p>
+<h3 id="understanding-the-sdf-gradient">Understanding the SDF
+Gradient</h3>
+<p>A Signed Distance Function, <span
+class="math inline">\(f(p)\)</span>, takes a point <span
+class="math inline">\(p = (x, y, z)\)</span> in 3D space and returns the
+shortest Euclidean distance to the surface of a geometry. On the
+surface, the value of <span class="math inline">\(f(p)\)</span> is
+zero.</p>
+<p>The surface normal <span class="math inline">\(\vec{n}\)</span> at
+any point on the boundary of an SDF is defined by the spatial gradient
+vector:</p>
+<p><span class="math display">\[\nabla f(p) = \left( \frac{\partial
+f}{\partial x}, \frac{\partial f}{\partial y}, \frac{\partial
+f}{\partial z} \right)\]</span></p>
+<p>Because an SDF represents distance, moving directly away from the
+surface along its perpendicular direction yields the steepest increase
+in distance. Therefore, computing the partial derivatives along each
+axis and normalizing the resulting vector provides the unit surface
+normal:</p>
+<p><span class="math display">\[\vec{n} = \frac{\nabla f(p)}{\|\nabla
+f(p)\|}\]</span></p>
+<h3 id="the-central-differences-method">The Central Differences
+Method</h3>
+<p>While analytical derivation is possible for simple primitives,
+complex scenes combining multiple primitives via boolean operations,
+smooth blending, or domain repetition make symbolic differentiation
+impractical. Instead, finite difference approximations are used.</p>
+<p>The central differences technique evaluates the function at a small
+offset <span class="math inline">\(\epsilon\)</span> both ahead of and
+behind the evaluation point along each axis:</p>
+<p><span class="math display">\[\frac{\partial f}{\partial x} \approx
+\frac{f(x + \epsilon, y, z) - f(x - \epsilon, y,
+z)}{2\epsilon}\]</span></p>
+<p><span class="math display">\[\frac{\partial f}{\partial y} \approx
+\frac{f(x, y + \epsilon, z) - f(x, y - \epsilon,
+z)}{2\epsilon}\]</span></p>
+<p><span class="math display">\[\frac{\partial f}{\partial z} \approx
+\frac{f(x, y, z + \epsilon) - f(x, y, z -
+\epsilon)}{2\epsilon}\]</span></p>
+<p>Central differences are preferred over forward differences (<span
+class="math inline">\([f(p + \epsilon) - f(p)] / \epsilon\)</span>)
+because the truncation error is second-order, <span
+class="math inline">\(O(\epsilon^2)\)</span>, rather than first-order,
+<span class="math inline">\(O(\epsilon)\)</span>. This symmetry yields
+significantly higher accuracy and smoother normals across sharp
+transitions. Because the resulting gradient vector is normalized, the
+common scaling factor of <span class="math inline">\(2\epsilon\)</span>
+in the denominator cancels out and can be omitted from the shader
+calculation.</p>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>The standard central differences implementation requires six
+evaluations of the scene's distance function (two taps along each of the
+three cardinal axes).</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Function representing the scene&#39;s signed distance field</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">map</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">calcNormal</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> eps <span class="op">=</span> <span class="fl">0.001</span><span class="op">;</span> <span class="co">// Small step size</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">vec2</span> h <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span>eps<span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">normalize</span><span class="op">(</span><span class="dt">vec3</span><span class="op">(</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">map</span><span class="op">(</span>p <span class="op">+</span> h<span class="op">.</span><span class="fu">xyy</span><span class="op">)</span> <span class="op">-</span> <span class="fu">map</span><span class="op">(</span>p <span class="op">-</span> h<span class="op">.</span><span class="fu">xyy</span><span class="op">),</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        <span class="fu">map</span><span class="op">(</span>p <span class="op">+</span> h<span class="op">.</span><span class="fu">yxy</span><span class="op">)</span> <span class="op">-</span> <span class="fu">map</span><span class="op">(</span>p <span class="op">-</span> h<span class="op">.</span><span class="fu">yxy</span><span class="op">),</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="fu">map</span><span class="op">(</span>p <span class="op">+</span> h<span class="op">.</span><span class="fu">yyx</span><span class="op">)</span> <span class="op">-</span> <span class="fu">map</span><span class="op">(</span>p <span class="op">-</span> h<span class="op">.</span><span class="fu">yyx</span><span class="op">)</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">));</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="choosing-the-epsilon-value">Choosing the Epsilon Value</h3>
+<p>The step size <code>eps</code> directly affects the visual quality of
+the normals:</p>
+<ul>
+<li><strong>Too Large:</strong> High-frequency geometric details, sharp
+edges, and crevice features will appear overly smoothed or beveled.</li>
+<li><strong>Too Small:</strong> 32-bit floating-point precision limits
+will introduce severe noise and banding artifacts into the normal
+estimation.</li>
+</ul>
+<p>An <code>eps</code> value between <code>0.0005</code> and
+<code>0.002</code> works well for scenes modeled within unit-scale
+coordinates. For scenes viewed across vast distances, scaling
+<code>eps</code> proportionally with the camera distance to the
+intersection point helps mitigate aliasing and floating-point
+errors.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transform Normals with gl_ObjectToWorldEXT in GLSL - glsl</title>
+    <meta name="description" content="This article explains how to correctly transform surface normal vectors from object space to world space inside GLSL closest hit shaders using Vulkan ray tracing extensions. It covers the mathematical requirements for transforming directional vectors und">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/transform-normals-with-gl-object-to-world-ext-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Transform Normals with gl_ObjectToWorldEXT in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/transform-normals-with-gl-object-to-world-ext-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to correctly transform surface normal vectors from object space to world space inside GLSL closest hit shaders using Vulkan ray tracing extensions. It covers the mathematical requirements for transforming directional vectors und" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="transform-normals-with-gl_objecttoworldext-in-glsl">Transform
+Normals with gl_ObjectToWorldEXT in GLSL</h1>
+<p>This article explains how to correctly transform surface normal
+vectors from object space to world space inside GLSL closest hit shaders
+using Vulkan ray tracing extensions. It covers the mathematical
+requirements for transforming directional vectors under non-uniform
+scaling, demonstrates the implementation using
+<code>gl_ObjectToWorldEXT</code>, and highlights performance
+optimizations utilizing the companion matrix
+<code>gl_WorldToObjectEXT</code>.</p>
+<h2 id="the-mathematics-of-normal-transformation">The Mathematics of
+Normal Transformation</h2>
+<p>Surface normals represent directions perpendicular to a surface
+rather than spatial coordinates. While position coordinates can be
+directly multiplied by an affine model-to-world transformation matrix
+(<span class="math inline">\(M\)</span>), transforming normal vectors
+with the same matrix breaks perpendicularity whenever non-uniform
+scaling or shearing is present.</p>
+<p>To preserve the orthogonal relationship between surface tangent
+vectors (<span class="math inline">\(T\)</span>) and normal vectors
+(<span class="math inline">\(N\)</span>) such that <span
+class="math inline">\(T \cdot N = 0\)</span>, normals must be
+transformed using the inverse transpose of the 3x3 linear portion of the
+transformation matrix:</p>
+<p><span class="math display">\[N_{world} = (M^{-1})^T \cdot
+N_{object}\]</span></p>
+<h2 id="using-gl_objecttoworldext-directly">Using gl_ObjectToWorldEXT
+Directly</h2>
+<p>In GLSL ray tracing shaders (<code>.rchit</code>), the affine
+transformation matrix from object space to world space is provided by
+the built-in variable:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Built-in declaration</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">// mat4x3 gl_ObjectToWorldEXT;</span></span></code></pre></div>
+<p>Because <code>gl_ObjectToWorldEXT</code> has the type
+<code>mat4x3</code>, it contains a 3x3 rotation-and-scale submatrix
+along with a translation column. To transform an object-space normal
+using <code>gl_ObjectToWorldEXT</code> directly:</p>
+<ol type="1">
+<li>Extract the upper 3x3 rotation and scaling components.</li>
+<li>Invert the 3x3 matrix.</li>
+<li>Transpose the inverted matrix.</li>
+<li>Multiply by the object-space normal and normalize the result.</li>
+</ol>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Extract the 3x3 linear transformation component</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">mat3</span> objectToWorld3x3 <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span>gl_ObjectToWorldEXT<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Compute the normal matrix (inverse transpose)</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">mat3</span> normalMatrix <span class="op">=</span> <span class="bu">transpose</span><span class="op">(</span><span class="bu">inverse</span><span class="op">(</span>objectToWorld3x3<span class="op">));</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Transform and re-normalize the normal</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> worldNormal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>normalMatrix <span class="op">*</span> objectNormal<span class="op">);</span></span></code></pre></div>
+<p>While mathematically complete, evaluating <code>inverse()</code>
+inside the closest hit shader introduces a runtime performance overhead
+for every ray intersection.</p>
+<h2 id="the-optimal-approach-pairing-with-gl_worldtoobjectext">The
+Optimal Approach: Pairing with gl_WorldToObjectEXT</h2>
+<p>Vulkan ray tracing pipelines provide the world-to-object matrix via
+<code>gl_WorldToObjectEXT</code>, which is precomputed by the driver as
+the inverse of <code>gl_ObjectToWorldEXT</code>:</p>
+<p><span class="math display">\[\text{mat3}(gl\_WorldToObjectEXT)
+\approx M^{-1}\]</span></p>
+<p>Because the inverse matrix is already available, the explicit
+<code>inverse()</code> call can be omitted entirely. Transposing
+<code>gl_WorldToObjectEXT</code> produces the exact inverse-transpose
+matrix required:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Extract the 3x3 component of the inverse matrix</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">mat3</span> worldToObject3x3 <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span>gl_WorldToObjectEXT<span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Transpose the inverse directly (Inverse Transpose)</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> worldNormal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="bu">transpose</span><span class="op">(</span>worldToObject3x3<span class="op">)</span> <span class="op">*</span> objectNormal<span class="op">);</span></span></code></pre></div>
+<p>Alternatively, utilizing GLSL's row-vector by matrix multiplication
+order performs an implicit transpose:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Equivalent to transpose(mat3(gl_WorldToObjectEXT)) * objectNormal</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> worldNormal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>objectNormal <span class="op">*</span> <span class="dt">mat3</span><span class="op">(</span>gl_WorldToObjectEXT<span class="op">));</span></span></code></pre></div>
+<h2 id="implementation-in-a-closest-hit-shader">Implementation in a
+Closest Hit Shader</h2>
+<p>Below is an integrated example inside a closest hit shader
+(<code>.rchit</code>):</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_ray_tracing : require</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> rayPayloadInEXT <span class="dt">vec3</span> hitColor<span class="op">;</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>hitAttributeEXT <span class="dt">vec2</span> attribs<span class="op">;</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Retrieve or calculate object-space geometric normal</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> objectNormal <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Transform to world space via inverse-transpose logic</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Using gl_WorldToObjectEXT avoids computing inverse(mat3(gl_ObjectToWorldEXT))</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> worldNormal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>objectNormal <span class="op">*</span> <span class="dt">mat3</span><span class="op">(</span>gl_WorldToObjectEXT<span class="op">));</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Proceed with lighting calculations using worldNormal</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> lightDir <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">2.0</span><span class="op">,</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">));</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> diffuse <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>worldNormal<span class="op">,</span> lightDir<span class="op">),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    hitColor <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span>diffuse<span class="op">);</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="key-considerations">Key Considerations</h2>
+<ul>
+<li><strong>Normalization:</strong> Transforming a normal vector alters
+its length whenever scaling is applied to the instance. Always wrap the
+transformed vector in <code>normalize()</code>.</li>
+<li><strong>Uniform Scaling:</strong> If an instance strictly uses
+uniform scaling and rigid rotations, the inverse transpose is equivalent
+to the original matrix up to a scalar factor. In such constrained
+pipelines,
+<code>normalize(mat3(gl_ObjectToWorldEXT) * objectNormal)</code> is
+sufficient.</li>
+<li><strong>Affine Layout:</strong> Remember that both
+<code>gl_ObjectToWorldEXT</code> and <code>gl_WorldToObjectEXT</code>
+are <code>mat4x3</code> matrices (4 columns, 3 rows in GLSL
+conventions), meaning slicing via <code>mat3(...)</code> extracts the
+primary linear transformation while dropping translation
+components.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

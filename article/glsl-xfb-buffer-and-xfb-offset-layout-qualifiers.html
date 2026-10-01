@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL xfb_buffer and xfb_offset Layout Qualifiers - glsl</title>
+    <meta name="description" content="The layout(xfbbuffer = N, xfboffset = M) qualifier enables in-shader configuration of transform feedback in modern OpenGL (4.4+) and the GLARBenhancedlayouts extension. Instead of declaring output varyings on the CPU using glTransformFeedbackVaryings bef">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-xfb-buffer-and-xfb-offset-layout-qualifiers">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL xfb_buffer and xfb_offset Layout Qualifiers - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-xfb-buffer-and-xfb-offset-layout-qualifiers" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The layout(xfbbuffer = N, xfboffset = M) qualifier enables in-shader configuration of transform feedback in modern OpenGL (4.4+) and the GLARBenhancedlayouts extension. Instead of declaring output varyings on the CPU using glTransformFeedbackVaryings bef" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-xfb_buffer-and-xfb_offset-layout-qualifiers">GLSL
+xfb_buffer and xfb_offset Layout Qualifiers</h1>
+<p>The <code>layout(xfb_buffer = N, xfb_offset = M)</code> qualifier
+enables in-shader configuration of transform feedback in modern OpenGL
+(4.4+) and the <code>GL_ARB_enhanced_layouts</code> extension. Instead
+of declaring output varyings on the CPU using
+<code>glTransformFeedbackVaryings</code> before linking, this layout
+qualifier allows you to define the target buffer binding indices and
+byte offsets directly inside your GLSL shader source. This article
+explains how <code>xfb_buffer</code> and <code>xfb_offset</code> work
+together to route and align vertex output data into specific GPU buffer
+objects.</p>
+<h3 id="understanding-xfb_buffer-and-xfb_offset">Understanding
+<code>xfb_buffer</code> and <code>xfb_offset</code></h3>
+<p>The qualifier is applied to output variables in the last active
+shader stage prior to rasterization (typically the Vertex, Tessellation
+Evaluation, or Geometry shader).</p>
+<ul>
+<li><strong><code>xfb_buffer = N</code></strong>: Identifies which
+transform feedback buffer binding point receives the variable. The index
+<code>N</code> is an integer from <code>0</code> to
+<code>GL_MAX_TRANSFORM_FEEDBACK_BUFFERS - 1</code>. This corresponds
+directly to the target slot bound via
+<code>glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, N, buffer)</code>
+or <code>glBindBufferRange</code>.</li>
+<li><strong><code>xfb_offset = M</code></strong>: Specifies the exact
+byte offset <code>M</code> within the transform feedback buffer record
+where this specific variable begins.</li>
+</ul>
+<h3 id="separate-vs-interleaved-recording">Separate vs. Interleaved
+Recording</h3>
+<p>By combining these two qualifiers, you can structure your capture
+data into either separate buffers or interleaved streams without calling
+API-side configuration functions.</p>
+<h4 id="separate-buffers">Separate Buffers</h4>
+<p>To write different attributes into separate buffer objects, assign
+each variable a distinct <code>xfb_buffer</code> index:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">xfb_buffer</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">xfb_offset</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> outPosition<span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">xfb_buffer</span> <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> <span class="dt">xfb_offset</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec3</span> outNormal<span class="op">;</span></span></code></pre></div>
+<p>In this setup, <code>outPosition</code> streams into buffer binding
+0, and <code>outNormal</code> streams into buffer binding 1, both
+starting at byte offset 0 of their respective per-vertex records.</p>
+<h4 id="interleaved-buffers">Interleaved Buffers</h4>
+<p>To write multiple attributes into a single shared buffer, assign them
+the same <code>xfb_buffer</code> index and increment the
+<code>xfb_offset</code> so that variables do not overlap:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">xfb_buffer</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">xfb_offset</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span>  <span class="dt">out</span> <span class="dt">vec4</span> outPosition<span class="op">;</span> <span class="co">// 16 bytes (bytes 0-15)</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">xfb_buffer</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">xfb_offset</span> <span class="op">=</span> <span class="dv">16</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec3</span> outNormal<span class="op">;</span>   <span class="co">// 12 bytes (bytes 16-27)</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">xfb_buffer</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">xfb_offset</span> <span class="op">=</span> <span class="dv">28</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec2</span> outTexCoord<span class="op">;</span> <span class="co">// 8 bytes  (bytes 28-35)</span></span></code></pre></div>
+<p>Here, all three attributes are interleaved into buffer binding 0. A
+single vertex consumes 36 bytes per record.</p>
+<h3 id="stride-configuration-with-xfb_stride">Stride Configuration with
+<code>xfb_stride</code></h3>
+<p>When interleaving variables manually, OpenGL can automatically
+calculate the vertex record stride if variables are packed
+consecutively. However, you can explicitly enforce a stride using
+<code>xfb_stride</code>:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">xfb_buffer</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">xfb_stride</span> <span class="op">=</span> <span class="dv">48</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span> <span class="co">// Sets global stride for buffer 0</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">xfb_buffer</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">xfb_offset</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span>  <span class="dt">out</span> <span class="dt">vec4</span> outPosition<span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">xfb_buffer</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">xfb_offset</span> <span class="op">=</span> <span class="dv">16</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec3</span> outNormal<span class="op">;</span></span></code></pre></div>
+<p>An explicit <code>xfb_stride</code> is required if you want custom
+padding at the end of each vertex record (for example, aligning each
+vertex to a 48-byte boundary instead of 28 bytes).</p>
+<h3 id="rules-and-validation-constraints">Rules and Validation
+Constraints</h3>
+<p>When using explicit transform feedback layouts, several validation
+rules apply:</p>
+<ol type="1">
+<li><strong>Alignment</strong>: The byte offset <code>M</code> must be a
+multiple of 4 bytes (the component size of basic float, integer, and
+unsigned integer types).</li>
+<li><strong>No Overlapping</strong>: Variables targeting the same
+<code>xfb_buffer</code> must not have overlapping byte ranges within the
+record.</li>
+<li><strong>Array Packing</strong>: If an array is captured, each
+element is placed sequentially starting at <code>xfb_offset</code>, with
+each element consuming its standard size without extra alignment gaps
+unless explicitly structured.</li>
+<li><strong>Link-Time Validation</strong>: If any shader stage uses
+<code>xfb_buffer</code> or <code>xfb_offset</code>, it overrides any
+configuration specified by <code>glTransformFeedbackVaryings</code>.
+Mixing CPU-side varying declarations with shader-side <code>xfb_*</code>
+qualifiers for the same program will cause a link error.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

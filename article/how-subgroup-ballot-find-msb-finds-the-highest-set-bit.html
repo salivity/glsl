@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How subgroupBallotFindMSB Finds the Highest Set Bit - glsl</title>
+    <meta name="description" content="This article explains how the GLSL function subgroupBallotFindMSB determines the most significant set bit within a subgroup ballot mask. It covers the structure of the four-component ballot vector, the hierarchical search order from the most significant">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-subgroup-ballot-find-msb-finds-the-highest-set-bit">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How subgroupBallotFindMSB Finds the Highest Set Bit - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-subgroup-ballot-find-msb-finds-the-highest-set-bit" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the GLSL function subgroupBallotFindMSB determines the most significant set bit within a subgroup ballot mask. It covers the structure of the four-component ballot vector, the hierarchical search order from the most significant" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-subgroupballotfindmsb-finds-the-highest-set-bit">How
+subgroupBallotFindMSB Finds the Highest Set Bit</h1>
+<p>This article explains how the GLSL function
+<code>subgroupBallotFindMSB</code> determines the most significant set
+bit within a subgroup ballot mask. It covers the structure of the
+four-component ballot vector, the hierarchical search order from the
+most significant word down to the least, the underlying bit-scanning
+instructions used by GPU hardware, and the arithmetic required to
+resolve the final invocation index.</p>
+<h3 id="ballot-mask-representation">Ballot Mask Representation</h3>
+<p>In GLSL subgroup operations, a ballot result is stored as a
+<code>uvec4</code>, representing a 128-bit bitmask where each bit
+corresponds to an invocation (lane) within the subgroup:</p>
+<ul>
+<li><code>value.x</code> covers invocation indices 0 through 31.</li>
+<li><code>value.y</code> covers invocation indices 32 through 63.</li>
+<li><code>value.z</code> covers invocation indices 64 through 95.</li>
+<li><code>value.w</code> covers invocation indices 96 through 127.</li>
+</ul>
+<p>When an invocation evaluates
+<code>subgroupBallotFindMSB(uvec4 value)</code>, it searches for the
+highest-indexed active invocation whose corresponding bit is set to
+<code>1</code>.</p>
+<h3 id="high-to-low-vector-traversal">High-to-Low Vector Traversal</h3>
+<p>Because the function searches for the most significant bit across the
+entire 128-bit vector, evaluation proceeds in descending order of
+significance across the vector components: <code>w</code>,
+<code>z</code>, <code>y</code>, and <code>x</code>.</p>
+<p>The GPU logically evaluates the vector components as follows:</p>
+<ol type="1">
+<li>Inspect <code>value.w</code>. If <code>value.w != 0</code>, the
+highest set bit resides in the range [96, 127].</li>
+<li>If <code>value.w == 0</code>, inspect <code>value.z</code>. If
+<code>value.z != 0</code>, the highest set bit resides in the range [64,
+95].</li>
+<li>If <code>value.z == 0</code>, inspect <code>value.y</code>. If
+<code>value.y != 0</code>, the highest set bit resides in the range [32,
+63].</li>
+<li>If <code>value.y == 0</code>, inspect <code>value.x</code>. If
+<code>value.x != 0</code>, the highest set bit resides in the range [0,
+31].</li>
+</ol>
+<h3 id="intra-word-bit-scanning">Intra-Word Bit Scanning</h3>
+<p>Once the highest non-zero 32-bit unsigned integer is identified, the
+hardware calculates the position of the most significant set bit within
+that specific word.</p>
+<p>Modern GPUs implement this operation directly at the ISA (Instruction
+Set Architecture) level using dedicated integer ALU instructions:</p>
+<ul>
+<li><strong>Count Leading Zeros (CLZ):</strong> Many architectures count
+the number of zero bits preceding the first <code>1</code> starting from
+bit 31. The intra-word MSB index is computed as
+<code>31 - CLZ(word)</code>.</li>
+<li><strong>Find First Bit / Bit Scan Reverse (BSR):</strong>
+Architectures such as AMD (via <code>V_FFBH_U32</code>) or NVIDIA (via
+<code>FLO</code> - Find Leading One) expose single-cycle instructions
+that return the zero-based index of the most significant <code>1</code>
+directly.</li>
+</ul>
+<h3 id="global-index-computation">Global Index Computation</h3>
+<p>After finding the local bit position within the relevant 32-bit
+component, the global index is resolved by adding an offset
+corresponding to that component's position within the
+<code>uvec4</code>:</p>
+<p><span class="math display">\[\text{Global MSB} = (\text{Component
+Index} \times 32) + \text{Local MSB}\]</span></p>
+<p>Where:</p>
+<ul>
+<li><code>w</code> has a component index of 3 (offset +96).</li>
+<li><code>z</code> has a component index of 2 (offset +64).</li>
+<li><code>y</code> has a component index of 1 (offset +32).</li>
+<li><code>x</code> has a component index of 0 (offset +0).</li>
+</ul>
+<p>For example, if <code>value.w</code> is zero and <code>value.z</code>
+contains <code>0x00000400</code> (bit 10 is set), the component index is
+2. The final result is <code>(2 * 32) + 10 = 74</code>.</p>
+<h3 id="undefined-behavior-on-zero-masks">Undefined Behavior on Zero
+Masks</h3>
+<p>If every component in <code>value</code> is zero
+(<code>uvec4(0)</code>), no set bit exists. According to the GLSL
+specification, passing a ballot mask with no set bits to
+<code>subgroupBallotFindMSB</code> produces an undefined result.
+Applications typically guard this call with
+<code>subgroupBallotBitCount(value) &gt; 0</code> or check if
+<code>value != uvec4(0)</code> before querying the MSB.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

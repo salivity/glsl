@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inspecting GLSL Intermediate Render Targets in RenderDoc - glsl</title>
+    <meta name="description" content="RenderDoc is a standalone graphics debugging tool that enables developers to capture, isolate, and inspect intermediate render targets generated across complex GLSL rendering pipelines. In modern OpenGL and Vulkan development, complex visual effects rely">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/inspecting-glsl-intermediate-render-targets-in-render-doc">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Inspecting GLSL Intermediate Render Targets in RenderDoc - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/inspecting-glsl-intermediate-render-targets-in-render-doc" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="RenderDoc is a standalone graphics debugging tool that enables developers to capture, isolate, and inspect intermediate render targets generated across complex GLSL rendering pipelines. In modern OpenGL and Vulkan development, complex visual effects rely" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="inspecting-glsl-intermediate-render-targets-in-renderdoc">Inspecting
+GLSL Intermediate Render Targets in RenderDoc</h1>
+<p>RenderDoc is a standalone graphics debugging tool that enables
+developers to capture, isolate, and inspect intermediate render targets
+generated across complex GLSL rendering pipelines. In modern OpenGL and
+Vulkan development, complex visual effects rely on multi-pass
+rendering—such as deferred shading, shadow mapping, and
+post-processing—where intermediate images are written to Framebuffer
+Objects (FBOs). RenderDoc provides real-time visibility into these
+offscreen textures, allowing engineers to verify intermediate shader
+calculations, diagnose graphical artifacts, and ensure pipeline state
+correctness without modifying application source code.</p>
+<h3 id="capturing-offscreen-framebuffer-states">Capturing Offscreen
+Framebuffer States</h3>
+<p>When executing rendering passes in GLSL, intermediate data is
+typically bound to texture attachments via FBOs. RenderDoc intercepts
+graphics API commands at runtime. By triggering a frame capture, it
+records the exact execution sequence of draw calls, compute dispatches,
+and bound framebuffer states. Developers can use the Event Browser to
+step through individual draw calls to observe the exact moment an
+intermediate target is cleared, drawn to, or used as an input texture
+for subsequent passes.</p>
+<h3 id="detailed-inspection-via-the-texture-viewer">Detailed Inspection
+via the Texture Viewer</h3>
+<p>Once a frame is captured, RenderDoc’s Texture Viewer exposes all
+active and inactive render targets associated with the GLSL
+pipeline:</p>
+<ul>
+<li><strong>Format and Dimension Verification:</strong> Displays
+underlying formats (e.g., <code>GL_RGBA16F</code>,
+<code>GL_DEPTH24_STENCIL8</code>) and resolutions, ensuring that
+intermediate buffers match expected pipeline specifications.</li>
+<li><strong>Pixel Value Probing:</strong> Allows picking specific pixel
+coordinates to view raw numeric outputs (floating-point, integer, or
+normalized) written by GLSL fragment shaders.</li>
+<li><strong>Dynamic Range and Channel Masking:</strong> Provides
+controls to isolate individual color channels (R, G, B, A) and adjust
+exposure/gamma ranges, which is essential for diagnosing
+high-dynamic-range (HDR) buffers or packed data like normal maps and
+depth values.</li>
+<li><strong>Depth/Stencil Analysis:</strong> Visualizes depth and
+stencil attachments with configurable depth range remapping to expose
+precision issues or z-fighting.</li>
+</ul>
+<h3 id="tracking-dependencies-across-multi-pass-pipelines">Tracking
+Dependencies Across Multi-Pass Pipelines</h3>
+<p>Intermediate targets frequently serve as input samplers for
+downstream GLSL shaders. For example, a G-buffer pass writes normals,
+albedo, and depth to multiple render targets (MRT), which a lighting
+shader subsequently samples. RenderDoc visualizes these resource
+dependencies through its Resource Inspector and Pipeline State viewer.
+Engineers can inspect the state of a texture when it transitions from an
+output render target to a sampled texture bound to a GLSL
+<code>uniform sampler2D</code>, ensuring synchronization, layout
+transitions, and sampler filtering settings are correct.</p>
+<h3 id="shader-debugging-and-output-verification">Shader Debugging and
+Output Verification</h3>
+<p>Beyond passive inspection, RenderDoc allows developers to debug GLSL
+fragment shaders directly from the target pixel of an intermediate
+buffer. By right-clicking a pixel within an intermediate render target,
+developers can launch a step-by-step shader debugging session. This
+reconstructs the execution of the GLSL code for that specific fragment,
+mapping uniforms, vertex inputs, and intermediate calculations directly
+to the final color written to the buffer. This capability eliminates the
+need for manual debugging techniques, such as rendering raw values
+directly to the screen.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

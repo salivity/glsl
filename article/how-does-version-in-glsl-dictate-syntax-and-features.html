@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does #version in GLSL Dictate Syntax and Features? - glsl</title>
+    <meta name="description" content="The #version directive is the mandatory first line in OpenGL Shading Language (GLSL) source code that instructs the shader compiler which language specification to enforce. By specifying a version number and an optional profile, #version controls the ava">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-version-in-glsl-dictate-syntax-and-features">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does #version in GLSL Dictate Syntax and Features? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-version-in-glsl-dictate-syntax-and-features" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The #version directive is the mandatory first line in OpenGL Shading Language (GLSL) source code that instructs the shader compiler which language specification to enforce. By specifying a version number and an optional profile, #version controls the ava" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-version-in-glsl-dictate-syntax-and-features">How Does
+#version in GLSL Dictate Syntax and Features?</h1>
+<p>The <code>#version</code> directive is the mandatory first line in
+OpenGL Shading Language (GLSL) source code that instructs the shader
+compiler which language specification to enforce. By specifying a
+version number and an optional profile, <code>#version</code> controls
+the availability of modern shader stages, built-in variables, keywords,
+data structures, and texture sampling functions. Omitting or
+misconfiguring this directive forces compilers to default to legacy
+specifications, fundamentally altering how inputs, outputs, and hardware
+capabilities are parsed.</p>
+<h2 id="core-mechanics-and-syntax-of-the-directive">Core Mechanics and
+Syntax of the Directive</h2>
+<p>Every GLSL shader source must declare <code>#version</code> before
+any other tokens or comments, except for whitespace and comments
+depending on compiler tolerance. The general syntax follows:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version number [profile]</span></span></code></pre></div>
+<ul>
+<li><strong>Version Number:</strong> A three-digit integer matching the
+GLSL version (such as <code>120</code>, <code>330</code>,
+<code>430</code>, or <code>460</code>). From OpenGL 3.3 onward, GLSL
+version numbers mirror the OpenGL core specification versions directly
+(e.g., GLSL 4.50 corresponds to OpenGL 4.5).</li>
+<li><strong>Profile Identifier:</strong> Introduced in GLSL 1.50, the
+profile flag specifies the context target: <code>core</code>,
+<code>compatibility</code>, or <code>es</code> (for OpenGL ES and
+WebGL2).</li>
+</ul>
+<p>If no profile is explicitly defined on desktop targets above GLSL
+1.50, the compiler defaults to the <code>core</code> profile. If the
+<code>#version</code> directive is entirely omitted from a shader, the
+GLSL compiler falls back to version <code>110</code> (OpenGL 2.0),
+triggering strict legacy parsing rules.</p>
+<h2 id="evolution-of-variable-qualifiers-across-versions">Evolution of
+Variable Qualifiers Across Versions</h2>
+<p>The declared <code>#version</code> drastically changes how data
+enters and exits shader stages.</p>
+<h3 id="legacy-qualifiers-glsl-110-to-120">Legacy Qualifiers (GLSL 1.10
+to 1.20)</h3>
+<p>In GLSL 1.10 and 1.20, data passing relies on fixed-function and
+stage-specific qualifiers:</p>
+<ul>
+<li><code>attribute</code>: Used exclusively in vertex shaders for
+per-vertex attributes.</li>
+<li><code>varying</code>: Used to pass interpolated data from vertex
+shaders to fragment shaders.</li>
+<li><code>uniform</code>: Shared constant data across all stages.</li>
+<li>Built-in outputs such as <code>gl_FragColor</code> and
+<code>gl_Position</code> handle direct pipeline communication.</li>
+</ul>
+<h3 id="modern-unified-qualifiers-glsl-130-and-above">Modern Unified
+Qualifiers (GLSL 1.30 and Above)</h3>
+<p>Starting with GLSL 1.30 (OpenGL 3.0), the language deprecated
+stage-specific data qualifiers in favor of unified in/out syntax:</p>
+<ul>
+<li><code>in</code> replaces <code>attribute</code> in vertex shaders
+and receives interpolated data in fragment shaders.</li>
+<li><code>out</code> writes data from vertex stages and defines
+user-declared render targets in fragment shaders.</li>
+<li><code>gl_FragColor</code> is deprecated in 1.30 and completely
+removed in 3.30 core, requiring developers to declare explicit
+<code>out vec4 fragColor</code> targets.</li>
+</ul>
+<h2 id="memory-layouts-buffers-and-feature-unlocks">Memory Layouts,
+Buffers, and Feature Unlocks</h2>
+<p>Modern GPU features are gated directly behind specific
+<code>#version</code> targets:</p>
+<ul>
+<li><strong>Uniform Buffer Objects (UBOs):</strong> Available starting
+in GLSL 1.40/3.30 using the <code>uniform BlockName { ... };</code>
+syntax to share large uniform blocks across programs.</li>
+<li><strong>Explicit Layout Qualifiers:</strong> GLSL 3.30 and 4.00
+introduce <code>layout(location = 0)</code> to bind vertex attribute
+indices and render target locations directly in shader code, removing
+the need for runtime API queries.</li>
+<li><strong>Shader Storage Buffer Objects (SSBOs) &amp; Compute
+Shaders:</strong> Declaring <code>#version 430</code> unlocks the
+compute pipeline (<code>layout(local_size_x = ...) in;</code>) and
+read-write <code>buffer</code> blocks for massive data
+manipulation.</li>
+<li><strong>Bindless and SPIR-V Capabilities:</strong> Versions
+<code>450</code> and <code>460</code> enable modern Vulkan-compatible
+semantics, enhanced memory qualifiers, and explicit binding models.</li>
+</ul>
+<h2 id="impact-of-profile-modifiers">Impact of Profile Modifiers</h2>
+<p>The optional profile argument defines whether deprecated legacy
+functions remain accessible:</p>
+<ul>
+<li><strong>Core Profile (<code>core</code>):</strong> Strips all
+deprecated features, including fixed-function state variables
+(<code>gl_ModelViewMatrix</code>, <code>gl_Vertex</code>), legacy
+lighting states, and implicit texture functions.</li>
+<li><strong>Compatibility Profile (<code>compatibility</code>):</strong>
+Retains full backward compatibility, allowing legacy variables
+(<code>gl_FragColor</code>, <code>gl_Normal</code>) to coexist with
+modern features.</li>
+<li><strong>Embedded Systems (<code>es</code>):</strong> Enforces OpenGL
+ES specification constraints, mandatory precision qualifiers
+(<code>precision highp float;</code>), and mobile-optimized feature
+subsets required for mobile hardware and WebGL2 contexts.</li>
+</ul>
+<h2 id="texture-sampling-function-overhauls">Texture Sampling Function
+Overhauls</h2>
+<p>The <code>#version</code> declaration alters built-in sampling
+functions. Prior to GLSL 1.30, sampling functions were explicitly named
+after their texture types:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// GLSL 1.20</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> color <span class="op">=</span> <span class="dt">texture2D</span><span class="op">(</span>u_Sampler<span class="op">,</span> uv<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> cube  <span class="op">=</span> <span class="dt">textureCube</span><span class="op">(</span>u_CubeMap<span class="op">,</span> dir<span class="op">);</span></span></code></pre></div>
+<p>In GLSL 1.30 and later, these overloaded functions were unified into
+a single polymorphic identifier:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// GLSL 330 core / 460 core</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> color <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_Sampler<span class="op">,</span> uv<span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> cube  <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_CubeMap<span class="op">,</span> dir<span class="op">);</span></span></code></pre></div>
+<p>Compiling overloaded <code>texture()</code> calls under
+<code>#version 120</code> results in a compilation failure, just as
+invoking <code>texture2D()</code> in modern core profiles triggers
+deprecation or unsupported symbol errors.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

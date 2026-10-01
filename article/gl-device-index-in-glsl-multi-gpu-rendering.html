@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gl_DeviceIndex in GLSL Multi-GPU Rendering - glsl</title>
+    <meta name="description" content="The built-in GLSL variable glDeviceIndex identifies the specific physical graphics processing unit executing a shader invocation within a multi-GPU device group. This article examines the core function of glDeviceIndex, its role in modern graphics APIs l">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gl-device-index-in-glsl-multi-gpu-rendering">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="gl_DeviceIndex in GLSL Multi-GPU Rendering - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gl-device-index-in-glsl-multi-gpu-rendering" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The built-in GLSL variable glDeviceIndex identifies the specific physical graphics processing unit executing a shader invocation within a multi-GPU device group. This article examines the core function of glDeviceIndex, its role in modern graphics APIs l" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="gl_deviceindex-in-glsl-multi-gpu-rendering">gl_DeviceIndex in
+GLSL Multi-GPU Rendering</h1>
+<p>The built-in GLSL variable <code>gl_DeviceIndex</code> identifies the
+specific physical graphics processing unit executing a shader invocation
+within a multi-GPU device group. This article examines the core function
+of <code>gl_DeviceIndex</code>, its role in modern graphics APIs like
+Vulkan, and how it enables advanced multi-GPU rendering techniques—such
+as alternate frame rendering, split-frame rendering, and stereo VR
+displays—without requiring redundant CPU-side command submission or
+separate pipeline states for each GPU.</p>
+<h3 id="definition-and-purpose">Definition and Purpose</h3>
+<p>In modern rendering APIs, multiple physical GPUs can be combined into
+a single logical device (such as a <code>VkDeviceGroup</code> in
+Vulkan). When commands are recorded to this logical device, they are
+broadcast across all participating physical devices.</p>
+<p>The <code>gl_DeviceIndex</code> variable is a built-in input integer
+defined in GLSL:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">int</span> gl_DeviceIndex<span class="op">;</span></span></code></pre></div>
+<p>It contains the zero-based index of the physical device executing the
+current shader invocation. If a logical device consists of two physical
+GPUs, <code>gl_DeviceIndex</code> evaluates to <code>0</code> on the
+primary GPU and <code>1</code> on the secondary GPU.</p>
+<h3 id="how-gl_deviceindex-functions-in-multi-gpu-pipelines">How
+gl_DeviceIndex Functions in Multi-GPU Pipelines</h3>
+<p>Before the introduction of device groups and
+<code>gl_DeviceIndex</code>, rendering to multiple GPUs required the CPU
+to record separate command buffers for each device, update separate
+descriptor sets, or push individual uniform data indicating which device
+was active.</p>
+<p>With <code>gl_DeviceIndex</code>, a single command buffer can be
+broadcast simultaneously to all GPUs in the group. The shader
+dynamically alters its execution path or data access patterns on the fly
+based on the value of <code>gl_DeviceIndex</code>.</p>
+<h3 id="common-use-cases">Common Use Cases</h3>
+<ol type="1">
+<li><p><strong>Stereoscopic VR Rendering</strong> In virtual reality
+setups, each GPU can be dedicated to rendering one eye. By using
+<code>gl_DeviceIndex</code> as an array index, a single vertex shader
+can select the appropriate view and projection matrices:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> CameraData <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> viewProjection<span class="op">[</span><span class="dv">2</span><span class="op">];</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> camera<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> camera<span class="op">.</span><span class="fu">viewProjection</span><span class="op">[</span>gl_DeviceIndex<span class="op">]</span> <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>inPosition<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></li>
+<li><p><strong>Split-Frame Rendering (SFR)</strong> Workload can be
+divided spatially, where each GPU processes a specific portion of the
+viewport (e.g., top and bottom halves, or interleaved tiles).
+<code>gl_DeviceIndex</code> allows the shader to determine clipping
+boundaries, viewport offsets, or screen-space coordinates unique to that
+device's assignment.</p></li>
+<li><p><strong>Per-Device Resource Indexing</strong> Shaders can index
+into device-local arrays of textures, storage buffers, or scratch
+memory. This avoids cross-GPU memory access penalties by ensuring each
+physical GPU reads from and writes to memory physically located on its
+own local memory bus.</p></li>
+</ol>
+<h3 id="key-benefits">Key Benefits</h3>
+<ul>
+<li><strong>Zero CPU Dispatch Overhead:</strong> Developers submit one
+draw call or dispatch command, and hardware dispatches the work across
+all GPUs simultaneously.</li>
+<li><strong>Unified Pipeline State:</strong> A single graphics or
+compute pipeline works across all devices, reducing shader compilation
+time and memory footprint.</li>
+<li><strong>Granular Work Distribution:</strong> Execution paths can
+diverge at the shader invocation level, allowing fine-grained load
+balancing across heterogeneous or identical multi-GPU
+configurations.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL early_fragment_tests and Depth Testing - glsl</title>
+    <meta name="description" content="The layout(earlyfragmenttests) in; layout qualifier in GLSL explicitly forces the GPU to perform depth and stencil testing prior to executing the fragment shader. Under normal pipeline conditions, drivers may defer depth tests until after fragment shadin">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-early-fragment-tests-and-depth-testing">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL early_fragment_tests and Depth Testing - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-early-fragment-tests-and-depth-testing" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The layout(earlyfragmenttests) in; layout qualifier in GLSL explicitly forces the GPU to perform depth and stencil testing prior to executing the fragment shader. Under normal pipeline conditions, drivers may defer depth tests until after fragment shadin" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-early_fragment_tests-and-depth-testing">GLSL
+early_fragment_tests and Depth Testing</h1>
+<p>The <code>layout(early_fragment_tests) in;</code> layout qualifier in
+GLSL explicitly forces the GPU to perform depth and stencil testing
+prior to executing the fragment shader. Under normal pipeline
+conditions, drivers may defer depth tests until after fragment shading,
+or use implementation-dependent optimizations. Declaring this layout
+qualifier establishes a strict execution order, ensuring that fragments
+failing the depth or stencil tests are discarded before any fragment
+shader instructions run, thereby optimizing performance and controlling
+side effects.</p>
+<h3 id="default-pipeline-execution-vs-early-testing">Default Pipeline
+Execution vs. Early Testing</h3>
+<p>By default, OpenGL can execute the depth test either before or after
+fragment shading:</p>
+<ul>
+<li><strong>Late Fragment Tests:</strong> Standard pipeline behavior
+runs the fragment shader first, followed by depth testing, stencil
+testing, and blending. This is mandatory if the fragment shader modifies
+the fragment's depth value via <code>gl_FragDepth</code>.</li>
+<li><strong>Driver-Assisted Early-Z:</strong> Modern GPUs often perform
+an implicit early depth test (Early-Z) as an optimization. However, the
+driver can disable this optimization automatically if the fragment
+shader uses operations with side effects, such as writing to Shader
+Storage Buffer Objects (SSBOs), modifying image variables via image
+load/store, or using atomic counters.</li>
+</ul>
+<h3 id="what-layoutearly_fragment_tests-in-enforces">What
+<code>layout(early_fragment_tests) in</code> Enforces</h3>
+<p>Declaring <code>layout(early_fragment_tests) in;</code> removes
+driver ambiguity and enforces the following pipeline sequence:</p>
+<ol type="1">
+<li><strong>Mandatory Pre-Shader Depth and Stencil Testing:</strong> The
+depth test and stencil test must execute before any fragment shader
+invocations.</li>
+<li><strong>Conditional Execution of Fragment Shaders:</strong> If a
+fragment fails the depth test (for example, if it is occluded by
+geometry closer to the camera), the fragment shader is completely
+bypassed.</li>
+<li><strong>Suppression of Shader Side Effects:</strong> Because
+occluded fragments are discarded prior to fragment execution, any side
+effects within the shader—such as atomic operations, SSBO writes, or
+image stores—are guaranteed not to occur for those fragments. This is
+crucial for algorithms like order-independent transparency, custom
+profiling, or software occlusion culling that rely on predictable
+writes.</li>
+<li><strong>Depth Value Immutability:</strong> When this qualifier is
+used, the fragment shader is legally prohibited from modifying
+<code>gl_FragDepth</code>. The depth value tested and written to the
+depth buffer is strictly the interpolated depth generated by the
+primitive's rasterization.</li>
+</ol>
+<h3 id="usage-example">Usage Example</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 430 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">early_fragment_tests</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> PixelCounter <span class="op">{</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> visiblePixels<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> fragColor<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Only executed for fragments that pass the depth and stencil tests</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">atomicAdd</span><span class="op">(</span>visiblePixels<span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By enforcing early tests, the counter in the example above only
+increments for genuinely visible fragments, eliminating inaccurate
+counts caused by overdraw.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

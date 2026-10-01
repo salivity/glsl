@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does the GLSL mix Function Work on Vectors? - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), the mix function performs linear interpolation between two values based on a third interpolation factor. When applied to vector data types, mix operates component-wise according to the algebraic formula $x \times (1.0 -">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-the-glsl-mix-function-work-on-vectors">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does the GLSL mix Function Work on Vectors? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-the-glsl-mix-function-work-on-vectors" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), the mix function performs linear interpolation between two values based on a third interpolation factor. When applied to vector data types, mix operates component-wise according to the algebraic formula $x \times (1.0 -" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-the-glsl-mix-function-work-on-vectors">How Does the
+GLSL mix Function Work on Vectors?</h1>
+<p>In OpenGL Shading Language (GLSL), the <code>mix</code> function
+performs linear interpolation between two values based on a third
+interpolation factor. When applied to vector data types,
+<code>mix</code> operates component-wise according to the algebraic
+formula <span class="math inline">\(x \times (1.0 - a) + y \times
+a\)</span>. This article examines the core mechanics, signature
+variants, component-level execution, extrapolation behavior, and
+practical use cases of vector linear interpolation in GLSL shaders.</p>
+<h2 id="mathematical-definition-and-vector-semantics">Mathematical
+Definition and Vector Semantics</h2>
+<p>At its core, GLSL's <code>mix(x, y, a)</code> evaluates a standard
+linear interpolation (often abbreviated as <em>lerp</em>). For vector
+types such as <code>vec2</code>, <code>vec3</code>, and
+<code>vec4</code> (as well as integer and double variants like
+<code>ivec</code> or <code>dvec</code>), the operation is mapped across
+every individual vector channel independently:</p>
+<p><span class="math display">\[result_i = x_i \times (1.0 - a_i) + y_i
+\times a_i\]</span></p>
+<p>Where <span class="math inline">\(i\)</span> represents each
+corresponding vector component (<span class="math inline">\(x, y, z,
+w\)</span> or <span class="math inline">\(r, g, b, a\)</span>).</p>
+<h2 id="function-signatures-for-vectors">Function Signatures for
+Vectors</h2>
+<p>GLSL provides two primary function signatures when mixing vector
+types:</p>
+<h3 id="1-vector-blending-with-a-scalar-factor">1. Vector Blending with
+a Scalar Factor</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>genType <span class="bu">mix</span><span class="op">(</span>genType x<span class="op">,</span> genType y<span class="op">,</span> <span class="dt">float</span> a<span class="op">);</span></span></code></pre></div>
+<p>When the third parameter <code>a</code> is a single
+<code>float</code>, that same scalar weight applies to all components of
+vectors <code>x</code> and <code>y</code>. For example:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> colorA <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span> <span class="co">// Red</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> colorB <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span> <span class="co">// Blue</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> blended <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>colorA<span class="op">,</span> colorB<span class="op">,</span> <span class="fl">0.25</span><span class="op">);</span></span></code></pre></div>
+<p>The resulting vector evaluates to:</p>
+<ul>
+<li><span class="math inline">\(r = 1.0 \times (1.0 - 0.25) + 0.0 \times
+0.25 = 0.75\)</span></li>
+<li><span class="math inline">\(g = 0.0 \times (1.0 - 0.25) + 0.0 \times
+0.25 = 0.0\)</span></li>
+<li><span class="math inline">\(b = 0.0 \times (1.0 - 0.25) + 1.0 \times
+0.25 = 0.25\)</span></li>
+<li><code>blended = vec3(0.75, 0.0, 0.25)</code></li>
+</ul>
+<h3 id="2-vector-blending-with-a-vector-factor">2. Vector Blending with
+a Vector Factor</h3>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>genType <span class="bu">mix</span><span class="op">(</span>genType x<span class="op">,</span> genType y<span class="op">,</span> genType a<span class="op">);</span></span></code></pre></div>
+<p>When <code>a</code> is a vector of the same dimension as
+<code>x</code> and <code>y</code>, each channel receives a unique
+blending coefficient:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> startPos <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">10.0</span><span class="op">);</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> endPos   <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">100.0</span><span class="op">,</span> <span class="fl">50.0</span><span class="op">);</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> weight   <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.5</span><span class="op">,</span> <span class="fl">0.1</span><span class="op">);</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> result <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>startPos<span class="op">,</span> endPos<span class="op">,</span> weight<span class="op">);</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co">// result.x = mix(0.0, 100.0, 0.5) = 50.0</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co">// result.y = mix(10.0, 50.0, 0.1) = 14.0</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="co">// result = vec2(50.0, 14.0)</span></span></code></pre></div>
+<h2 id="extrapolation-and-value-range">Extrapolation and Value
+Range</h2>
+<p>A common misconception is that <code>mix</code> automatically clamps
+values within the range <span class="math inline">\([0.0, 1.0]\)</span>.
+The standard <code>mix</code> function does not restrict the
+interpolation factor <span class="math inline">\(a\)</span>:</p>
+<ul>
+<li>When <span class="math inline">\(a = 0.0\)</span>, the result is
+strictly <span class="math inline">\(x\)</span>.</li>
+<li>When <span class="math inline">\(a = 1.0\)</span>, the result is
+strictly <span class="math inline">\(y\)</span>.</li>
+<li>When <span class="math inline">\(0.0 &lt; a &lt; 1.0\)</span>, the
+result is a weighted blend between <span
+class="math inline">\(x\)</span> and <span
+class="math inline">\(y\)</span>.</li>
+<li>When <span class="math inline">\(a &lt; 0.0\)</span> or <span
+class="math inline">\(a &gt; 1.0\)</span>, the function computes linear
+extrapolation beyond the boundaries of <span
+class="math inline">\(x\)</span> and <span
+class="math inline">\(y\)</span>.</li>
+</ul>
+<p>To ensure bounded interpolation, developers frequently wrap the
+weight factor with <code>clamp(a, 0.0, 1.0)</code> or
+<code>saturate(a)</code>.</p>
+<h2 id="boolean-selection-variant">Boolean Selection Variant</h2>
+<p>Starting in GLSL 1.30 and GLSL ES 3.00, <code>mix</code> includes an
+overload that accepts a boolean vector (e.g., <code>bvec2</code>,
+<code>bvec3</code>, <code>bvec4</code>) for the selector argument:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>genType <span class="bu">mix</span><span class="op">(</span>genType x<span class="op">,</span> genType y<span class="op">,</span> genBType a<span class="op">);</span></span></code></pre></div>
+<p>In this mode, <code>mix</code> behaves as a conditional component
+selector rather than an arithmetic interpolator:</p>
+<ul>
+<li>If <span class="math inline">\(a_i\)</span> is <code>false</code>,
+the component evaluates to <span
+class="math inline">\(x_i\)</span>.</li>
+<li>If <span class="math inline">\(a_i\)</span> is <code>true</code>,
+the component evaluates to <span
+class="math inline">\(y_i\)</span>.</li>
+</ul>
+<p>This allows conditional vector masking on the GPU without dynamic
+branching penalties.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

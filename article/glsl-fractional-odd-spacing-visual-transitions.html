@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Fractional Odd Spacing Visual Transitions - glsl</title>
+    <meta name="description" content="This article provides an overview of the visual transitions that occur when using the fractionaloddspacing layout qualifier in GLSL tessellation shaders. It explains how dynamic tessellation levels smoothly interpolate geometry, how new vertices emerge w">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-fractional-odd-spacing-visual-transitions">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Fractional Odd Spacing Visual Transitions - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-fractional-odd-spacing-visual-transitions" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of the visual transitions that occur when using the fractionaloddspacing layout qualifier in GLSL tessellation shaders. It explains how dynamic tessellation levels smoothly interpolate geometry, how new vertices emerge w" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-fractional-odd-spacing-visual-transitions">GLSL Fractional
+Odd Spacing Visual Transitions</h1>
+<p>This article provides an overview of the visual transitions that
+occur when using the <code>fractional_odd_spacing</code> layout
+qualifier in GLSL tessellation shaders. It explains how dynamic
+tessellation levels smoothly interpolate geometry, how new vertices
+emerge without popping artifacts, and how the rendered mesh behaves
+visually across continuous Level of Detail (LOD) changes.</p>
+<h2 id="the-problem-of-geometry-popping">The Problem of Geometry
+Popping</h2>
+<p>In dynamic level-of-detail systems, tessellation factors change
+continuously based on camera distance or screen-space metrics. When
+using standard <code>equal_spacing</code>, the tessellation level is
+rounded to the nearest whole integer. This causes abrupt visual "pops"
+where entire rows or loops of triangles suddenly appear or disappear in
+a single frame.</p>
+<h2 id="continuous-segment-scaling">Continuous Segment Scaling</h2>
+<p>The <code>fractional_odd_spacing</code> qualifier eliminates popping
+by enabling smooth, continuous transitions between odd numbers of
+segments (<span class="math inline">\(1, 3, 5, 7, \dots\)</span>).</p>
+<p>When a tessellation factor is non-integer:</p>
+<ol type="1">
+<li>The hardware rounds the factor up to the nearest odd integer, <span
+class="math inline">\(n\)</span>.</li>
+<li>The edge is divided into <span class="math inline">\(n\)</span>
+segments.</li>
+<li>The <span class="math inline">\(n - 2\)</span> inner segments share
+an equal, fixed relative length.</li>
+<li>The remaining two segments (located at the boundaries of the edge)
+start with a length of zero when the tessellation factor is at <span
+class="math inline">\(n - 2\)</span>.</li>
+<li>As the factor increases continuously toward <span
+class="math inline">\(n\)</span>, these two boundary segments smoothly
+expand from zero length until they match the length of all other
+segments.</li>
+</ol>
+<h2 id="visual-manifestation-during-camera-movement">Visual
+Manifestation During Camera Movement</h2>
+<p>As an observer moves closer to an object using
+<code>fractional_odd_spacing</code>, the mesh transitions through
+distinct visual phases:</p>
+<ul>
+<li><strong>Zero-Length Introduction:</strong> New vertices emerge
+directly on top of existing corner vertices rather than suddenly
+appearing in the middle of an edge. Because these new triangles
+initially have an area of zero, they are completely invisible.</li>
+<li><strong>Smooth Expansion:</strong> As the distance decreases and the
+tessellation level rises, the zero-area triangles gradually widen.
+Vertices migrate smoothly along the edge toward their final positions.
+Visually, this appears as a seamless morphing or stretching of surface
+detail rather than an instantaneous swap of meshes.</li>
+<li><strong>Symmetry Preservation:</strong> Because the fractional
+segments expand symmetrically at both ends of an edge, the mesh
+maintains structural balance without visibly sliding to one side.</li>
+<li><strong>Preservation of the Base Mesh:</strong> Unlike
+<code>fractional_even_spacing</code> (which clamps to a minimum of 2
+segments), <code>fractional_odd_spacing</code> supports a tessellation
+level of 1.0. At the lowest level of detail, edges consist of a single
+segment, allowing the mesh to revert exactly to its original,
+un-tessellated base state without unnecessary subdivisions.</li>
+</ul>
+<p>By continuously growing new triangles from zero area at the mesh
+boundaries, <code>fractional_odd_spacing</code> creates a fluid visual
+transition where geometric density adapts imperceptibly across varying
+view distances.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

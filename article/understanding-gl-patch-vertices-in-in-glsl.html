@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding gl_PatchVerticesIn in GLSL - glsl</title>
+    <meta name="description" content="This article provides an overview of the built-in GLSL variable glPatchVerticesIn, explaining how it communicates the number of control points per input patch to tessellation shaders. You will learn how this value is established on the CPU via OpenGL com">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-gl-patch-vertices-in-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding gl_PatchVerticesIn in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-gl-patch-vertices-in-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of the built-in GLSL variable glPatchVerticesIn, explaining how it communicates the number of control points per input patch to tessellation shaders. You will learn how this value is established on the CPU via OpenGL com" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-gl_patchverticesin-in-glsl">Understanding
+gl_PatchVerticesIn in GLSL</h1>
+<p>This article provides an overview of the built-in GLSL variable
+<code>gl_PatchVerticesIn</code>, explaining how it communicates the
+number of control points per input patch to tessellation shaders. You
+will learn how this value is established on the CPU via OpenGL commands,
+how it dictates the sizing of input arrays in both the Tessellation
+Control Shader (TCS) and Tessellation Evaluation Shader (TES), and how
+to use it effectively in your rendering pipeline.</p>
+<h3 id="what-is-gl_patchverticesin">What is gl_PatchVerticesIn?</h3>
+<p>In the OpenGL pipeline, tessellation processes geometric primitives
+called patches. The built-in variable <code>gl_PatchVerticesIn</code> is
+an implicitly declared integer (<code>in int gl_PatchVerticesIn;</code>)
+available in tessellation shaders. It represents the number of
+vertices—or control points—present in the input patch currently being
+processed by the shader.</p>
+<h3 id="behavior-in-the-tessellation-control-shader-tcs">Behavior in the
+Tessellation Control Shader (TCS)</h3>
+<p>In the Tessellation Control Shader, <code>gl_PatchVerticesIn</code>
+corresponds directly to the patch size configured by the host
+application on the CPU. The OpenGL application sets this size using the
+following state call:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>glPatchParameteri<span class="op">(</span>GL_PATCH_VERTICES<span class="op">,</span> numVertices<span class="op">);</span></span></code></pre></div>
+<p>When the draw call executes, <code>gl_PatchVerticesIn</code> in the
+TCS reflects <code>numVertices</code>. It also specifies the implicit
+dimension of the built-in input array <code>gl_in[]</code>, as well as
+any user-defined input arrays passed from the vertex shader. For
+instance, if <code>GL_PATCH_VERTICES</code> is set to 4,
+<code>gl_PatchVerticesIn</code> will evaluate to 4, indicating that
+indices <code>gl_in[0]</code> through <code>gl_in[3]</code> contain
+valid control point data.</p>
+<h3 id="behavior-in-the-tessellation-evaluation-shader-tes">Behavior in
+the Tessellation Evaluation Shader (TES)</h3>
+<p>The behavior of <code>gl_PatchVerticesIn</code> changes slightly in
+the Tessellation Evaluation Shader depending on whether a TCS is
+present:</p>
+<ol type="1">
+<li><strong>When a TCS is present:</strong>
+<code>gl_PatchVerticesIn</code> in the TES reflects the output patch
+size defined by the TCS, not the initial size passed from the host. This
+count matches the layout qualifier defined in the TCS:
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">vertices</span> <span class="op">=</span> N<span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span></code></pre></div>
+In this scenario, <code>gl_PatchVerticesIn</code> in the TES will equal
+<code>N</code>.</li>
+<li><strong>When a TCS is omitted:</strong> The pipeline routes the
+original patch data directly to the TES. Here,
+<code>gl_PatchVerticesIn</code> defaults back to the size configured by
+<code>glPatchParameteri(GL_PATCH_VERTICES, ...)</code>.</li>
+</ol>
+<h3 id="practical-usage">Practical Usage</h3>
+<p><code>gl_PatchVerticesIn</code> is commonly used as a loop bound when
+inspecting, modifying, or passing through control point attributes.
+Instead of hardcoding iteration limits, shaders can use this variable to
+write flexible control code:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">vertices</span> <span class="op">=</span> <span class="dv">3</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Pass attributes dynamically based on the input patch size</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="bu">gl_PatchVerticesIn</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Process or inspect gl_in[i]</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="va">gl_out</span><span class="op">[</span><span class="bu">gl_InvocationID</span><span class="op">].</span><span class="fu">gl_Position</span> <span class="op">=</span> <span class="va">gl_in</span><span class="op">[</span><span class="bu">gl_InvocationID</span><span class="op">].</span><span class="fu">gl_Position</span><span class="op">;</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Set tessellation levels once per patch</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">gl_InvocationID</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">gl_TessLevelInner</span><span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="fl">3.0</span><span class="op">;</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">gl_TessLevelOuter</span><span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="fl">3.0</span><span class="op">;</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        <span class="bu">gl_TessLevelOuter</span><span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">=</span> <span class="fl">3.0</span><span class="op">;</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">gl_TessLevelOuter</span><span class="op">[</span><span class="dv">2</span><span class="op">]</span> <span class="op">=</span> <span class="fl">3.0</span><span class="op">;</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By querying <code>gl_PatchVerticesIn</code>, tessellation stages
+remain decoupled from fixed vertex counts, preventing out-of-bounds
+array reads and ensuring correct correspondence between host setup and
+GPU execution.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculating 3D Morton Codes in GLSL for LBVH - glsl</title>
+    <meta name="description" content="This article explains how to compute 3D Morton codes from integer coordinates using GLSL to facilitate Linear Bounding Volume Hierarchy (LBVH) construction on the GPU. Morton codes, or Z-order curve values, project multi-dimensional data into a single di">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/calculating-3-d-morton-codes-in-glsl-for-lbvh">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Calculating 3D Morton Codes in GLSL for LBVH - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/calculating-3-d-morton-codes-in-glsl-for-lbvh" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to compute 3D Morton codes from integer coordinates using GLSL to facilitate Linear Bounding Volume Hierarchy (LBVH) construction on the GPU. Morton codes, or Z-order curve values, project multi-dimensional data into a single di" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="calculating-3d-morton-codes-in-glsl-for-lbvh">Calculating 3D
+Morton Codes in GLSL for LBVH</h1>
+<p>This article explains how to compute 3D Morton codes from integer
+coordinates using GLSL to facilitate Linear Bounding Volume Hierarchy
+(LBVH) construction on the GPU. Morton codes, or Z-order curve values,
+project multi-dimensional data into a single dimension while preserving
+spatial locality. By quantizing bounding box centers into integer
+coordinates and interleaving their bits using bitwise operations,
+compute shaders can generate sorted linear sequences of primitives
+essential for fast, parallel LBVH generation.</p>
+<h2 id="understanding-morton-codes-in-lbvhs">Understanding Morton Codes
+in LBVHs</h2>
+<p>Building a Linear BVH requires ordering geometric primitives along a
+space-filling curve. The 3D Morton code achieves this by interleaving
+the binary representations of a point's <span
+class="math inline">\(x\)</span>, <span
+class="math inline">\(y\)</span>, and <span
+class="math inline">\(z\)</span> coordinates.</p>
+<p>When applied to 32-bit unsigned integers in GLSL, each axis is
+typically quantized into a 10-bit integer (representing values from
+<span class="math inline">\(0\)</span> to <span
+class="math inline">\(1023\)</span>). Interleaving three 10-bit values
+produces a 30-bit Morton code, which fits cleanly inside a single 32-bit
+<code>uint</code>. Sorting primitives by this 30-bit key clusters
+spatially adjacent geometry together, allowing the hierarchy to be
+constructed in parallel using algorithms such as Karras' LBVH
+builder.</p>
+<h2 id="quantizing-coordinates-to-integers">Quantizing Coordinates to
+Integers</h2>
+<p>Before interleaving bits, floating-point positions must be normalized
+relative to the scene's axis-aligned bounding box (AABB) and scaled to a
+10-bit integer range (<span class="math inline">\([0, 2^{10} -
+1]\)</span>):</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uvec3</span> <span class="fu">quantizePosition</span><span class="op">(</span><span class="dt">vec3</span> point<span class="op">,</span> <span class="dt">vec3</span> sceneMin<span class="op">,</span> <span class="dt">vec3</span> sceneMax<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Normalize coordinates to [0.0, 1.0]</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> normalized <span class="op">=</span> <span class="op">(</span>point <span class="op">-</span> sceneMin<span class="op">)</span> <span class="op">/</span> <span class="op">(</span>sceneMax <span class="op">-</span> sceneMin<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Clamp to ensure values remain within range</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    normalized <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>normalized<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Scale to 10-bit integer range [0, 1023]</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">uvec3</span><span class="op">(</span>normalized <span class="op">*</span> <span class="fl">1023.0</span><span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="expanding-bits-via-dilation">Expanding Bits via Dilation</h2>
+<p>To interleave the bits of <span class="math inline">\(x\)</span>,
+<span class="math inline">\(y\)</span>, and <span
+class="math inline">\(z\)</span>, each coordinate's bits must first be
+spread out so that every bit is separated by two zeros. A 10-bit integer
+can be dilated into a 30-bit integer using a sequence of bit shifts and
+masks:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="fu">expandBits</span><span class="op">(</span><span class="dt">uint</span> v<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> <span class="op">(</span>v <span class="op">*</span> <span class="bn">0x00010001</span>u<span class="op">)</span> <span class="op">&amp;</span> <span class="bn">0xFF0000FF</span>u<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> <span class="op">(</span>v <span class="op">*</span> <span class="bn">0x00000101</span>u<span class="op">)</span> <span class="op">&amp;</span> <span class="bn">0x0F00F00F</span>u<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> <span class="op">(</span>v <span class="op">*</span> <span class="bn">0x00000011</span>u<span class="op">)</span> <span class="op">&amp;</span> <span class="bn">0xC30C30C3</span>u<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> <span class="op">(</span>v <span class="op">*</span> <span class="bn">0x00000005</span>u<span class="op">)</span> <span class="op">&amp;</span> <span class="bn">0x49249249</span>u<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> v<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Alternatively, standard shift-or bit manipulation can be used without
+multiplication:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="fu">expandBits</span><span class="op">(</span><span class="dt">uint</span> v<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> <span class="op">(</span>v <span class="op">|</span> <span class="op">(</span>v <span class="op">&lt;&lt;</span> <span class="dv">16</span><span class="op">))</span> <span class="op">&amp;</span> <span class="bn">0x030000FF</span>u<span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> <span class="op">(</span>v <span class="op">|</span> <span class="op">(</span>v <span class="op">&lt;&lt;</span>  <span class="dv">8</span><span class="op">))</span> <span class="op">&amp;</span> <span class="bn">0x0300F00F</span>u<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> <span class="op">(</span>v <span class="op">|</span> <span class="op">(</span>v <span class="op">&lt;&lt;</span>  <span class="dv">4</span><span class="op">))</span> <span class="op">&amp;</span> <span class="bn">0x030C30C3</span>u<span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> <span class="op">(</span>v <span class="op">|</span> <span class="op">(</span>v <span class="op">&lt;&lt;</span>  <span class="dv">2</span><span class="op">))</span> <span class="op">&amp;</span> <span class="bn">0x09249249</span>u<span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> v<span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Both methods insert two zeros between each of the lowest 10 bits of
+<code>v</code>.</p>
+<h2 id="interleaving-coordinates-into-a-3d-morton-code">Interleaving
+Coordinates into a 3D Morton Code</h2>
+<p>Once each axis coordinate is dilated, the final 30-bit Morton code is
+generated by shifting the dilated components and combining them with
+bitwise OR operations:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="fu">calculateMorton3D</span><span class="op">(</span><span class="dt">uvec3</span> quantizedPos<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> xx <span class="op">=</span> <span class="fu">expandBits</span><span class="op">(</span>quantizedPos<span class="op">.</span><span class="fu">x</span><span class="op">);</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> yy <span class="op">=</span> <span class="fu">expandBits</span><span class="op">(</span>quantizedPos<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> zz <span class="op">=</span> <span class="fu">expandBits</span><span class="op">(</span>quantizedPos<span class="op">.</span><span class="fu">z</span><span class="op">);</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span>xx <span class="op">&lt;&lt;</span> <span class="dv">2</span><span class="op">)</span> <span class="op">|</span> <span class="op">(</span>yy <span class="op">&lt;&lt;</span> <span class="dv">1</span><span class="op">)</span> <span class="op">|</span> zz<span class="op">;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>In this encoding, bit <span class="math inline">\(3i + 2\)</span>
+belongs to the X coordinate, bit <span class="math inline">\(3i +
+1\)</span> belongs to the Y coordinate, and bit <span
+class="math inline">\(3i\)</span> belongs to the Z coordinate for any
+bit index <span class="math inline">\(i \in [0, 9]\)</span>.</p>
+<h2 id="complete-glsl-compute-implementation">Complete GLSL Compute
+Implementation</h2>
+<p>The full pipeline integrates coordinate normalization, quantization,
+dilation, and interleaving within a compute shader stage:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">64</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Primitive <span class="op">{</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> minBound<span class="op">;</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> maxBound<span class="op">;</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> InputPrimitives <span class="op">{</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    Primitive primitives<span class="op">[];</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">writeonly</span> <span class="kw">buffer</span> OutputMortonCodes <span class="op">{</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> mortonKeys<span class="op">[];</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> u_SceneMin<span class="op">;</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> u_SceneMax<span class="op">;</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">uint</span> u_PrimitiveCount<span class="op">;</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="fu">expandBits</span><span class="op">(</span><span class="dt">uint</span> v<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> <span class="op">(</span>v <span class="op">|</span> <span class="op">(</span>v <span class="op">&lt;&lt;</span> <span class="dv">16</span><span class="op">))</span> <span class="op">&amp;</span> <span class="bn">0x030000FF</span>u<span class="op">;</span></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> <span class="op">(</span>v <span class="op">|</span> <span class="op">(</span>v <span class="op">&lt;&lt;</span>  <span class="dv">8</span><span class="op">))</span> <span class="op">&amp;</span> <span class="bn">0x0300F00F</span>u<span class="op">;</span></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> <span class="op">(</span>v <span class="op">|</span> <span class="op">(</span>v <span class="op">&lt;&lt;</span>  <span class="dv">4</span><span class="op">))</span> <span class="op">&amp;</span> <span class="bn">0x030C30C3</span>u<span class="op">;</span></span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> <span class="op">(</span>v <span class="op">|</span> <span class="op">(</span>v <span class="op">&lt;&lt;</span>  <span class="dv">2</span><span class="op">))</span> <span class="op">&amp;</span> <span class="bn">0x09249249</span>u<span class="op">;</span></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> v<span class="op">;</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="fu">morton3D</span><span class="op">(</span><span class="dt">vec3</span> normalizedPos<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>    normalizedPos <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>normalizedPos<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uvec3</span> i <span class="op">=</span> <span class="dt">uvec3</span><span class="op">(</span>normalizedPos <span class="op">*</span> <span class="fl">1023.0</span><span class="op">);</span></span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span><span class="fu">expandBits</span><span class="op">(</span>i<span class="op">.</span><span class="fu">x</span><span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="dv">2</span><span class="op">)</span> <span class="op">|</span> <span class="op">(</span><span class="fu">expandBits</span><span class="op">(</span>i<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="dv">1</span><span class="op">)</span> <span class="op">|</span> <span class="fu">expandBits</span><span class="op">(</span>i<span class="op">.</span><span class="fu">z</span><span class="op">);</span></span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> <span class="dt">index</span> <span class="op">=</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="dt">index</span> <span class="op">&gt;=</span> u_PrimitiveCount<span class="op">)</span> <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> <span class="dt">centroid</span> <span class="op">=</span> <span class="op">(</span>primitives<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">minBound</span> <span class="op">+</span> primitives<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">maxBound</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> normalizedCentroid <span class="op">=</span> <span class="op">(</span><span class="dt">centroid</span> <span class="op">-</span> u_SceneMin<span class="op">)</span> <span class="op">/</span> <span class="op">(</span>u_SceneMax <span class="op">-</span> u_SceneMin<span class="op">);</span></span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>    mortonKeys<span class="op">[</span><span class="dt">index</span><span class="op">]</span> <span class="op">=</span> <span class="fu">morton3D</span><span class="op">(</span>normalizedCentroid<span class="op">);</span></span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The resulting array of Morton codes can then be passed to a GPU
+sorting pass (such as a parallel Radix Sort) to finalize primitive
+ordering for LBVH hierarchy construction.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

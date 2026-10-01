@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disney Burley Diffuse Model GLSL Implementation - glsl</title>
+    <meta name="description" content="This article provides a technical breakdown and complete GLSL shader implementation of the Disney Burley diffuse BRDF (bidirectional reflectance distribution function). Unlike standard Lambertian reflectance, Brent Burley’s model captures surface rough">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/disney-burley-diffuse-model-glsl-implementation">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Disney Burley Diffuse Model GLSL Implementation - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/disney-burley-diffuse-model-glsl-implementation" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a technical breakdown and complete GLSL shader implementation of the Disney Burley diffuse BRDF (bidirectional reflectance distribution function). Unlike standard Lambertian reflectance, Brent Burley’s model captures surface rough" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="disney-burley-diffuse-model-glsl-implementation">Disney Burley
+Diffuse Model GLSL Implementation</h1>
+<p>This article provides a technical breakdown and complete GLSL shader
+implementation of the Disney Burley diffuse BRDF (bidirectional
+reflectance distribution function). Unlike standard Lambertian
+reflectance, Brent Burley’s model captures surface roughness phenomena,
+notably retro-reflection at grazing angles and edge darkening on smooth
+surfaces. Readers will learn the underlying mathematical formulation and
+how to translate it into an efficient, real-time GLSL fragment
+shader.</p>
+<h3 id="the-mathematics-behind-burley-diffuse">The Mathematics Behind
+Burley Diffuse</h3>
+<p>Standard Lambertian diffuse assumes an ideal matte surface that
+reflects light uniformly in all directions (<span
+class="math inline">\(f_{\text{diffuse}} = \frac{\rho}{\pi}\)</span>).
+However, physical materials with microscopic roughness exhibit
+retro-reflection—microfacets reflect light back along the incident light
+direction, causing brightened silhouettes when grazing angles align.
+Conversely, smooth surfaces exhibit a diffuse Fresnel falloff, where
+diffuse reflectance drops at grazing angles as more energy enters
+specular reflection.</p>
+<p>The Disney Burley diffuse model interpolates between diffuse
+retro-reflection for rough surfaces and diffuse Fresnel falloff for
+smooth surfaces using the Schlick Fresnel approximation.</p>
+<p>The model is defined as:</p>
+<p><span class="math display">\[f_{\text{diffuse}} =
+\frac{\text{baseColor}}{\pi} \cdot F_D(N \cdot L) \cdot F_D(N \cdot
+V)\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(L\)</span> is the normalized light
+vector.</li>
+<li><span class="math inline">\(V\)</span> is the normalized view
+vector.</li>
+<li><span class="math inline">\(N\)</span> is the normalized surface
+normal.</li>
+<li><span class="math inline">\(H = \frac{L + V}{\|L + V\|}\)</span> is
+the normalized half-vector.</li>
+<li><span class="math inline">\(\theta_d\)</span> is the difference
+angle, computed via the dot product <span class="math inline">\(\cos
+\theta_d = L \cdot H = V \cdot H\)</span>.</li>
+</ul>
+<p>The grazing retro-reflection factor <span
+class="math inline">\(F_{D90}\)</span> is determined by linear
+roughness:</p>
+<p><span class="math display">\[F_{D90} = 0.5 + 2 \cdot \text{roughness}
+\cdot (\cos \theta_d)^2\]</span></p>
+<p>Each Fresnel response term is calculated using Schlick's
+approximation with <span class="math inline">\(F_0 = 1\)</span> and
+<span class="math inline">\(F_{90} = F_{D90}\)</span>:</p>
+<p><span class="math display">\[F_D(N \cdot L) = 1 + (F_{D90} - 1)(1 - N
+\cdot L)^5\]</span> <span class="math display">\[F_D(N \cdot V) = 1 +
+(F_{D90} - 1)(1 - N \cdot V)^5\]</span></p>
+<p>When roughness is zero, <span class="math inline">\(F_{D90} =
+0.5\)</span>, producing a reduction in diffuse scattering at grazing
+angles (darkening). When roughness is high, <span
+class="math inline">\(F_{D90} &gt; 1.0\)</span> (up to <span
+class="math inline">\(2.5\)</span>), creating significant brightening at
+grazing angles (retro-reflection).</p>
+<hr />
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>Below is the GLSL function implementing the Disney Burley diffuse
+BRDF. It clamps all dot products to avoid negative illumination
+artifacts and safely handles cases where <span
+class="math inline">\(L\)</span> and <span
+class="math inline">\(V\)</span> oppose each other.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define PI 3.14159265358979323846</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">/**</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"> * Calculates the Disney Burley diffuse response.</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"> *</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param N          World-space surface normal (normalized)</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param V          World-space view vector pointing toward camera (normalized)</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param L          World-space light vector pointing toward light source (normalized)</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param roughness  Linear perceptual roughness [0.0, 1.0]</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param baseColor  Albedo / diffuse color of the material</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co"> * @return           Reflected diffuse radiance</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"> */</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">DisneyBurleyDiffuse</span><span class="op">(</span><span class="dt">vec3</span> N<span class="op">,</span> <span class="dt">vec3</span> V<span class="op">,</span> <span class="dt">vec3</span> L<span class="op">,</span> <span class="dt">float</span> roughness<span class="op">,</span> <span class="dt">vec3</span> baseColor<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Half-vector between view and light directions</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> H <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>L <span class="op">+</span> V<span class="op">);</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute clamped dot products</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotL <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> L<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotV <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> V<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> LdotH <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>L<span class="op">,</span> H<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate the grazing retro-reflection response</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> energyBias <span class="op">=</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> energyFactor <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> energyBias<span class="op">,</span> roughness<span class="op">);</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> Fd90 <span class="op">=</span> energyBias <span class="op">+</span> <span class="fl">2.0</span> <span class="op">*</span> roughness <span class="op">*</span> <span class="op">(</span>LdotH <span class="op">*</span> LdotH<span class="op">);</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Schlick approximations for incident and view angles</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lightScatter <span class="op">=</span> <span class="fl">1.0</span> <span class="op">+</span> <span class="op">(</span>Fd90 <span class="op">-</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> NdotL<span class="op">,</span> <span class="fl">5.0</span><span class="op">);</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> viewScatter  <span class="op">=</span> <span class="fl">1.0</span> <span class="op">+</span> <span class="op">(</span>Fd90 <span class="op">-</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> NdotV<span class="op">,</span> <span class="fl">5.0</span><span class="op">);</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Combined diffuse BRDF</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span>baseColor <span class="op">/</span> PI<span class="op">)</span> <span class="op">*</span> lightScatter <span class="op">*</span> viewScatter<span class="op">;</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<hr />
+<h3 id="integration-in-a-fragment-shader">Integration in a Fragment
+Shader</h3>
+<p>To use the model in a forward lighting pipeline, multiply the
+returned BRDF value by the incident light irradiance (<span
+class="math inline">\(E = \text{lightColor} \cdot (N \cdot
+L)\)</span>):</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Normalization ensures interpolation artifacts do not skew vectors</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> N <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>vNormal<span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> V <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>uCameraPosition <span class="op">-</span> vWorldPos<span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> L <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>uLightPosition <span class="op">-</span> vWorldPos<span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotL <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> L<span class="op">),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute Burley diffuse reflection</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> diffuseBRDF <span class="op">=</span> <span class="fu">DisneyBurleyDiffuse</span><span class="op">(</span>N<span class="op">,</span> V<span class="op">,</span> L<span class="op">,</span> uRoughness<span class="op">,</span> uBaseColor<span class="op">);</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Final diffuse contribution</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> directDiffuse <span class="op">=</span> diffuseBRDF <span class="op">*</span> uLightColor <span class="op">*</span> NdotL<span class="op">;</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>directDiffuse<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="performance-optimization">Performance Optimization</h3>
+<p>The fifth power <code>pow(1.0 - x, 5.0)</code> can be optimized for
+real-time GPUs to reduce arithmetic overhead:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> fL <span class="op">=</span> <span class="fl">1.0</span> <span class="op">-</span> NdotL<span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> fL2 <span class="op">=</span> fL <span class="op">*</span> fL<span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> fL5 <span class="op">=</span> fL2 <span class="op">*</span> fL2 <span class="op">*</span> fL<span class="op">;</span> <span class="co">// Equivalent to pow(1.0 - NdotL, 5.0)</span></span></code></pre></div>
+<p>Applying this algebraic expansion eliminates expensive transcendent
+function calls on mobile or low-power hardware while preserving exact
+visual output.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

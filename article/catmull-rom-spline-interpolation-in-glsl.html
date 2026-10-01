@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catmull-Rom Spline Interpolation in GLSL - glsl</title>
+    <meta name="description" content="This article explains how to evaluate a cubic Catmull-Rom spline across four control points directly inside an OpenGL Shading Language (GLSL) shader. Catmull-Rom splines provide smooth, $C^1$-continuous curves that pass through their internal control poi">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/catmull-rom-spline-interpolation-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Catmull-Rom Spline Interpolation in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/catmull-rom-spline-interpolation-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to evaluate a cubic Catmull-Rom spline across four control points directly inside an OpenGL Shading Language (GLSL) shader. Catmull-Rom splines provide smooth, $C^1$-continuous curves that pass through their internal control poi" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="catmull-rom-spline-interpolation-in-glsl">Catmull-Rom Spline
+Interpolation in GLSL</h1>
+<p>This article explains how to evaluate a cubic Catmull-Rom spline
+across four control points directly inside an OpenGL Shading Language
+(GLSL) shader. Catmull-Rom splines provide smooth, <span
+class="math inline">\(C^1\)</span>-continuous curves that pass through
+their internal control points, making them ideal for camera paths,
+particle trajectories, and smooth texture sampling. Below, you will find
+the mathematical derivation of the spline and an optimized GLSL
+implementation using standard vector operations.</p>
+<h3 id="mathematical-formulation">Mathematical Formulation</h3>
+<p>A cubic Catmull-Rom spline evaluates a point along a segment bounded
+by control points <span class="math inline">\(P_1\)</span> and <span
+class="math inline">\(P_2\)</span>, with control points <span
+class="math inline">\(P_0\)</span> and <span
+class="math inline">\(P_3\)</span> defining the entry and exit tangents.
+The interpolation factor <span class="math inline">\(t\)</span> ranges
+from <span class="math inline">\(0.0\)</span> to <span
+class="math inline">\(1.0\)</span>, where <span class="math inline">\(t
+= 0.0\)</span> returns <span class="math inline">\(P_1\)</span> and
+<span class="math inline">\(t = 1.0\)</span> returns <span
+class="math inline">\(P_2\)</span>.</p>
+<p>The standard uniform Catmull-Rom spline can be expressed as a matrix
+multiplication:</p>
+<p><span class="math display">\[
+P(t) = \frac{1}{2} \begin{bmatrix} 1 &amp; t &amp; t^2 &amp; t^3
+\end{bmatrix}
+\begin{bmatrix}
+0 &amp;  2 &amp;  0 &amp;  0 \\
+-1 &amp;  0 &amp;  1 &amp;  0 \\
+2 &amp; -5 &amp;  4 &amp; -1 \\
+-1 &amp;  3 &amp; -3 &amp;  1
+\end{bmatrix}
+\begin{bmatrix} P_0 \\ P_1 \\ P_2 \\ P_3 \end{bmatrix}
+\]</span></p>
+<p>Expanding this into polynomial coefficients yields:</p>
+<ul>
+<li><span class="math inline">\(a = -P_0 + 3P_1 - 3P_2 +
+P_3\)</span></li>
+<li><span class="math inline">\(b = 2P_0 - 5P_1 + 4P_2 -
+P_3\)</span></li>
+<li><span class="math inline">\(c = -P_0 + P_2\)</span></li>
+<li><span class="math inline">\(d = 2P_1\)</span></li>
+</ul>
+<p>The interpolated position is computed as:</p>
+<p><span class="math display">\[
+P(t) = 0.5 \cdot (d + c \cdot t + b \cdot t^2 + a \cdot t^3)
+\]</span></p>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>Using Horner's rule, the polynomial evaluation requires fewer
+multiplications, minimizing instruction count on the GPU.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Evaluates a cubic Catmull-Rom spline between p1 and p2 using p0 and p3 as tangents.</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">// Parameter t should be normalized in the range [0.0, 1.0].</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">catmullRom</span><span class="op">(</span><span class="dt">vec3</span> p0<span class="op">,</span> <span class="dt">vec3</span> p1<span class="op">,</span> <span class="dt">vec3</span> p2<span class="op">,</span> <span class="dt">vec3</span> p3<span class="op">,</span> <span class="dt">float</span> t<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> a <span class="op">=</span> <span class="op">-</span>p0 <span class="op">+</span> <span class="fl">3.0</span> <span class="op">*</span> p1 <span class="op">-</span> <span class="fl">3.0</span> <span class="op">*</span> p2 <span class="op">+</span> p3<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> b <span class="op">=</span> <span class="fl">2.0</span> <span class="op">*</span> p0 <span class="op">-</span> <span class="fl">5.0</span> <span class="op">*</span> p1 <span class="op">+</span> <span class="fl">4.0</span> <span class="op">*</span> p2 <span class="op">-</span> p3<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> c <span class="op">=</span> <span class="op">-</span>p0 <span class="op">+</span> p2<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> d <span class="op">=</span> <span class="fl">2.0</span> <span class="op">*</span> p1<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fl">0.5</span> <span class="op">*</span> <span class="op">(((</span>a <span class="op">*</span> t <span class="op">+</span> b<span class="op">)</span> <span class="op">*</span> t <span class="op">+</span> c<span class="op">)</span> <span class="op">*</span> t <span class="op">+</span> d<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This function can be overloaded for <code>float</code>,
+<code>vec2</code>, or <code>vec4</code> by changing the component types
+accordingly, as GLSL supports component-wise arithmetic on all vector
+types.</p>
+<h3 id="boundary-handling-and-usage">Boundary Handling and Usage</h3>
+<p>When using Catmull-Rom splines across a longer sequence of
+points:</p>
+<ol type="1">
+<li><strong>Segment Selection:</strong> To interpolate between point
+<span class="math inline">\(i\)</span> and point <span
+class="math inline">\(i+1\)</span>, pass points <span
+class="math inline">\(i-1\)</span>, <span
+class="math inline">\(i\)</span>, <span
+class="math inline">\(i+1\)</span>, and <span
+class="math inline">\(i+2\)</span> as <span class="math inline">\(P_0,
+P_1, P_2, P_3\)</span>.</li>
+<li><strong>Endpoints:</strong> For the first segment, where <span
+class="math inline">\(P_{-1}\)</span> does not exist, approximate <span
+class="math inline">\(P_0\)</span> using linear extrapolation: <span
+class="math inline">\(P_0 = 2P_1 - P_2\)</span>. Similarly, for the
+final segment, approximate the trailing point as <span
+class="math inline">\(P_3 = 2P_2 - P_1\)</span>.</li>
+<li><strong>Parameter Normalization:</strong> Ensure <span
+class="math inline">\(t\)</span> is clamped using
+<code>clamp(t, 0.0, 1.0)</code> to avoid overshooting outside the
+segment bounds.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

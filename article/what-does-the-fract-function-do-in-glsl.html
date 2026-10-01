@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Does the Fract Function Do in GLSL? - glsl</title>
+    <meta name="description" content="The fract function in the OpenGL Shading Language (GLSL) computes the fractional part of a floating-point scalar or vector. Mathematically, it evaluates $x - \lfloor x \rfloor$, where $\lfloor x \rfloor$ represents the floor function. Because it relies o">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-does-the-fract-function-do-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Does the Fract Function Do in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-does-the-fract-function-do-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The fract function in the OpenGL Shading Language (GLSL) computes the fractional part of a floating-point scalar or vector. Mathematically, it evaluates $x - \lfloor x \rfloor$, where $\lfloor x \rfloor$ represents the floor function. Because it relies o" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-does-the-fract-function-do-in-glsl">What Does the Fract
+Function Do in GLSL?</h1>
+<p>The <code>fract</code> function in the OpenGL Shading Language (GLSL)
+computes the fractional part of a floating-point scalar or vector.
+Mathematically, it evaluates <span class="math inline">\(x - \lfloor x
+\rfloor\)</span>, where <span class="math inline">\(\lfloor x
+\rfloor\)</span> represents the floor function. Because it relies on the
+floor operation rather than simple truncation, <code>fract</code>
+produces a strictly periodic sawtooth wave on the half-open interval
+<span class="math inline">\([0, 1)\)</span> for any real input, making
+it essential for UV manipulation, repeating patterns, and procedural
+shaders.</p>
+<h2 id="mathematical-definition">Mathematical Definition</h2>
+<p>The OpenGL Shading Language specification explicitly defines the
+function as:</p>
+<p><span class="math display">\[\operatorname{fract}(x) = x -
+\operatorname{floor}(x)\]</span></p>
+<p>The <code>floor</code> function returns the greatest integer less
+than or equal to <span class="math inline">\(x\)</span>. Consequently,
+<code>fract</code> subtracts that base integer from the original value
+to isolate the remaining fraction.</p>
+<h3 id="positive-values">Positive Values</h3>
+<p>For positive numbers, <code>fract</code> behaves identically to
+stripping away the whole number portion:</p>
+<ul>
+<li><span class="math inline">\(\operatorname{fract}(3.75) = 3.75 -
+\operatorname{floor}(3.75) = 3.75 - 3.0 = 0.75\)</span></li>
+<li><span class="math inline">\(\operatorname{fract}(1.0) = 1.0 -
+\operatorname{floor}(1.0) = 1.0 - 1.0 = 0.0\)</span></li>
+</ul>
+<h3 id="negative-values">Negative Values</h3>
+<p>For negative inputs, the behavior differs from standard decimal
+truncation because <span
+class="math inline">\(\operatorname{floor}(x)\)</span> rounds toward
+negative infinity rather than toward zero:</p>
+<ul>
+<li><span class="math inline">\(\operatorname{fract}(-0.25) = -0.25 -
+\operatorname{floor}(-0.25) = -0.25 - (-1.0) = 0.75\)</span></li>
+<li><span class="math inline">\(\operatorname{fract}(-2.8) = -2.8 -
+\operatorname{floor}(-2.8) = -2.8 - (-3.0) = 0.2\)</span></li>
+</ul>
+<p>Because <span class="math inline">\(\operatorname{floor}(x)\)</span>
+always satisfies <span class="math inline">\(\operatorname{floor}(x) \le
+x &lt; \operatorname{floor}(x) + 1\)</span>, the result of <span
+class="math inline">\(\operatorname{fract}(x)\)</span> is guaranteed to
+lie within the non-negative range:</p>
+<p><span class="math display">\[0 \le \operatorname{fract}(x) &lt;
+1\]</span></p>
+<h2 id="vector-support-and-component-wise-execution">Vector Support and
+Component-Wise Execution</h2>
+<p>GLSL implements <code>fract</code> as an overloaded intrinsic
+function supporting multiple floating-point types:</p>
+<ul>
+<li><code>float fract(float x)</code></li>
+<li><code>vec2 fract(vec2 x)</code></li>
+<li><code>vec3 fract(vec3 x)</code></li>
+<li><code>vec4 fract(vec4 x)</code></li>
+</ul>
+<p>When applied to vector types (<code>vec2</code>, <code>vec3</code>,
+or <code>vec4</code>), the operation executes independently on each
+individual component:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> uv <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">3.2</span><span class="op">,</span> <span class="op">-</span><span class="fl">1.7</span><span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> f <span class="op">=</span> <span class="bu">fract</span><span class="op">(</span>uv<span class="op">);</span> <span class="co">// f becomes vec2(0.2, 0.3)</span></span></code></pre></div>
+<h2 id="common-applications-in-shaders">Common Applications in
+Shaders</h2>
+<h3 id="texture-tiling-and-uv-grids">Texture Tiling and UV Grids</h3>
+<p>Multiplying UV coordinates by a scalar and passing the result to
+<code>fract</code> creates repeating coordinate spaces across a single
+surface, dividing geometry into localized <span
+class="math inline">\([0, 1)\)</span> cells:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> tiledUV <span class="op">=</span> <span class="bu">fract</span><span class="op">(</span>v_uv <span class="op">*</span> <span class="fl">4.0</span><span class="op">);</span> <span class="co">// Creates a 4x4 repeating grid</span></span></code></pre></div>
+<h3 id="sawtooth-waveforms-and-timers">Sawtooth Waveforms and
+Timers</h3>
+<p>Passing a linearly increasing time variable into <code>fract</code>
+generates a standard sawtooth wave oscillating between <span
+class="math inline">\(0.0\)</span> and <span
+class="math inline">\(1.0\)</span>, commonly used for looped animations,
+blinking effects, and periodic visual transitions.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

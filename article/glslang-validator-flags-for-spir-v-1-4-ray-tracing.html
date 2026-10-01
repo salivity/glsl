@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>glslangValidator Flags for SPIR-V 1.4 Ray Tracing - glsl</title>
+    <meta name="description" content="Compiling GLSL ray tracing shaders into SPIR-V 1.4 requires specific command-line flags when using glslangValidator. This guide outlines the exact flags needed to target SPIR-V 1.4, explains alternative target environment options, and clarifies why the S">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glslang-validator-flags-for-spir-v-1-4-ray-tracing">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="glslangValidator Flags for SPIR-V 1.4 Ray Tracing - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glslang-validator-flags-for-spir-v-1-4-ray-tracing" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Compiling GLSL ray tracing shaders into SPIR-V 1.4 requires specific command-line flags when using glslangValidator. This guide outlines the exact flags needed to target SPIR-V 1.4, explains alternative target environment options, and clarifies why the S" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="glslangvalidator-flags-for-spir-v-14-ray-tracing">glslangValidator
+Flags for SPIR-V 1.4 Ray Tracing</h1>
+<p>Compiling GLSL ray tracing shaders into SPIR-V 1.4 requires specific
+command-line flags when using <code>glslangValidator</code>. This guide
+outlines the exact flags needed to target SPIR-V 1.4, explains
+alternative target environment options, and clarifies why the SPIR-V 1.4
+specification is mandatory for modern Vulkan ray tracing pipelines
+(<code>VK_KHR_ray_tracing_pipeline</code>).</p>
+<h3 id="the-required-command-line-flags">The Required Command-Line
+Flags</h3>
+<p>To emit SPIR-V 1.4 code from a GLSL ray tracing shader, pass the
+<code>-V</code> flag alongside the <code>--target-env</code> argument
+set to <code>spirv1.4</code>:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">glslangValidator</span> <span class="at">-V</span> <span class="at">--target-env</span> spirv1.4 <span class="at">-o</span> shader.spv shader.rgen</span></code></pre></div>
+<ul>
+<li><strong><code>-V</code></strong>: Instructs
+<code>glslangValidator</code> to compile the shader into a binary SPIR-V
+file rather than simply validating the GLSL source code.</li>
+<li><strong><code>--target-env spirv1.4</code></strong>: Explicitly
+targets the SPIR-V 1.4 specification.</li>
+</ul>
+<h3 id="vulkan-environment-target-alternatives">Vulkan Environment
+Target Alternatives</h3>
+<p>In Vulkan applications, you can also target the Vulkan environment
+directly instead of targeting the raw SPIR-V version:</p>
+<ul>
+<li><strong><code>--target-env vulkan1.1spirv1.4</code></strong>: Used
+if your application runs on Vulkan 1.1 with the
+<code>VK_KHR_ray_tracing_pipeline</code> or
+<code>VK_KHR_spirv_1_4</code> extensions enabled.</li>
+<li><strong><code>--target-env vulkan1.2</code></strong>: Vulkan 1.2
+incorporates SPIR-V 1.5 by default. Because SPIR-V is
+backward-compatible, targeting Vulkan 1.2 natively satisfies and exceeds
+the SPIR-V 1.4 requirement for ray tracing:</li>
+</ul>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">glslangValidator</span> <span class="at">-V</span> <span class="at">--target-env</span> vulkan1.2 <span class="at">-o</span> shader.spv shader.rgen</span></code></pre></div>
+<h3 id="why-ray-tracing-requires-spir-v-14">Why Ray Tracing Requires
+SPIR-V 1.4</h3>
+<p>The Vulkan KHR ray tracing extensions
+(<code>GL_EXT_ray_tracing</code>) require SPIR-V 1.4 or higher due to
+how variables are passed between ray tracing stages.</p>
+<p>In SPIR-V 1.3 and earlier, only input and output storage classes
+(<code>Input</code> and <code>Output</code>) were listed in the entry
+point interface. SPIR-V 1.4 changed the interface rules so that all
+global variables accessed by an entry point—including ray tracing
+storage classes like <code>RayPayloadKHR</code>,
+<code>IncomingRayPayloadKHR</code>, <code>HitAttributeKHR</code>, and
+uniform or storage buffers—must be declared in the entry point’s
+interface list. Without the <code>--target-env spirv1.4</code> (or
+newer) flag, compilation will fail with errors indicating that ray
+tracing features are incompatible with the target SPIR-V version.</p>
+<h3 id="handling-shader-extensions">Handling Shader Extensions</h3>
+<p><code>glslangValidator</code> automatically detects the shader stage
+based on standard file extensions:</p>
+<ul>
+<li><code>.rgen</code>: Ray Generation</li>
+<li><code>.rint</code>: Intersection</li>
+<li><code>.rahit</code>: Any-Hit</li>
+<li><code>.rchit</code>: Closest-Hit</li>
+<li><code>.rmiss</code>: Miss</li>
+<li><code>.rcall</code>: Callable</li>
+</ul>
+<p>If your shader files use a custom extension (such as
+<code>.glsl</code>), explicitly define the shader stage using the
+<code>-S</code> flag:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">glslangValidator</span> <span class="at">-V</span> <span class="at">--target-env</span> spirv1.4 <span class="at">-S</span> rgen <span class="at">-o</span> rgen.spv custom_shader_name.glsl</span></code></pre></div></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

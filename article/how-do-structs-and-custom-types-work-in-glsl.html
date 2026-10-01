@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Do Structs and Custom Types Work in GLSL? - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), structures allow developers to group multiple variables of different types into a single user-defined composite data type. This article explores how to declare structs, instantiate them using constructors, pass them thr">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-do-structs-and-custom-types-work-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Do Structs and Custom Types Work in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-do-structs-and-custom-types-work-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), structures allow developers to group multiple variables of different types into a single user-defined composite data type. This article explores how to declare structs, instantiate them using constructors, pass them thr" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-do-structs-and-custom-types-work-in-glsl">How Do Structs and
+Custom Types Work in GLSL?</h1>
+<p>In OpenGL Shading Language (GLSL), structures allow developers to
+group multiple variables of different types into a single user-defined
+composite data type. This article explores how to declare structs,
+instantiate them using constructors, pass them through shader functions
+and interface blocks, and manage their layout and performance
+constraints within the rendering pipeline.</p>
+<h2 id="declaring-structs-and-custom-types">Declaring Structs and Custom
+Types</h2>
+<p>A structure in GLSL is declared using the <code>struct</code>
+keyword, followed by the type name and a block defining member
+variables. Struct members can include basic scalar types (such as
+<code>float</code>, <code>int</code>, <code>bool</code>), vector and
+matrix types (such as <code>vec3</code>, <code>mat4</code>), fixed-size
+arrays, and other previously defined struct types.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Light <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> position<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> color<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> intensity<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> radius<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>You can define a struct globally or inside a function, though global
+definitions are standard when sharing types across multiple shader
+functions. Struct declarations can also declare variable instances
+immediately after the closing brace:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Material <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> ambient<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> diffuse<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> specular<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> shininess<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> primaryMaterial<span class="op">;</span></span></code></pre></div>
+<h2 id="instantiation-and-constructors">Instantiation and
+Constructors</h2>
+<p>GLSL automatically creates a constructor for every declared struct.
+The constructor takes the exact name of the struct and expects arguments
+for every field in the exact order they were declared.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Constructing an instance of Light</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>Light mainLight <span class="op">=</span> <span class="fu">Light</span><span class="op">(</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">10.0</span><span class="op">,</span> <span class="fl">5.0</span><span class="op">),</span> <span class="co">// position</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.95</span><span class="op">,</span> <span class="fl">0.8</span><span class="op">),</span> <span class="co">// color</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="fl">2.5</span><span class="op">,</span>                  <span class="co">// intensity</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="fl">50.0</span>                  <span class="co">// radius</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<p>Accessing and modifying members uses the standard dot operator
+(<code>.</code>):</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>mainLight<span class="op">.</span><span class="fu">intensity</span> <span class="op">=</span> <span class="fl">3.0</span><span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> lightDir <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>mainLight<span class="op">.</span><span class="fu">position</span> <span class="op">-</span> fragPosition<span class="op">);</span></span></code></pre></div>
+<p>GLSL does not support default values inside the struct definition, so
+every field must be supplied when using the constructor.</p>
+<h2 id="structs-in-functions-and-shading-logic">Structs in Functions and
+Shading Logic</h2>
+<p>Structs can serve as parameter types and return types for
+user-defined functions. By default, structs are passed by value, but
+GLSL parameter qualifiers (<code>in</code>, <code>out</code>,
+<code>inout</code>) dictate how data flows into and out of
+functions.</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">calculateDirectLight</span><span class="op">(</span><span class="dt">in</span> Light light<span class="op">,</span> <span class="dt">in</span> Material mat<span class="op">,</span> <span class="dt">in</span> <span class="dt">vec3</span> normal<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> nDotL <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>normal<span class="op">,</span> <span class="bu">normalize</span><span class="op">(</span>light<span class="op">.</span><span class="fu">position</span><span class="op">)),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> mat<span class="op">.</span><span class="fu">diffuse</span> <span class="op">*</span> light<span class="op">.</span><span class="fu">color</span> <span class="op">*</span> <span class="op">(</span>nDotL <span class="op">*</span> light<span class="op">.</span><span class="fu">intensity</span><span class="op">);</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Passing large structs by value can impact register usage in GPU
+threads, so grouping only closely related attributes is best
+practice.</p>
+<h2 id="using-structs-in-uniforms-and-interface-blocks">Using Structs in
+Uniforms and Interface Blocks</h2>
+<p>Custom types are frequently used to organize uniform inputs, keeping
+related state together:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> Material uMaterial<span class="op">;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> Light uLights<span class="op">[</span><span class="dv">4</span><span class="op">];</span></span></code></pre></div>
+<p>When using structs inside Uniform Buffer Objects (UBOs) or Shader
+Storage Buffer Objects (SSBOs), memory layout rules (such as
+<code>std140</code> or <code>std430</code>) govern byte offsets and
+padding:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std140</span><span class="op">)</span> <span class="kw">uniform</span> LightingBlock <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    Light directionalLight<span class="op">;</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    Light pointLights<span class="op">[</span><span class="dv">8</span><span class="op">];</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> activeLightCount<span class="op">;</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>In <code>std140</code>, struct members are aligned according to base
+alignment rules, and the entire struct is padded to a multiple of 16
+bytes (the size of a <code>vec4</code>). Understanding these alignment
+rules ensures memory matches between the host CPU application and the
+GLSL shader.</p>
+<h2 id="nesting-and-limitations">Nesting and Limitations</h2>
+<p>GLSL supports nesting one struct inside another, enabling complex
+hierarchical data models:</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Surface <span class="op">{</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> worldPos<span class="op">;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> normal<span class="op">;</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    Material material<span class="op">;</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>However, GLSL structs are strictly data containers and differ from
+object-oriented classes:</p>
+<ul>
+<li><strong>No Member Functions:</strong> Structs cannot contain
+methods, member functions, or custom constructor logic.</li>
+<li><strong>No Inheritance:</strong> Polymorphism, inheritance, and
+access specifiers (such as <code>public</code> or <code>private</code>)
+do not exist in GLSL.</li>
+<li><strong>No Dynamic Memory:</strong> Structs cannot contain pointers,
+dynamic arrays, or references.</li>
+<li><strong>Equality Comparisons:</strong> Structs of the same type can
+be compared using <code>==</code> and <code>!=</code> if all component
+types support equality comparison, but component-wise arithmetic cannot
+be performed on entire structs simultaneously without custom
+functions.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

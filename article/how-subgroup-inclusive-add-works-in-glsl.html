@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How subgroupInclusiveAdd Works in GLSL - glsl</title>
+    <meta name="description" content="The subgroupInclusiveAdd function in GLSL computes an inclusive prefix sum (also known as an inclusive scan) across all active invocations within a single subgroup. By utilizing low-level hardware communication pathways rather than shared memory or barri">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-subgroup-inclusive-add-works-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How subgroupInclusiveAdd Works in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-subgroup-inclusive-add-works-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The subgroupInclusiveAdd function in GLSL computes an inclusive prefix sum (also known as an inclusive scan) across all active invocations within a single subgroup. By utilizing low-level hardware communication pathways rather than shared memory or barri" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-subgroupinclusiveadd-works-in-glsl">How subgroupInclusiveAdd
+Works in GLSL</h1>
+<p>The <code>subgroupInclusiveAdd</code> function in GLSL computes an
+inclusive prefix sum (also known as an inclusive scan) across all active
+invocations within a single subgroup. By utilizing low-level hardware
+communication pathways rather than shared memory or barrier
+synchronizations, it produces a running total where each lane receives
+the sum of its own value and the values of all preceding active lanes.
+This article explains how GLSL subgroups operate, the mathematical
+definition of an inclusive prefix sum, the low-level hardware mechanisms
+used to pass values between lanes, and how control flow masking impacts
+the result.</p>
+<h2 id="subgroups-and-lane-indexing">Subgroups and Lane Indexing</h2>
+<p>In modern GPU hardware, workgroups are divided into smaller,
+fixed-size batches of threads called subgroups (referred to as warps on
+NVIDIA GPUs or wavefronts on AMD GPUs). Typical subgroup sizes are 32 or
+64 invocations. Within a subgroup, each invocation is assigned a unique
+index accessible through the built-in variable
+<code>gl_SubgroupInvocationID</code>, ranging from <code>0</code> to
+<code>gl_SubgroupSize - 1</code>.</p>
+<p>Because these invocations execute in lockstep on SIMD (Single
+Instruction, Multiple Data) or SIMT (Single Instruction, Multiple
+Threads) processing units, they can exchange data directly via hardware
+registers without reading from or writing to shared memory
+(<code>workgroup</code> memory).</p>
+<h2 id="the-inclusive-prefix-sum-operation">The Inclusive Prefix Sum
+Operation</h2>
+<p>An inclusive prefix sum takes an input value <span
+class="math inline">\(x_i\)</span> from each invocation <span
+class="math inline">\(i\)</span> and computes an output <span
+class="math inline">\(y_i\)</span> that includes the invocation's own
+value:</p>
+<p><span class="math display">\[y_i = \sum_{k=0}^{i} x_k\]</span></p>
+<p>Assuming an active subgroup where four lanes (IDs 0 through 3)
+provide the input values <code>[3, 1, 4, 2]</code>:</p>
+<ul>
+<li><strong>Lane 0:</strong> <span class="math inline">\(3 =
+3\)</span></li>
+<li><strong>Lane 1:</strong> <span class="math inline">\(3 + 1 =
+4\)</span></li>
+<li><strong>Lane 2:</strong> <span class="math inline">\(3 + 1 + 4 =
+8\)</span></li>
+<li><strong>Lane 3:</strong> <span class="math inline">\(3 + 1 + 4 + 2 =
+10\)</span></li>
+</ul>
+<p>The resulting values across the lanes are <code>[3, 4, 8, 10]</code>.
+This differs from <code>subgroupExclusiveAdd</code>, which excludes the
+current lane's value and yields <code>[0, 3, 4, 8]</code>.</p>
+<h2 id="hardware-implementation-via-register-shuffling">Hardware
+Implementation via Register Shuffling</h2>
+<p>Rather than performing a sequential accumulation across lanes in
+linear time (<span class="math inline">\(O(N)\)</span>), GPU hardware
+implements <code>subgroupInclusiveAdd</code> in parallel using register
+shuffle instructions (such as <code>shuffle_up</code> or logarithmic
+reduction networks). This process requires <span
+class="math inline">\(O(\log_2 N)\)</span> steps, where <span
+class="math inline">\(N\)</span> is the subgroup size.</p>
+<p>A typical hardware execution follows the Kogge-Stone algorithm
+pattern across successive clock cycles:</p>
+<ol type="1">
+<li><strong>Step 1 (Offset 1):</strong> Each lane <span
+class="math inline">\(i\)</span> reads the value from lane <span
+class="math inline">\(i - 1\)</span> using cross-lane register shifting.
+If <span class="math inline">\(i \ge 1\)</span>, it adds that value to
+its current register.</li>
+<li><strong>Step 2 (Offset 2):</strong> Each lane <span
+class="math inline">\(i\)</span> reads the accumulated value from lane
+<span class="math inline">\(i - 2\)</span>. If <span
+class="math inline">\(i \ge 2\)</span>, it adds that value to its
+register.</li>
+<li><strong>Step 3 (Offset 4):</strong> Each lane <span
+class="math inline">\(i\)</span> reads from lane <span
+class="math inline">\(i - 4\)</span> and accumulates.</li>
+<li><strong>Subsequent Steps:</strong> The offset doubles in each stage
+(<span class="math inline">\(8, 16, 32\)</span>) until the offset
+exceeds the subgroup size.</li>
+</ol>
+<p>By the end of <span class="math inline">\(\log_2(\text{subgroup
+size})\)</span> steps (e.g., 5 steps for a 32-lane warp), every lane
+holds the correct running total of all preceding lanes and itself.</p>
+<h2 id="inactive-lanes-and-control-flow-masking">Inactive Lanes and
+Control Flow Masking</h2>
+<p>Subgroup operations automatically account for inactive invocations
+caused by divergent branching or partially filled workgroups. The GPU
+tracks execution using an internal bitmask of active lanes.</p>
+<p>When <code>subgroupInclusiveAdd</code> executes:</p>
+<ul>
+<li>Inactive lanes are excluded from the summation.</li>
+<li>The prefix sum only accumulates values from active lanes with a
+<code>gl_SubgroupInvocationID</code> less than or equal to the current
+lane's ID.</li>
+<li>If lane 1 is inactive in the set
+<code>[lane 0: 3, lane 1: inactive, lane 2: 4]</code>, lane 2's
+inclusive sum evaluates to <span class="math inline">\(3 + 4 =
+7\)</span>.</li>
+</ul>
+<h2 id="glsl-usage">GLSL Usage</h2>
+<p>To use <code>subgroupInclusiveAdd</code>, the
+<code>GL_KHR_shader_subgroup_arithmetic</code> extension must be
+supported and enabled in the shader. The function works with signed
+integers, unsigned integers, and floating-point scalars or vectors.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_KHR_shader_subgroup_arithmetic : enable</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">64</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> inputVal <span class="op">=</span> <span class="dv">1</span>u<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Each invocation receives the sum of its value and all lower active lanes</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> runningTotal <span class="op">=</span> <span class="fu">subgroupInclusiveAdd</span><span class="op">(</span>inputVal<span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// runningTotal for Lane 0 = 1, Lane 1 = 2, Lane 2 = 3, etc.</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Because it bypasses the latency of writing to local storage and
+issuing synchronization barriers, <code>subgroupInclusiveAdd</code>
+serves as a primary building block for high-performance stream
+compaction, memory allocation counters, and hierarchical prefix sums
+across large compute buffers.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

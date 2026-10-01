@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>reportIntersectionEXT in GLSL Intersection Shaders - glsl</title>
+    <meta name="description" content="In Vulkan ray tracing pipelines, the reportIntersectionEXT function serves as the bridge between custom procedural geometry intersection logic and the core ray traversal hardware. Used exclusively within GLSL intersection shaders, its primary purpose is">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/report-intersection-ext-in-glsl-intersection-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="reportIntersectionEXT in GLSL Intersection Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/report-intersection-ext-in-glsl-intersection-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In Vulkan ray tracing pipelines, the reportIntersectionEXT function serves as the bridge between custom procedural geometry intersection logic and the core ray traversal hardware. Used exclusively within GLSL intersection shaders, its primary purpose is" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="reportintersectionext-in-glsl-intersection-shaders">reportIntersectionEXT
+in GLSL Intersection Shaders</h1>
+<p>In Vulkan ray tracing pipelines, the
+<code>reportIntersectionEXT</code> function serves as the bridge between
+custom procedural geometry intersection logic and the core ray traversal
+hardware. Used exclusively within GLSL intersection shaders, its primary
+purpose is to report a valid ray-primitive hit back to the ray tracing
+pipeline, providing the hit distance along the ray and a custom hit
+classification identifier.</p>
+<h3 id="why-the-function-is-needed">Why the Function Is Needed</h3>
+<p>While standard ray tracing hardware automatically handles
+intersections for triangle meshes, custom geometries—such as spheres,
+analytical bounding volumes, capsules, or signed distance fields
+(SDFs)—require custom intersection algorithms.</p>
+<p>When a ray intersects the bounding box of a procedural primitive, the
+intersection shader is invoked. The shader performs mathematical tests
+to determine if and where the ray intersects the surface. Once a valid
+intersection is found, the shader must explicitly notify the traversal
+engine. That notification is executed using
+<code>reportIntersectionEXT</code>.</p>
+<h3 id="function-signature-and-parameters">Function Signature and
+Parameters</h3>
+<p>The function signature is defined as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> <span class="fu">reportIntersectionEXT</span><span class="op">(</span><span class="dt">float</span> hitT<span class="op">,</span> <span class="dt">uint</span> hitKind<span class="op">);</span></span></code></pre></div>
+<ul>
+<li><strong><code>hitT</code></strong>: A floating-point value
+representing the parametric distance along the ray where the
+intersection occurred (<span class="math inline">\(P(t) = O + t \cdot
+D\)</span>). This value must lie within the current ray interval defined
+by <code>gl_RayTminEXT</code> and <code>gl_RayTmaxEXT</code>.</li>
+<li><strong><code>hitKind</code></strong>: An unsigned 8-bit integer
+(values 0 to 127 are typically user-defined, while values 128 to 255 are
+reserved for built-in behavior). This identifier is passed along the
+pipeline and can be queried in subsequent any-hit and closest-hit
+shaders using the <code>gl_HitKindEXT</code> built-in variable to
+distinguish between different types of surfaces or intersection
+events.</li>
+</ul>
+<h3 id="return-value-and-pipeline-behavior">Return Value and Pipeline
+Behavior</h3>
+<p>The <code>reportIntersectionEXT</code> function returns a boolean
+value indicating whether the reported intersection was accepted or
+rejected by the traversal engine:</p>
+<ul>
+<li><strong>Returns <code>true</code></strong>: The intersection is
+within the valid range and was accepted. If an any-hit shader is bound,
+it is invoked immediately to evaluate the hit. If the any-hit shader
+does not call <code>ignoreIntersectionEXT()</code>, the current maximum
+ray range (<code>gl_RayTmaxEXT</code>) shrinks to <code>hitT</code>,
+ensuring that future tests only search for closer intersections.</li>
+<li><strong>Returns <code>false</code></strong>: The intersection was
+rejected. This occurs if <code>hitT</code> falls outside the current
+<code>[gl_RayTminEXT, gl_RayTmaxEXT]</code> bounds, if the any-hit
+shader rejected the hit via <code>ignoreIntersectionEXT()</code>, or if
+the ray traversal was terminated early.</li>
+</ul>
+<h3 id="handling-multiple-intersections">Handling Multiple
+Intersections</h3>
+<p>If a ray intersects a procedural object at multiple locations (such
+as the entry and exit points of a sphere), the intersection shader can
+calculate both points and call <code>reportIntersectionEXT</code>
+multiple times. Reporting the closer hit first is standard practice, as
+an accepted hit immediately contracts <code>gl_RayTmaxEXT</code>,
+allowing the pipeline to discard any subsequent potential hits that are
+farther away.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

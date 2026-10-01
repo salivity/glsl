@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Triplanar Normal Blending with Surface Gradients in GLSL - glsl</title>
+    <meta name="description" content="This article explains how to blend triplanar normal maps in GLSL using the surface gradient framework introduced by Morten S. Mikkelsen. Triplanar mapping traditionally suffers from complex tangent space derivations and tangent-basis discontinuities acro">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/triplanar-normal-blending-with-surface-gradients-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Triplanar Normal Blending with Surface Gradients in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/triplanar-normal-blending-with-surface-gradients-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to blend triplanar normal maps in GLSL using the surface gradient framework introduced by Morten S. Mikkelsen. Triplanar mapping traditionally suffers from complex tangent space derivations and tangent-basis discontinuities acro" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="triplanar-normal-blending-with-surface-gradients-in-glsl">Triplanar
+Normal Blending with Surface Gradients in GLSL</h1>
+<p>This article explains how to blend triplanar normal maps in GLSL
+using the surface gradient framework introduced by Morten S. Mikkelsen.
+Triplanar mapping traditionally suffers from complex tangent space
+derivations and tangent-basis discontinuities across projection
+boundaries. By converting tangent-space normal samples into world-space
+surface gradients before blending, you can linearly accumulate normal
+perturbations across all three projection axes without distortion or the
+need for explicit per-vertex tangents, producing a correctly oriented,
+normalized normal vector.</p>
+<hr />
+<h3 id="the-mathematical-formula">The Mathematical Formula</h3>
+<p>The surface gradient framework represents normal perturbations as a
+vector field tangential to the surface. For a given geometric surface
+normal <span class="math inline">\(N\)</span>, the final perturbed
+normal <span class="math inline">\(N_{final}\)</span> is evaluated by
+subtracting the accumulated surface gradient <span
+class="math inline">\(G\)</span> from <span
+class="math inline">\(N\)</span>:</p>
+<p><span class="math display">\[N_{final} = \text{normalize}(N -
+G)\]</span></p>
+<p>For triplanar projection, <span class="math inline">\(G\)</span> is
+the weighted sum of individual surface gradients evaluated on each
+coordinate plane (<span class="math inline">\(X\)</span>, <span
+class="math inline">\(Y\)</span>, and <span
+class="math inline">\(Z\)</span>):</p>
+<p><span class="math display">\[G = w_x G_x + w_y G_y + w_z
+G_z\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(w_x, w_y, w_z\)</span> are blending
+weights derived from the geometric normal (such that <span
+class="math inline">\(w_x + w_y + w_z = 1\)</span>).</li>
+<li><span class="math inline">\(G_i\)</span> is the surface gradient
+contributed by projection plane <span
+class="math inline">\(i\)</span>.</li>
+</ul>
+<p>For any planar mapping defined by tangent vector <span
+class="math inline">\(T\)</span> and bitangent vector <span
+class="math inline">\(B\)</span>, a sampled tangent-space normal
+deviation <span class="math inline">\((n_x, n_y, n_z)\)</span> yields a
+surface gradient:</p>
+<p><span class="math display">\[G_i = \frac{n_x T_\perp + n_y
+B_\perp}{n_z}\]</span></p>
+<p>where <span class="math inline">\(T_\perp\)</span> and <span
+class="math inline">\(B_\perp\)</span> are the surface projections of
+the planar coordinate axes:</p>
+<p><span class="math display">\[T_\perp = T - (T \cdot N)N\]</span>
+<span class="math display">\[B_\perp = B - (B \cdot N)N\]</span></p>
+<p>When working directly with standard unit normal maps where
+perturbations are small, the division by <span
+class="math inline">\(n_z\)</span> is often omitted or simplified to
+<span class="math inline">\(n_x T_\perp + n_y B_\perp\)</span>.</p>
+<hr />
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>Below is the complete GLSL function evaluating triplanar normal
+mapping using surface gradients:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Project a planar direction onto the surface plane defined by geometric normal N</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">projectOntoSurface</span><span class="op">(</span><span class="dt">vec3</span> axis<span class="op">,</span> <span class="dt">vec3</span> N<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> axis <span class="op">-</span> <span class="bu">dot</span><span class="op">(</span>axis<span class="op">,</span> N<span class="op">)</span> <span class="op">*</span> N<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Computes a surface gradient for an individual projection plane</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">surfGradPlane</span><span class="op">(</span><span class="dt">vec3</span> tsNormal<span class="op">,</span> <span class="dt">vec3</span> T<span class="op">,</span> <span class="dt">vec3</span> B<span class="op">,</span> <span class="dt">vec3</span> N<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> T_perp <span class="op">=</span> <span class="fu">projectOntoSurface</span><span class="op">(</span>T<span class="op">,</span> N<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> B_perp <span class="op">=</span> <span class="fu">projectOntoSurface</span><span class="op">(</span>B<span class="op">,</span> N<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// tsNormal is assumed to be unpacked to the [-1, 1] range</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span>tsNormal<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> T_perp <span class="op">+</span> tsNormal<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> B_perp<span class="op">)</span> <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>tsNormal<span class="op">.</span><span class="fu">z</span><span class="op">,</span> <span class="fl">1e-4</span><span class="op">);</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="co">// Evaluates the blended triplanar normal</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">evaluateTriplanarNormal</span><span class="op">(</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> worldPos<span class="op">,</span> </span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> geomNormal<span class="op">,</span> </span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">sampler2D</span> normalMap<span class="op">,</span> </span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> uvScale<span class="op">,</span> </span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> blendSharpness</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> N <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>geomNormal<span class="op">);</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate blending weights</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> weights <span class="op">=</span> <span class="bu">pow</span><span class="op">(</span><span class="bu">abs</span><span class="op">(</span>N<span class="op">),</span> <span class="dt">vec3</span><span class="op">(</span>blendSharpness<span class="op">));</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    weights <span class="op">/=</span> <span class="op">(</span>weights<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> weights<span class="op">.</span><span class="fu">y</span> <span class="op">+</span> weights<span class="op">.</span><span class="fu">z</span><span class="op">);</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Projection UV coordinates</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> uvX <span class="op">=</span> worldPos<span class="op">.</span><span class="fu">zy</span> <span class="op">*</span> uvScale<span class="op">;</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> uvY <span class="op">=</span> worldPos<span class="op">.</span><span class="fu">xz</span> <span class="op">*</span> uvScale<span class="op">;</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> uvZ <span class="op">=</span> worldPos<span class="op">.</span><span class="fu">xy</span> <span class="op">*</span> uvScale<span class="op">;</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Sample normal maps (tangent-space vectors unpacked to [-1, 1])</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> tNormalX <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>normalMap<span class="op">,</span> uvX<span class="op">).</span><span class="fu">xyz</span> <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> tNormalY <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>normalMap<span class="op">,</span> uvY<span class="op">).</span><span class="fu">xyz</span> <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> tNormalZ <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>normalMap<span class="op">,</span> uvZ<span class="op">).</span><span class="fu">xyz</span> <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Account for projection orientation</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    tNormalX<span class="op">.</span><span class="fu">x</span> <span class="op">*=</span> <span class="bu">sign</span><span class="op">(</span>N<span class="op">.</span><span class="fu">x</span><span class="op">);</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    tNormalY<span class="op">.</span><span class="fu">x</span> <span class="op">*=</span> <span class="bu">sign</span><span class="op">(</span>N<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>    tNormalZ<span class="op">.</span><span class="fu">x</span> <span class="op">*=</span> <span class="op">-</span><span class="bu">sign</span><span class="op">(</span>N<span class="op">.</span><span class="fu">z</span><span class="op">);</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Define planar tangent/bitangent axes</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    <span class="co">// X projection (ZY plane): T = (0, 0, 1), B = (0, 1, 0)</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> G_x <span class="op">=</span> <span class="fu">surfGradPlane</span><span class="op">(</span>tNormalX<span class="op">,</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">),</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">),</span> N<span class="op">);</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Y projection (XZ plane): T = (1, 0, 0), B = (0, 0, 1)</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> G_y <span class="op">=</span> <span class="fu">surfGradPlane</span><span class="op">(</span>tNormalY<span class="op">,</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">),</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">),</span> N<span class="op">);</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Z projection (XY plane): T = (-1, 0, 0), B = (0, 1, 0)</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> G_z <span class="op">=</span> <span class="fu">surfGradPlane</span><span class="op">(</span>tNormalZ<span class="op">,</span> <span class="dt">vec3</span><span class="op">(-</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">),</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">),</span> N<span class="op">);</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Accumulate surface gradients linearly</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> G <span class="op">=</span> weights<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> G_x <span class="op">+</span> weights<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> G_y <span class="op">+</span> weights<span class="op">.</span><span class="fu">z</span> <span class="op">*</span> G_z<span class="op">;</span></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Resolve final perturbed normal</span></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">normalize</span><span class="op">(</span>N <span class="op">-</span> G<span class="op">);</span></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="advantages-of-the-surface-gradient-formulation">Advantages of
+the Surface Gradient Formulation</h3>
+<ol type="1">
+<li><strong>Linear Additivity:</strong> Because surface gradients reside
+in the common tangent space of the surface rather than three arbitrary
+local spaces, linear combinations (<span class="math inline">\(w_x G_x +
+w_y G_y + w_z G_z\)</span>) preserve correct slope and direction without
+renormalization until the final step.</li>
+<li><strong>Tangent-Free:</strong> Mesh tangent vectors (<span
+class="math inline">\(T\)</span>) and bitangents (<span
+class="math inline">\(B\)</span>) do not need to be exported or
+interpolated across vertices.</li>
+<li><strong>No Matrix Inversions:</strong> Avoids transforming normals
+between tangent space and world space repeatedly, eliminating artifacts
+caused by non-orthogonal tangent bases.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL std140 Layout Padding Rules for vec3 - glsl</title>
+    <meta name="description" content="Understanding the memory layout of uniform buffer objects is critical for preventing subtle data alignment bugs between host code and shaders. In OpenGL Shading Language (GLSL), the std140 layout standard enforces explicit sizing and alignment rules for">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-std-140-layout-padding-rules-for-vec-3">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL std140 Layout Padding Rules for vec3 - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-std-140-layout-padding-rules-for-vec-3" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Understanding the memory layout of uniform buffer objects is critical for preventing subtle data alignment bugs between host code and shaders. In OpenGL Shading Language (GLSL), the std140 layout standard enforces explicit sizing and alignment rules for" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-std140-layout-padding-rules-for-vec3">GLSL std140 Layout
+Padding Rules for vec3</h1>
+<p>Understanding the memory layout of uniform buffer objects is critical
+for preventing subtle data alignment bugs between host code and shaders.
+In OpenGL Shading Language (GLSL), the <code>std140</code> layout
+standard enforces explicit sizing and alignment rules for all uniform
+block members. This article details the specific padding and alignment
+behavior applied to the three-component floating-point vector
+(<code>vec3</code>) under the <code>std140</code> specification.</p>
+<h2 id="the-base-alignment-rule-for-vec3">The Base Alignment Rule for
+vec3</h2>
+<p>According to the OpenGL specification for <code>std140</code>,
+members of a uniform block are aligned according to their base
+alignment:</p>
+<ul>
+<li>A scalar (e.g., <code>float</code>, <code>int</code>,
+<code>uint</code>) has a base alignment of 4 bytes.</li>
+<li>A two-component vector (<code>vec2</code>) has a base alignment of 8
+bytes.</li>
+<li>A three-component vector (<code>vec3</code>) has a base alignment of
+16 bytes.</li>
+<li>A four-component vector (<code>vec4</code>) has a base alignment of
+16 bytes.</li>
+</ul>
+<p>Even though a <code>vec3</code> only occupies 12 bytes of active data
+(three 32-bit floats), its base alignment is rounded up to 16
+bytes—identical to the base alignment of a <code>vec4</code>.</p>
+<h2 id="offset-and-boundary-placement">Offset and Boundary
+Placement</h2>
+<p>Because the base alignment of a <code>vec3</code> is 16 bytes, any
+<code>vec3</code> declared inside a <code>std140</code> uniform block
+must begin at an offset that is an exact multiple of 16 bytes.</p>
+<p>If preceding data does not cleanly end on a 16-byte boundary, the
+compiler automatically inserts padding bytes immediately before the
+<code>vec3</code> to push its starting offset to the next 16-byte
+multiple.</p>
+<h3 id="example-alignment-padding-before-vec3">Example: Alignment
+Padding Before vec3</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">std140</span><span class="op">)</span> <span class="kw">uniform</span> ExampleBlock <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a<span class="op">;</span>    <span class="co">// Offset: 0, Size: 4 bytes</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>                <span class="co">// Padding: 12 bytes (offsets 4 to 15)</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> b<span class="op">;</span>     <span class="co">// Offset: 16, Size: 12 bytes (offsets 16 to 27)</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>In this example, 12 bytes of padding are placed after
+<code>float a</code> so that <code>vec3 b</code> can align to byte
+offset 16.</p>
+<h2 id="trailing-padding-and-packing">Trailing Padding and Packing</h2>
+<p>While a <code>vec3</code> aligns to 16 bytes, its raw size remains 12
+bytes. If another variable with a smaller alignment requirement follows
+the <code>vec3</code>, it can occupy the remaining 4 bytes of that
+16-byte chunk, provided its alignment constraints are satisfied.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">std140</span><span class="op">)</span> <span class="kw">uniform</span> PackedExample <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> a<span class="op">;</span>     <span class="co">// Offset: 0, Size: 12 bytes (offsets 0 to 11)</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> b<span class="op">;</span>    <span class="co">// Offset: 12, Size: 4 bytes (offsets 12 to 15)</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> c<span class="op">;</span>     <span class="co">// Offset: 16, Size: 16 bytes (offsets 16 to 31)</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>Because <code>float b</code> requires only 4-byte alignment, it fits
+directly into offset 12 without additional padding. However, if another
+<code>vec3</code> or <code>vec4</code> follows <code>vec3 a</code>, it
+cannot use offset 12 because both types require 16-byte alignment. In
+that case, 4 bytes of implicit padding are added after
+<code>vec3 a</code>.</p>
+<h2 id="arrays-of-vec3">Arrays of vec3</h2>
+<p>Under <code>std140</code>, array elements are always aligned to
+multiples of 16 bytes. Consequently, an array of <code>vec3</code> does
+not tightly pack elements into sequential 12-byte blocks. Instead, each
+element has a stride of 16 bytes:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">std140</span><span class="op">)</span> <span class="kw">uniform</span> ArrayBlock <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> vectors<span class="op">[</span><span class="dv">2</span><span class="op">];</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<ul>
+<li><code>vectors[0]</code>: Offsets 0 to 11 (Offsets 12 to 15 are
+padding)</li>
+<li><code>vectors[1]</code>: Offsets 16 to 27 (Offsets 28 to 31 are
+padding)</li>
+</ul>
+<p>Each <code>vec3</code> in an array wastes 4 bytes as trailing
+padding.</p>
+<h2 id="matching-the-layout-in-c">Matching the Layout in C++</h2>
+<p>When mirroring a GLSL uniform block in host code such as C++, you
+must explicitly account for these padding rules to maintain
+alignment:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> ExampleBlock <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">alignas</span><span class="op">(</span><span class="dv">16</span><span class="op">)</span> <span class="dt">float</span> a<span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">alignas</span><span class="op">(</span><span class="dv">16</span><span class="op">)</span> <span class="dt">float</span> b<span class="op">[</span><span class="dv">3</span><span class="op">];</span> <span class="co">// vec3 represented with 16-byte alignment</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> ArrayBlock <span class="op">{</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">struct</span> Vec3Padded <span class="op">{</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> x<span class="op">,</span> y<span class="op">,</span> z<span class="op">;</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> padding<span class="op">;</span> <span class="co">// Explicitly fills the 4-byte gap to reach 16 bytes</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">};</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    Vec3Padded vectors<span class="op">[</span><span class="dv">2</span><span class="op">];</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>To avoid complex manual padding and potential data mismatches, using
+<code>vec4</code> instead of <code>vec3</code> in <code>std140</code>
+blocks is widely considered a best practice in graphics programming.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

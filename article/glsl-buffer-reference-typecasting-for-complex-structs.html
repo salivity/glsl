@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Buffer Reference Typecasting for Complex Structs - glsl</title>
+    <meta name="description" content="Buffer reference typecasting in GLSL, introduced via the GLEXTbufferreference extension, provides developers with raw, C-like pointer capabilities to reinterpret blocks of GPU memory. By allowing 64-bit addresses to be converted between different buffer">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-buffer-reference-typecasting-for-complex-structs">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Buffer Reference Typecasting for Complex Structs - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-buffer-reference-typecasting-for-complex-structs" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Buffer reference typecasting in GLSL, introduced via the GLEXTbufferreference extension, provides developers with raw, C-like pointer capabilities to reinterpret blocks of GPU memory. By allowing 64-bit addresses to be converted between different buffer" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-buffer-reference-typecasting-for-complex-structs">GLSL
+Buffer Reference Typecasting for Complex Structs</h1>
+<p>Buffer reference typecasting in GLSL, introduced via the
+<code>GL_EXT_buffer_reference</code> extension, provides developers with
+raw, C-like pointer capabilities to reinterpret blocks of GPU memory. By
+allowing 64-bit addresses to be converted between different buffer
+reference types, GLSL enables zero-copy memory reinterpretation between
+complex, heterogenous struct layouts. This article explains the
+underlying mechanics of buffer references, how memory aliasing functions
+across structured data types, and the alignment prerequisites necessary
+to cast complex structs safely.</p>
+<h2 id="understanding-buffer-references">Understanding Buffer
+References</h2>
+<p>Historically, OpenGL and Vulkan required explicit bindings for
+uniform and storage buffers, restricting a specific memory region to a
+single predefined layout. The <code>GL_EXT_buffer_reference</code>
+extension changes this paradigm by turning buffer blocks into
+first-class reference types represented internally as 64-bit memory
+addresses (pointers).</p>
+<p>When a struct is declared with the <code>buffer_reference</code>
+layout qualifier, the compiler does not assign it a fixed descriptor
+binding. Instead, the struct definition serves as a memory template. An
+instance of this reference contains an address pointing to physical
+device memory, and accessing its members generates memory load or store
+instructions relative to that base address.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_buffer_reference : require</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_ARB_gpu_shader_int64 : require</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>buffer_reference<span class="op">,</span> <span class="dt">std430</span><span class="op">)</span> <span class="kw">buffer</span> BasePayload <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> typeIdentifier<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> position<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>buffer_reference<span class="op">,</span> <span class="dt">std430</span><span class="op">)</span> <span class="kw">buffer</span> DetailedPayload <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> typeIdentifier<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> position<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> transformMatrix<span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> attributes<span class="op">[</span><span class="dv">4</span><span class="op">];</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<h2 id="the-mechanism-of-pointer-reinterpretation">The Mechanism of
+Pointer Reinterpretation</h2>
+<p>Because buffer reference handles are interchangeable with 64-bit
+unsigned integers (<code>uint64_t</code>), GLSL supports explicit
+typecasting across disparate struct interfaces. The compiler permits
+casting directly from one buffer reference type to another, or casting
+through an intermediate <code>uint64_t</code>.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Direct reference cast</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>DetailedPayload detailedRef <span class="op">=</span> <span class="fu">DetailedPayload</span><span class="op">(</span>baseRef<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Cast through uint64_t</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>uint64_t rawAddress <span class="op">=</span> <span class="fu">uint64_t</span><span class="op">(</span>baseRef<span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>DetailedPayload detailedRefFromInt <span class="op">=</span> <span class="fu">DetailedPayload</span><span class="op">(</span>rawAddress<span class="op">);</span></span></code></pre></div>
+<p>When this cast occurs, no memory is moved, duplicated, or converted.
+The GPU merely preserves the underlying 64-bit memory address while
+swapping the metadata used to calculate member offsets. Any subsequent
+read or write using the new reference utilizes the memory offsets
+defined by the target struct rather than the source struct.</p>
+<h2 id="memory-alignment-and-layout-parity">Memory Alignment and Layout
+Parity</h2>
+<p>To successfully cast memory between complex structs containing nested
+objects, matrices, or variable arrays, strict layout parity is required.
+By default, shader storage buffers use standard packing rules like
+<code>std430</code> or <code>scalar</code> (enabled via
+<code>GL_EXT_scalar_block_layout</code>).</p>
+<p>When casting between two complex structs:</p>
+<ol type="1">
+<li><strong>Shared Head Members:</strong> If both structs are intended
+to share header information (such as an object type or flag mask), those
+shared members must share identical data types, array dimensions, and
+byte offsets.</li>
+<li><strong>Buffer Reference Alignment:</strong> Buffer reference
+definitions require an explicit alignment argument if the data is
+aligned more strictly than the default type requirement. Declaring
+<code>layout(buffer_reference, buffer_reference_align = 16)</code>
+guarantees the compiler that pointer arithmetic and vectorized reads
+comply with the hardware's vector alignment requirements.</li>
+<li><strong>Internal Padding:</strong> Struct members in GLSL are
+subject to implicit padding rules. For example, a <code>vec3</code>
+followed by a <code>float</code> might pack tightly, but a
+<code>vec3</code> followed by a <code>mat4</code> introduces a 4-byte
+pad in <code>std430</code>. If the destination struct does not mirror
+this padding, fields read after the cast will read misaligned, corrupted
+data.</li>
+</ol>
+<h2 id="implementing-polymorphism-and-custom-allocators">Implementing
+Polymorphism and Custom Allocators</h2>
+<p>Complex memory casting via buffer references is standard practice in
+GPU-driven rendering for implementing polymorphism, scene graphs, and
+custom memory pools.</p>
+<p>Consider an acceleration structure payload where memory holds
+different geometry data:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>buffer_reference<span class="op">,</span> scalar<span class="op">)</span> <span class="kw">buffer</span> MeshNode <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> nodeType<span class="op">;</span> <span class="co">// 0 for Mesh, 1 for Volume</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> indexCount<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    uint64_t vertexBufferAddress<span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    uint64_t indexBufferAddress<span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>buffer_reference<span class="op">,</span> scalar<span class="op">)</span> <span class="kw">buffer</span> VolumeNode <span class="op">{</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> nodeType<span class="op">;</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> density<span class="op">;</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dimensions<span class="op">;</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    uint64_t gridDataAddress<span class="op">;</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">processNode</span><span class="op">(</span>uint64_t nodeAddress<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Read the shared header</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    MeshNode genericNode <span class="op">=</span> <span class="fu">MeshNode</span><span class="op">(</span>nodeAddress<span class="op">);</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>genericNode<span class="op">.</span><span class="fu">nodeType</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Read directly as a MeshNode</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>        <span class="dt">uint</span> count <span class="op">=</span> genericNode<span class="op">.</span><span class="fu">indexCount</span><span class="op">;</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Process mesh...</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Cast memory to VolumeNode</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>        VolumeNode volume <span class="op">=</span> <span class="fu">VolumeNode</span><span class="op">(</span>nodeAddress<span class="op">);</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> density <span class="op">=</span> volume<span class="op">.</span><span class="fu">density</span><span class="op">;</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Process volume...</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>In this architecture, memory acts as an untyped arena. The shader
+reads the discriminator field (<code>nodeType</code>) from the common
+offset, casts the pointer to the appropriate complex struct, and
+immediately reads deep nested structures without runtime serialization
+costs.</p>
+<h2 id="hardware-behavior-and-safety">Hardware Behavior and Safety</h2>
+<p>Buffer reference casting bypasses driver-level boundary checks.
+Unlike traditional Uniform Buffer Objects (UBOs) or Shader Storage
+Buffer Objects (SSBOs), which carry implicit size descriptors configured
+by host APIs, a cast reference functions purely as an unmanaged
+pointer.</p>
+<p>Accessing a cast struct that extends beyond the allocated range of
+the backing memory buffer leads to undefined device behavior, typically
+resulting in device loss (GPU crash) or reading uninitialized memory.
+Ensuring that the backing allocation is large enough to satisfy the
+highest-offset member of the casted struct is strictly the
+responsibility of the developer.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

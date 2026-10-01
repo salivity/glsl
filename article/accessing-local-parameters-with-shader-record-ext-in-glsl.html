@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accessing Local Parameters with shaderRecordEXT in GLSL - glsl</title>
+    <meta name="description" content="The shaderRecordEXT storage qualifier enables Vulkan ray tracing shaders written in GLSL to access local, per-pipeline parameters directly from the Shader Binding Table (SBT). Instead of relying on global descriptor sets or dynamic uniform offsets to bin">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/accessing-local-parameters-with-shader-record-ext-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Accessing Local Parameters with shaderRecordEXT in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/accessing-local-parameters-with-shader-record-ext-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The shaderRecordEXT storage qualifier enables Vulkan ray tracing shaders written in GLSL to access local, per-pipeline parameters directly from the Shader Binding Table (SBT). Instead of relying on global descriptor sets or dynamic uniform offsets to bin" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="accessing-local-parameters-with-shaderrecordext-in-glsl">Accessing
+Local Parameters with shaderRecordEXT in GLSL</h1>
+<p>The <code>shaderRecordEXT</code> storage qualifier enables Vulkan ray
+tracing shaders written in GLSL to access local, per-pipeline parameters
+directly from the Shader Binding Table (SBT). Instead of relying on
+global descriptor sets or dynamic uniform offsets to bind per-geometry
+or per-material resources, developers can embed custom parameter data
+alongside shader identifiers. This article details the mechanics of the
+<code>shaderRecordEXT</code> qualifier, its interaction with the Shader
+Binding Table, how it is declared in GLSL, and the performance and
+architectural advantages it provides in real-time ray tracing
+pipelines.</p>
+<h2 id="the-role-of-the-shader-binding-table-sbt">The Role of the Shader
+Binding Table (SBT)</h2>
+<p>In Vulkan ray tracing (<code>VK_KHR_ray_tracing_pipeline</code>),
+execution relies on the Shader Binding Table. The SBT is a GPU buffer
+organized into sequential records. Each record consists of:</p>
+<ol type="1">
+<li><strong>A Shader Identifier:</strong> A fixed-size handle that
+indicates which shader program (ray generation, miss, closest hit, any
+hit, or callable) the GPU must execute.</li>
+<li><strong>Local Shader Record Data:</strong> An optional block of
+arbitrary user-defined data placed immediately after the shader
+identifier.</li>
+</ol>
+<p>When a ray interacts with geometry, the hardware uses the ray type,
+instance offsets, and geometry index to calculate an exact byte offset
+into the SBT. This offset points to the specific record for that hit or
+event.</p>
+<h2 id="how-shaderrecordext-maps-to-the-sbt">How
+<code>shaderRecordEXT</code> Maps to the SBT</h2>
+<p>The <code>shaderRecordEXT</code> layout qualifier instructs the GLSL
+compiler and SPIR-V generator to bind a buffer block to the local data
+payload within the currently executing SBT entry.</p>
+<p>When the shader executes:</p>
+<ul>
+<li>The ray tracing hardware evaluates the address of the selected SBT
+entry.</li>
+<li>It steps past the shader group handle (sized according to
+<code>shaderGroupHandleSize</code>).</li>
+<li>The base address of the block qualified by
+<code>shaderRecordEXT</code> is automatically resolved to the memory
+location immediately following the handle.</li>
+</ul>
+<p>Because the offset computation is handled directly by ray tracing
+indexing formulas, the shader accesses its local parameters with zero
+descriptor binding overhead.</p>
+<h2 id="declaring-shaderrecordext-in-glsl">Declaring
+<code>shaderRecordEXT</code> in GLSL</h2>
+<p>To use <code>shaderRecordEXT</code>, the
+<code>GL_EXT_ray_tracing</code> extension must be enabled. The qualifier
+is applied to a buffer block declaration:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_ray_tracing : require</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_buffer_reference : require</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>shaderRecordEXT<span class="op">,</span> <span class="dt">std430</span><span class="op">)</span> <span class="kw">buffer</span> ShaderRecord <span class="op">{</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    uint64_t vertexBufferAddress<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    uint64_t indexBufferAddress<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span>     baseColor<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span>      textureIndex<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Access parameters directly as block members</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> materialColor <span class="op">=</span> baseColor<span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span>  diffuseMapID  <span class="op">=</span> textureIndex<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="key-declaration-rules">Key Declaration Rules:</h3>
+<ul>
+<li><strong>Block Type:</strong> Must be declared as a
+<code>buffer</code> block, not a <code>uniform</code> block.</li>
+<li><strong>Memory Layout:</strong> Typically paired with
+<code>std430</code> (or <code>std140</code>) to guarantee deterministic
+byte alignment matching host-side CPU data serialization.</li>
+<li><strong>Read-Only Behavior:</strong> In standard usage, variables
+inside a <code>shaderRecordEXT</code> block are read-only because the
+SBT is populated during scene setup or acceleration structure updates,
+not modified by concurrent ray invocations.</li>
+<li><strong>Single Instance:</strong> Only one
+<code>shaderRecordEXT</code> block is permitted per ray tracing shader
+stage.</li>
+</ul>
+<h2 id="parameter-addressing-and-memory-indexing">Parameter Addressing
+and Memory Indexing</h2>
+<p>When <code>traceRayEXT</code> triggers a closest hit or any hit
+shader, the SBT address for the record is calculated internally as:</p>
+<p><span class="math display">\[\text{Address} = \text{SBT Base} +
+(\text{InstanceOffset} + \text{GeometryIndex} \times \text{Stride} +
+\text{RayType}) \times \text{RecordSize}\]</span></p>
+<p>Because the data exposed by <code>shaderRecordEXT</code> resides
+physically inside this entry, accessing its fields requires no indirect
+memory dereferencing through descriptor tables. If dynamic resources
+such as vertex or index buffers are required, developers typically write
+64-bit GPU device addresses (<code>GL_EXT_buffer_reference</code>) into
+the shader record. The shader reads the 64-bit pointer directly from the
+<code>shaderRecordEXT</code> block and immediately dereferences geometry
+data.</p>
+<h2 id="practical-advantages">Practical Advantages</h2>
+<ul>
+<li><strong>Elimination of Descriptor Set Churn:</strong> Materials and
+geometric meshes do not require individual descriptor sets or massive
+bindless arrays indexed by draw IDs.</li>
+<li><strong>Cache Locality:</strong> Loading the shader identifier and
+its immediate execution constants occurs in the same memory transaction
+or contiguous cache lines.</li>
+<li><strong>Pipeline Simplification:</strong> Decouples pipeline state
+from resource binding, allowing thousands of distinct materials to be
+handled cleanly within a single ray dispatch call.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How subpassLoad Reads Input Attachments in Vulkan GLSL - glsl</title>
+    <meta name="description" content="This article explains how the subpassLoad GLSL function accesses pixel data from input attachments inside Vulkan render passes. It covers the mechanics of pixel-local data fetching, the distinction between standard texture sampling and input attachments,">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-subpass-load-reads-input-attachments-in-vulkan-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How subpassLoad Reads Input Attachments in Vulkan GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-subpass-load-reads-input-attachments-in-vulkan-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the subpassLoad GLSL function accesses pixel data from input attachments inside Vulkan render passes. It covers the mechanics of pixel-local data fetching, the distinction between standard texture sampling and input attachments," />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-subpassload-reads-input-attachments-in-vulkan-glsl">How
+subpassLoad Reads Input Attachments in Vulkan GLSL</h1>
+<p>This article explains how the <code>subpassLoad</code> GLSL function
+accesses pixel data from input attachments inside Vulkan render passes.
+It covers the mechanics of pixel-local data fetching, the distinction
+between standard texture sampling and input attachments, memory
+interactions on tile-based architectures, and the required shader syntax
+and pipeline dependencies.</p>
+<h3 id="the-purpose-of-input-attachments">The Purpose of Input
+Attachments</h3>
+<p>In Vulkan, an input attachment is a specialized image view bound to a
+render pass subpass that allows a fragment shader to read values
+previously written by an earlier subpass. Unlike standard textures
+accessed via samplers, input attachments are restricted to reading only
+the data associated with the current fragment's pixel coordinate.</p>
+<p>This restriction enables significant performance optimizations,
+particularly on Tile-Based Deferred Rendering (TBDR) architectures
+commonly found in mobile devices. By constraining reads to the current
+pixel, the GPU can keep framebuffer data within high-speed, on-chip tile
+memory (transient storage) between subpasses, entirely bypassing costly
+roundtrips to main system memory (VRAM).</p>
+<h3 id="how-subpassload-operates">How subpassLoad Operates</h3>
+<p>The <code>subpassLoad</code> function acts as an intrinsic fetch
+operation. When invoked within a fragment shader, it retrieves the
+color, depth, or stencil data directly associated with the executing
+fragment's coordinates (<code>gl_FragCoord.xy</code>).</p>
+<p>Key characteristics of <code>subpassLoad</code> include:</p>
+<ul>
+<li><strong>Implicit Coordinate Mapping:</strong> Unlike
+<code>texture()</code> or <code>texelFetch()</code>,
+<code>subpassLoad</code> does not take UV coordinates or integer texel
+coordinates as an argument. The hardware automatically maps the read
+operation to the exact pixel location of the current fragment.</li>
+<li><strong>No Filtering:</strong> The fetch does not perform bilinear,
+trilinear, or anisotropic filtering. It retrieves raw, un-normalized
+texel data directly from the attachment.</li>
+<li><strong>Multisample Support:</strong> For multisampled attachments,
+<code>subpassLoad</code> accepts an integer sample index to fetch a
+specific sample from the pixel location.</li>
+</ul>
+<h3 id="glsl-declaration-and-syntax">GLSL Declaration and Syntax</h3>
+<p>To use <code>subpassLoad</code>, the attachment must be declared in
+GLSL as a <code>subpassInput</code> uniform type with an explicit
+<code>input_attachment_index</code>.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Declare the input attachment bound to index 0</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>input_attachment_index <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">subpassInput</span> uDepthAttachment<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>input_attachment_index <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">subpassInput</span> uColorAttachment<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Multisampled variants use subpassInputMS</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>input_attachment_index <span class="op">=</span> <span class="dv">2</span><span class="op">,</span> set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">subpassInputMS</span> uMSAttachment<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> outFinalColor<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> </span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Reading single-sampled attachments:</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> previousColor <span class="op">=</span> <span class="fu">subpassLoad</span><span class="op">(</span>uColorAttachment<span class="op">);</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> depthValue   <span class="op">=</span> <span class="fu">subpassLoad</span><span class="op">(</span>uDepthAttachment<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Reading multisampled attachments requires an explicit sample index:</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> sampleIndex <span class="op">=</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> msColor <span class="op">=</span> <span class="fu">subpassLoad</span><span class="op">(</span>uMSAttachment<span class="op">,</span> sampleIndex<span class="op">);</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    outFinalColor <span class="op">=</span> previousColor <span class="op">*</span> depthValue<span class="op">;</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The <code>input_attachment_index</code> maps directly to the array
+index specified in the <code>pInputAttachments</code> field of the
+<code>VkSubpassDescription</code> structure on the host side.</p>
+<h3 id="synchronization-and-subpass-dependencies">Synchronization and
+Subpass Dependencies</h3>
+<p>Because <code>subpassLoad</code> reads data produced within the same
+render pass, proper execution order and memory visibility must be
+enforced via <code>VkSubpassDependency</code>. Without explicit
+dependencies, the GPU may attempt to read an attachment before the
+writing subpass has completed its output.</p>
+<p>A typical dependency configuration includes:</p>
+<ul>
+<li><strong>Source Stage:</strong>
+<code>VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT</code> (or
+<code>EARLY_FRAGMENT_TESTS_BIT</code> /
+<code>LATE_FRAGMENT_TESTS_BIT</code> for depth).</li>
+<li><strong>Destination Stage:</strong>
+<code>VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT</code>.</li>
+<li><strong>Source Access Mask:</strong>
+<code>VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT</code> (or
+<code>DEPTH_STENCIL_ATTACHMENT_WRITE_BIT</code>).</li>
+<li><strong>Destination Access Mask:</strong>
+<code>VK_ACCESS_INPUT_ATTACHMENT_READ_BIT</code>.</li>
+<li><strong>Dependency Flags:</strong> Typically marked with
+<code>VK_DEPENDENCY_BY_REGION_BIT</code>, which specifies that the
+dependency is local to the frame's sub-regions or tiles, enabling
+hardware tile caches to remain un-flushed.</li>
+</ul>
+<h3 id="architectural-constraints">Architectural Constraints</h3>
+<p>Because <code>subpassLoad</code> strictly binds to the current
+fragment coordinate, it cannot be used for operations requiring
+neighborhood pixel awareness, such as Gaussian blurs, bloom, or
+post-process edge detection. When neighbor-pixel sampling is necessary,
+the render pass must be ended, and the image must be bound as a standard
+sampled texture (<code>sampler2D</code>) using standard texture
+coordinates.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

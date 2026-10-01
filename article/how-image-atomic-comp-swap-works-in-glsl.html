@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How imageAtomicCompSwap Works in GLSL - glsl</title>
+    <meta name="description" content="The imageAtomicCompSwap function in the OpenGL Shading Language (GLSL) provides a hardware-level atomic compare-and-swap (CAS) operation for modifying image texels without race conditions. This article covers the function's syntax, its execution flow at">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-image-atomic-comp-swap-works-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How imageAtomicCompSwap Works in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-image-atomic-comp-swap-works-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The imageAtomicCompSwap function in the OpenGL Shading Language (GLSL) provides a hardware-level atomic compare-and-swap (CAS) operation for modifying image texels without race conditions. This article covers the function's syntax, its execution flow at" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-imageatomiccompswap-works-in-glsl">How imageAtomicCompSwap
+Works in GLSL</h1>
+<p>The <code>imageAtomicCompSwap</code> function in the OpenGL Shading
+Language (GLSL) provides a hardware-level atomic compare-and-swap (CAS)
+operation for modifying image texels without race conditions. This
+article covers the function's syntax, its execution flow at the memory
+controller level, the return values it generates, and how it is used
+within CAS loops to implement arbitrary atomic operations on textures in
+compute and fragment shaders.</p>
+<h2 id="function-syntax-and-supported-formats">Function Syntax and
+Supported Formats</h2>
+<p>The <code>imageAtomicCompSwap</code> function performs an atomic
+read-modify-write operation on an individual texel. Its signatures in
+GLSL are defined as follows:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="bu">imageAtomicCompSwap</span><span class="op">(</span><span class="dt">coherent</span> IMAGE_TYPE image<span class="op">,</span> ivec coordinate<span class="op">,</span> <span class="dt">uint</span> compare<span class="op">,</span> <span class="dt">uint</span> data<span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span>  <span class="bu">imageAtomicCompSwap</span><span class="op">(</span><span class="dt">coherent</span> IMAGE_TYPE image<span class="op">,</span> ivec coordinate<span class="op">,</span> <span class="dt">int</span>  compare<span class="op">,</span> <span class="dt">int</span>  data<span class="op">);</span></span></code></pre></div>
+<p>To use this function, the target image must be bound with an
+atomically compatible internal format, typically <code>r32ui</code>
+(unsigned 32-bit integer) or <code>r32i</code> (signed 32-bit integer).
+The image variable declaration usually requires the
+<code>coherent</code> memory qualifier to ensure writes are visible
+across different shader invocations.</p>
+<h2 id="the-compare-and-swap-mechanism">The Compare-and-Swap
+Mechanism</h2>
+<p>The compare-and-swap operation is executed atomically by the GPU's
+memory subsystem at the target texel's memory location. The operation
+follows a strict three-step sequence that cannot be interrupted by other
+shader invocations:</p>
+<ol type="1">
+<li><strong>Read:</strong> The memory controller reads the current value
+stored at the specified texel coordinates.</li>
+<li><strong>Compare:</strong> The controller compares this current value
+against the <code>compare</code> parameter provided by the calling
+invocation.</li>
+<li><strong>Conditional Write:</strong>
+<ul>
+<li>If the current value matches <code>compare</code>, the memory
+controller overwrites the texel value with <code>data</code>.</li>
+<li>If the current value does not match <code>compare</code>, the texel
+value remains untouched.</li>
+</ul></li>
+</ol>
+<p>Regardless of whether the write succeeds or fails, the function
+returns the original value that was stored in the texel before the
+operation took place. The calling invocation determines whether the swap
+was successful by testing if <code>returnValue == compare</code>.</p>
+<h2 id="implementing-cas-loops-for-complex-operations">Implementing CAS
+Loops for Complex Operations</h2>
+<p>Hardware-supported atomics on images are typically limited to basic
+operations like addition, subtraction, bitwise logic, and min/max. When
+an algorithm requires an unsupported atomic operation—such as atomic
+floating-point addition or conditional
+thresholding—<code>imageAtomicCompSwap</code> is executed inside a
+loop.</p>
+<p>In this pattern, the shader repeatedly attempts the update until it
+succeeds:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>r32ui<span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">coherent</span> <span class="dt">uimage2D</span> targetImage<span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">atomicCustomUpdate</span><span class="op">(</span><span class="dt">ivec2</span> coords<span class="op">,</span> <span class="dt">uint</span> targetAdjustment<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Read the initial state</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> expected <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>targetImage<span class="op">,</span> coords<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">while</span> <span class="op">(</span><span class="kw">true</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Compute the new value based on the expected current value</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        <span class="dt">uint</span> newValue <span class="op">=</span> expected <span class="op">+</span> targetAdjustment<span class="op">;</span> <span class="co">// Or any complex operation</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Attempt to swap</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        <span class="dt">uint</span> actual <span class="op">=</span> <span class="bu">imageAtomicCompSwap</span><span class="op">(</span>targetImage<span class="op">,</span> coords<span class="op">,</span> expected<span class="op">,</span> newValue<span class="op">);</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>        <span class="co">// If the value hasn&#39;t changed since the load, the swap succeeded</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>actual <span class="op">==</span> expected<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>            <span class="kw">break</span><span class="op">;</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Another thread modified the texel first; retry using the updated value</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>        expected <span class="op">=</span> actual<span class="op">;</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Because <code>imageAtomicCompSwap</code> returns the actual value
+read during the atomic step, failed attempts immediately yield the most
+up-to-date value, reducing redundant read requests across the memory bus
+during contention.</p>
+<h2 id="memory-consistency-considerations">Memory Consistency
+Considerations</h2>
+<p>When coordinating shared image data among workgroups, the atomic
+operation guarantees ordering only at the specific memory address being
+modified. If other invocations need to read the updated texel through
+non-atomic operations (such as standard <code>imageLoad</code>), you
+must enforce execution and memory visibility by using
+<code>memoryBarrierImage()</code> or
+<code>groupMemoryBarrier()</code>.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

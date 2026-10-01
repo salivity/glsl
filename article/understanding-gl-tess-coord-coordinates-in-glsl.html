@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding gl_TessCoord Coordinates in GLSL - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), glTessCoord is a built-in vec3 input variable available exclusively within the Tessellation Evaluation Shader (TES) that defines the relative location of a newly generated vertex within an abstract patch domain. Thi">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-gl-tess-coord-coordinates-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding gl_TessCoord Coordinates in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-gl-tess-coord-coordinates-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), glTessCoord is a built-in vec3 input variable available exclusively within the Tessellation Evaluation Shader (TES) that defines the relative location of a newly generated vertex within an abstract patch domain. Thi" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-gl_tesscoord-coordinates-in-glsl">Understanding
+gl_TessCoord Coordinates in GLSL</h1>
+<p>In the OpenGL Shading Language (GLSL), <code>gl_TessCoord</code> is a
+built-in <code>vec3</code> input variable available exclusively within
+the Tessellation Evaluation Shader (TES) that defines the relative
+location of a newly generated vertex within an abstract patch domain.
+This article explains the exact coordinates stored in
+<code>gl_TessCoord</code> and demonstrates how its components change
+meaning based on whether the tessellation primitive mode is set to
+triangles, quads, or isolines.</p>
+<h2 id="the-structure-of-gl_tesscoord">The Structure of
+gl_TessCoord</h2>
+<p>The variable is defined internally as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> <span class="bu">gl_TessCoord</span><span class="op">;</span></span></code></pre></div>
+<p>While <code>gl_TessCoord</code> is always a three-component
+floating-point vector, the number of active components and their
+mathematical interpretations depend on the primitive execution mode
+specified in the TES input layout qualifier.</p>
+<hr />
+<h2 id="1-triangle-patches-layouttriangles-in">1. Triangle Patches
+(<code>layout(triangles) in;</code>)</h2>
+<p>When tessellating triangles, <code>gl_TessCoord</code> stores
+<strong>barycentric coordinates</strong>:</p>
+<ul>
+<li><strong><code>gl_TessCoord.x</code> (<span
+class="math inline">\(u\)</span>):</strong> Weight of the first corner
+vertex.</li>
+<li><strong><code>gl_TessCoord.y</code> (<span
+class="math inline">\(v\)</span>):</strong> Weight of the second corner
+vertex.</li>
+<li><strong><code>gl_TessCoord.z</code> (<span
+class="math inline">\(w\)</span>):</strong> Weight of the third corner
+vertex.</li>
+</ul>
+<p>In this mode, all three components are in the range <span
+class="math inline">\([0.0, 1.0]\)</span>, and their sum always equals
+one:</p>
+<p><span class="math display">\[u + v + w = 1.0\]</span></p>
+<p>These coordinates are primarily used to interpolate attributes across
+the triangle's surface:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> position <span class="op">=</span> <span class="bu">gl_TessCoord</span><span class="op">.</span><span class="fu">x</span> <span class="op">*</span> p0 <span class="op">+</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>                <span class="bu">gl_TessCoord</span><span class="op">.</span><span class="fu">y</span> <span class="op">*</span> p1 <span class="op">+</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>                <span class="bu">gl_TessCoord</span><span class="op">.</span><span class="fu">z</span> <span class="op">*</span> p2<span class="op">;</span></span></code></pre></div>
+<hr />
+<h2 id="2-quad-patches-layoutquads-in">2. Quad Patches
+(<code>layout(quads) in;</code>)</h2>
+<p>When tessellating quads, <code>gl_TessCoord</code> stores
+<strong>normalized Cartesian <span class="math inline">\((u, v)\)</span>
+coordinates</strong>:</p>
+<ul>
+<li><strong><code>gl_TessCoord.x</code> (<span
+class="math inline">\(u\)</span>):</strong> Horizontal position across
+the quad, ranging from <span class="math inline">\(0.0\)</span> to <span
+class="math inline">\(1.0\)</span>.</li>
+<li><strong><code>gl_TessCoord.y</code> (<span
+class="math inline">\(v\)</span>):</strong> Vertical position across the
+quad, ranging from <span class="math inline">\(0.0\)</span> to <span
+class="math inline">\(1.0\)</span>.</li>
+<li><strong><code>gl_TessCoord.z</code>:</strong> Unused and always set
+to <span class="math inline">\(0.0\)</span>.</li>
+</ul>
+<p>These coordinates represent positions on a 2D unit square and are
+commonly used to perform bilinear interpolation or evaluate 2D
+parametric surfaces (such as Bézier patches or terrain heightmaps).</p>
+<hr />
+<h2 id="3-isoline-patches-layoutisolines-in">3. Isoline Patches
+(<code>layout(isolines) in;</code>)</h2>
+<p>When generating isolines (lines), <code>gl_TessCoord</code> also
+functions as a <strong>2D coordinate vector</strong>:</p>
+<ul>
+<li><strong><code>gl_TessCoord.x</code> (<span
+class="math inline">\(u\)</span>):</strong> Normalized position along
+the current line segment, ranging from <span
+class="math inline">\(0.0\)</span> to <span
+class="math inline">\(1.0\)</span>.</li>
+<li><strong><code>gl_TessCoord.y</code> (<span
+class="math inline">\(v\)</span>):</strong> Normalized index identifying
+which isoline the vertex belongs to, ranging from <span
+class="math inline">\(0.0\)</span> to <span
+class="math inline">\(1.0\)</span>.</li>
+<li><strong><code>gl_TessCoord.z</code>:</strong> Unused and always set
+to <span class="math inline">\(0.0\)</span>.</li>
+</ul>
+<p>The tessellator generates lines along the horizontal <span
+class="math inline">\(u\)</span>-axis, spaced across the vertical <span
+class="math inline">\(v\)</span>-axis according to the outer
+tessellation levels.</p>
+<hr />
+<h2 id="summary-of-coordinate-formats">Summary of Coordinate
+Formats</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Primitive Domain</th>
+<th style="text-align: left;"><code>gl_TessCoord.x</code></th>
+<th style="text-align: left;"><code>gl_TessCoord.y</code></th>
+<th style="text-align: left;"><code>gl_TessCoord.z</code></th>
+<th style="text-align: left;">Coordinate Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td
+style="text-align: left;"><strong><code>triangles</code></strong></td>
+<td style="text-align: left;"><span class="math inline">\(u \in [0,
+1]\)</span></td>
+<td style="text-align: left;"><span class="math inline">\(v \in [0,
+1]\)</span></td>
+<td style="text-align: left;"><span class="math inline">\(w \in [0,
+1]\)</span></td>
+<td style="text-align: left;">Barycentric (<span class="math inline">\(u
++ v + w = 1\)</span>)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong><code>quads</code></strong></td>
+<td style="text-align: left;"><span class="math inline">\(u \in [0,
+1]\)</span></td>
+<td style="text-align: left;"><span class="math inline">\(v \in [0,
+1]\)</span></td>
+<td style="text-align: left;"><span
+class="math inline">\(0.0\)</span></td>
+<td style="text-align: left;">2D Cartesian UV</td>
+</tr>
+<tr>
+<td
+style="text-align: left;"><strong><code>isolines</code></strong></td>
+<td style="text-align: left;">Segment parameter <span
+class="math inline">\(u \in [0, 1]\)</span></td>
+<td style="text-align: left;">Line index parameter <span
+class="math inline">\(v \in [0, 1]\)</span></td>
+<td style="text-align: left;"><span
+class="math inline">\(0.0\)</span></td>
+<td style="text-align: left;">2D Parametric</td>
+</tr>
+</tbody>
+</table></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Dynamic Branching Penalties in Loops - glsl</title>
+    <meta name="description" content="When a conditional branch inside a GLSL loop depends on per-fragment data, it triggers dynamic branch divergence, one of the most severe performance bottlenecks in GPU rendering. This article details how single-instruction, multiple-threads (SIMT) hardwa">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-dynamic-branching-penalties-in-loops">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Dynamic Branching Penalties in Loops - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-dynamic-branching-penalties-in-loops" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="When a conditional branch inside a GLSL loop depends on per-fragment data, it triggers dynamic branch divergence, one of the most severe performance bottlenecks in GPU rendering. This article details how single-instruction, multiple-threads (SIMT) hardwa" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-dynamic-branching-penalties-in-loops">GLSL Dynamic
+Branching Penalties in Loops</h1>
+<p>When a conditional branch inside a GLSL loop depends on per-fragment
+data, it triggers dynamic branch divergence, one of the most severe
+performance bottlenecks in GPU rendering. This article details how
+single-instruction, multiple-threads (SIMT) hardware processes
+non-uniform conditions, why per-fragment evaluations force thread
+serialization and idle execution cycles, and how divergent loops amplify
+the overall computational cost.</p>
+<h2 id="the-simt-architecture-and-lockstep-execution">The SIMT
+Architecture and Lockstep Execution</h2>
+<p>Modern GPUs process fragments in lockstep parallel groups, typically
+referred to as warps (NVIDIA, 32 threads) or wavefronts (AMD, 32 or 64
+threads). All fragment threads within a given warp share a single
+program counter and execute the exact same instruction at any given
+clock cycle.</p>
+<p>When a branch condition relies on constant data (uniforms) or
+vertex-derived attributes that evaluate identically across the entire
+warp, execution remains unified. However, when the condition depends on
+per-fragment values—such as dynamic textures, dynamic buffers, varying
+attributes, or computed mathematical results—different fragments in the
+same warp can evaluate the condition to opposite boolean outcomes.</p>
+<h2 id="dynamic-branch-divergence-and-thread-serialization">Dynamic
+Branch Divergence and Thread Serialization</h2>
+<p>When adjacent fragments in a warp evaluate a conditional statement
+differently, the GPU cannot split the warp to run two separate code
+paths simultaneously. Instead, it must serialize execution using thread
+masking (predication):</p>
+<ol type="1">
+<li><strong>Path A (True):</strong> The GPU executes the instructions
+inside the <code>if</code> block. Threads representing fragments where
+the condition evaluated to <code>false</code> are masked out (disabled).
+These threads sit completely idle while drawing power and consuming
+clock cycles.</li>
+<li><strong>Path B (False):</strong> The GPU executes the
+<code>else</code> block (if present). The active/inactive masks are
+inverted, forcing the threads that took Path A to sit idle while Path B
+executes.</li>
+</ol>
+<p>The execution time for the warp becomes the sum of both paths (<span
+class="math inline">\(Time_{True} + Time_{False}\)</span>) rather than
+just the single branch that an individual fragment needs.</p>
+<h2 id="the-multiplying-penalty-inside-loops">The Multiplying Penalty
+Inside Loops</h2>
+<p>Placing a divergent branch inside a loop compounds the overhead with
+every iteration:</p>
+<ul>
+<li><strong>Worst-Case Duration:</strong> If a branch causes a loop to
+exit early (<code>break</code>) or skip calculations
+(<code>continue</code>), the warp cannot stop running until the
+<em>slowest</em> fragment in the group finishes its final iteration. A
+single fragment requiring 100 iterations forces all other 31 or 63
+fragments to execute 100 iterations of empty, masked cycles.</li>
+<li><strong>Per-Iteration Desynchronization:</strong> If the branch
+condition fluctuates per iteration based on fragment-specific
+calculations, threads alternate between being active and inactive
+repeatedly. This eliminates the benefits of SIMD instruction caching and
+drastically lowers arithmetic throughput.</li>
+<li><strong>Instruction Cache Thrashing:</strong> Complex diverging
+branches inside repetitive loops increase the active instruction
+footprint, reducing instruction cache hits and adding latency stalls
+while fetching divergent shader code.</li>
+</ul>
+<h2 id="broken-fragment-derivations-and-mipmapping">Broken Fragment
+Derivations and Mipmapping</h2>
+<p>Per-fragment branching also impacts fragment derivatives
+(<code>dFdx</code>, <code>dFdy</code>). These operations evaluate <span
+class="math inline">\(2 \times 2\)</span> pixel quadrands simultaneously
+to determine surface gradients and mipmap levels. If adjacent fragments
+within a quad take different execution paths because of dynamic
+branches, derivative calculations become undefined or explicitly illegal
+in GLSL, leading to visual rendering artifacts or forced fallback to
+coarse approximations.</p>
+<h2 id="summary">Summary</h2>
+<p>The fundamental execution penalty for per-fragment dynamic branching
+in a loop is severe throughput degradation. The warp is serialized to
+execute every possible execution branch across all iterations, and the
+fastest fragments are forced to idle at zero computational efficiency
+until the slowest fragment in the group completes.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

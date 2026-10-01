@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single Scalar Matrix Construction in GLSL - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), constructing a matrix using a single scalar value generates a diagonal matrix where the scalar is assigned to every component along the main diagonal, while all off-diagonal elements are set to zero. This article co">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/single-scalar-matrix-construction-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Single Scalar Matrix Construction in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/single-scalar-matrix-construction-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), constructing a matrix using a single scalar value generates a diagonal matrix where the scalar is assigned to every component along the main diagonal, while all off-diagonal elements are set to zero. This article co" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="single-scalar-matrix-construction-in-glsl">Single Scalar Matrix
+Construction in GLSL</h1>
+<p>In the OpenGL Shading Language (GLSL), constructing a matrix using a
+single scalar value generates a diagonal matrix where the scalar is
+assigned to every component along the main diagonal, while all
+off-diagonal elements are set to zero. This article covers the exact
+mechanics of single-scalar matrix constructors, illustrates how they are
+used for identity and scaling transformations, and explains their
+behavior with both square and non-square matrices.</p>
+<h2 id="diagonal-initialization-rule">Diagonal Initialization Rule</h2>
+<p>When you pass a single scalar (such as a <code>float</code>) into any
+GLSL matrix constructor, the language assigns that value to all
+positions where the row index equals the column index (<span
+class="math inline">\(M_{i,i}\)</span>). Every other entry (<span
+class="math inline">\(M_{i,j}\)</span> where <span
+class="math inline">\(i \neq j\)</span>) is initialized to
+<code>0.0</code>.</p>
+<p>Mathematically, passing a scalar <span
+class="math inline">\(s\)</span> into a constructor creates:</p>
+<p><span class="math display">\[
+M_{i,j} = \begin{cases} s &amp; \text{if } i = j \\ 0.0 &amp; \text{if }
+i \neq j \end{cases}
+\]</span></p>
+<h2 id="constructing-identity-matrices">Constructing Identity
+Matrices</h2>
+<p>The most common application of this behavior is generating an
+identity matrix. Passing <code>1.0</code> into a square matrix
+constructor places ones along the main diagonal and zeros everywhere
+else.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Creates a 4x4 identity matrix</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">mat4</span> identity <span class="op">=</span> <span class="dt">mat4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">);</span></span></code></pre></div>
+<p>The resulting <code>identity</code> matrix evaluates to:</p>
+<p><span class="math display">\[
+\begin{bmatrix}
+1.0 &amp; 0.0 &amp; 0.0 &amp; 0.0 \\
+0.0 &amp; 1.0 &amp; 0.0 &amp; 0.0 \\
+0.0 &amp; 0.0 &amp; 1.0 &amp; 0.0 \\
+0.0 &amp; 0.0 &amp; 0.0 &amp; 1.0
+\end{bmatrix}
+\]</span></p>
+<h2 id="non-unit-scalar-matrices">Non-Unit Scalar Matrices</h2>
+<p>If a value other than <code>1.0</code> is provided, that value
+populates the entire diagonal. This is useful for uniform scaling
+transformations.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Creates a 3x3 diagonal scale matrix</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">mat3</span> scaleMatrix <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span><span class="fl">2.5</span><span class="op">);</span></span></code></pre></div>
+<p>This constructor produces:</p>
+<p><span class="math display">\[
+\begin{bmatrix}
+2.5 &amp; 0.0 &amp; 0.0 \\
+0.0 &amp; 2.5 &amp; 0.0 \\
+0.0 &amp; 0.0 &amp; 2.5
+\end{bmatrix}
+\]</span></p>
+<h2 id="behavior-with-non-square-matrices">Behavior with Non-Square
+Matrices</h2>
+<p>GLSL supports non-square matrices (such as <code>mat2x3</code>,
+<code>mat4x2</code>, and <code>mat3x4</code>). When initialized with a
+single scalar, the same rule applies: elements where the row index
+equals the column index receive the scalar, while all remaining elements
+are set to zero.</p>
+<p>For example, initializing a <code>mat2x4</code> (2 columns, 4 rows)
+with a scalar:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">mat2x4</span> m <span class="op">=</span> <span class="dt">mat2x4</span><span class="op">(</span><span class="fl">3.0</span><span class="op">);</span></span></code></pre></div>
+<p>Because there are only two columns, the diagonal only covers indices
+<code>[0][0]</code> and <code>[1][1]</code>:</p>
+<p><span class="math display">\[
+\begin{bmatrix}
+3.0 &amp; 0.0 \\
+0.0 &amp; 3.0 \\
+0.0 &amp; 0.0 \\
+0.0 &amp; 0.0
+\end{bmatrix}
+\]</span></p>
+<h2 id="type-requirements">Type Requirements</h2>
+<p>The scalar passed to standard floating-point matrices
+(<code>mat2</code>, <code>mat3</code>, <code>mat4</code>, etc.) must
+match the underlying component type of the matrix or be implicitly
+convertible. In standard GLSL:</p>
+<ul>
+<li>Use floating-point literals (e.g., <code>mat4(1.0)</code>) instead
+of integers (<code>mat4(1)</code>), as older GLSL versions or strict
+profiles do not implicitly cast <code>int</code> to
+<code>float</code>.</li>
+<li>For double-precision matrices (<code>dmat2</code>,
+<code>dmat3</code>, <code>dmat4</code>), pass a double literal (e.g.,
+<code>dmat4(1.0lf)</code>).</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

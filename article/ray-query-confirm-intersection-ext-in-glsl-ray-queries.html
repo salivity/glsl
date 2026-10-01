@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rayQueryConfirmIntersectionEXT in GLSL Ray Queries - glsl</title>
+    <meta name="description" content="The rayQueryConfirmIntersectionEXT function in GLSL is an intrinsic instruction provided by the GLEXTrayquery extension, primarily designed to validate and record ray intersections with procedural (custom) primitives. When performing ray queries against">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/ray-query-confirm-intersection-ext-in-glsl-ray-queries">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="rayQueryConfirmIntersectionEXT in GLSL Ray Queries - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/ray-query-confirm-intersection-ext-in-glsl-ray-queries" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The rayQueryConfirmIntersectionEXT function in GLSL is an intrinsic instruction provided by the GLEXTrayquery extension, primarily designed to validate and record ray intersections with procedural (custom) primitives. When performing ray queries against" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="rayqueryconfirmintersectionext-in-glsl-ray-queries">rayQueryConfirmIntersectionEXT
+in GLSL Ray Queries</h1>
+<p>The <code>rayQueryConfirmIntersectionEXT</code> function in GLSL is
+an intrinsic instruction provided by the <code>GL_EXT_ray_query</code>
+extension, primarily designed to validate and record ray intersections
+with procedural (custom) primitives. When performing ray queries against
+Axis-Aligned Bounding Boxes (AABBs) containing analytical geometry, this
+function serves as the definitive mechanism to confirm that a
+mathematical intersection occurred within the primitive and to commit
+the calculated hit distance back to the traversal engine.</p>
+<p>When using ray queries, geometry is separated into
+hardware-accelerated triangles and user-defined procedural primitives
+enclosed by AABBs. During acceleration structure traversal via
+<code>rayQueryProceedEXT</code>, hitting an AABB does not mean the
+underlying procedural object was struck—it only indicates that the ray
+passed through its bounding volume. When this happens, traversal pauses,
+and the ray query state reports a candidate intersection of type
+<code>gl_RayQueryCandidateIntersectionAABBEXT</code>.</p>
+<p>At this point, the shader is responsible for custom intersection
+handling:</p>
+<ol type="1">
+<li><strong>Analytical Calculation:</strong> The developer must evaluate
+the intersection between the ray and the procedural object (such as a
+sphere, cylinder, or implicit surface) using the ray parameters
+retrieved from the ray query.</li>
+<li><strong>Hit Validation:</strong> If the analytical test determines
+that the ray misses the actual procedural surface, the shader takes no
+action and resumes traversal using <code>rayQueryProceedEXT</code>.</li>
+<li><strong>Hit Confirmation:</strong> If the ray successfully strikes
+the object within the valid ray segment (between the current minimum and
+maximum ray distance, <code>tMin</code> and <code>tMax</code>), the
+shader must call
+<code>rayQueryConfirmIntersectionEXT(rayQuery, hitT)</code>.</li>
+</ol>
+<p>The primary role of <code>rayQueryConfirmIntersectionEXT</code> is
+accepting the calculated distance (<code>hitT</code>) as a confirmed
+hit. Calling this function instructs the ray query traversal state
+to:</p>
+<ul>
+<li><strong>Update Closest-Hit Distance:</strong> If the ray query is
+searching for the closest hit, it updates the ray's maximum travel
+distance (<code>tMax</code>) to the provided <code>hitT</code>. Any
+subsequent candidate intersections farther than this new
+<code>hitT</code> will be automatically culled by the traversal
+hardware.</li>
+<li><strong>Commit the Hit:</strong> It transitions the intersection
+status from a pending candidate into a committed intersection, ensuring
+that the procedural hit is recognized when querying final hit properties
+after traversal completes.</li>
+<li><strong>Handle Early Termination:</strong> For shadow rays or
+ambient occlusion tests configured to terminate on the first hit,
+confirming the intersection allows the ray traversal to stop
+immediately, avoiding redundant traversal steps.</li>
+</ul>
+<p>Without calling <code>rayQueryConfirmIntersectionEXT</code>, the ray
+query engine assumes the ray traversed the bounding box without striking
+any internal geometry, and any custom intersections computed in the
+shader are discarded.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

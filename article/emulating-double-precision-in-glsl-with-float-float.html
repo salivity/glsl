@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emulating Double Precision in GLSL with Float-Float - glsl</title>
+    <meta name="description" content="Emulating 64-bit double precision on graphics hardware is essential when deploying compute tasks or high-zoom rendering (such as fractals) to platforms lacking native double support, including WebGL 1.0, WebGL 2.0, and many mobile GPUs. This article expl">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/emulating-double-precision-in-glsl-with-float-float">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Emulating Double Precision in GLSL with Float-Float - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/emulating-double-precision-in-glsl-with-float-float" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Emulating 64-bit double precision on graphics hardware is essential when deploying compute tasks or high-zoom rendering (such as fractals) to platforms lacking native double support, including WebGL 1.0, WebGL 2.0, and many mobile GPUs. This article expl" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="emulating-double-precision-in-glsl-with-float-float">Emulating
+Double Precision in GLSL with Float-Float</h1>
+<p>Emulating 64-bit double precision on graphics hardware is essential
+when deploying compute tasks or high-zoom rendering (such as fractals)
+to platforms lacking native <code>double</code> support, including WebGL
+1.0, WebGL 2.0, and many mobile GPUs. This article explains how
+double-single arithmetic (often called float-float or DSfun) emulates
+near-double precision in GLSL by storing numbers as an unevaluated sum
+of two standard 32-bit floats. We cover the underlying data
+representation, error-free transformations like Knuth's
+<code>twoSum</code>, and the fundamental algorithms for addition and
+multiplication.</p>
+<h3 id="the-float-float-representation">The Float-Float
+Representation</h3>
+<p>In GLSL, an emulated double is represented as a <code>vec2</code>,
+where the components define a single real number <span
+class="math inline">\(x\)</span>:</p>
+<p><span class="math display">\[x = x_{\text{hi}} +
+x_{\text{lo}}\]</span></p>
+<p>Here, <span class="math inline">\(x_{\text{hi}}\)</span> represents
+the most significant 24 bits of the mantissa, while <span
+class="math inline">\(x_{\text{lo}}\)</span> captures the residual
+rounding error, effectively adding another 24 bits of precision. The
+condition <span class="math inline">\(|x_{\text{lo}}| \le
+\frac{1}{2}\text{ulp}(x_{\text{hi}})\)</span> ensures that the two
+floats do not overlap in significant bits.</p>
+<p>This approach provides approximately 46 to 48 bits of significand
+precision—closely approaching IEEE 754 double precision (53 bits).
+However, the exponent range remains restricted to that of 32-bit floats
+(<span class="math inline">\(2^{-126}\)</span> to <span
+class="math inline">\(2^{127}\)</span>), meaning this technique
+addresses precision loss, not underflow/overflow bounds.</p>
+<h3 id="error-free-transformations">Error-Free Transformations</h3>
+<p>The foundation of float-float arithmetic rests on error-free
+transformations (EFTs). These mathematical identities compute both the
+floating-point result of an operation and the exact rounding error
+discarded by the hardware.</p>
+<h4 id="quicktwosum">QuickTwoSum</h4>
+<p>When it is known that <span class="math inline">\(|a| \ge
+|b|\)</span>, the error can be extracted using three floating-point
+additions/subtractions:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">quickTwoSum</span><span class="op">(</span><span class="dt">float</span> a<span class="op">,</span> <span class="dt">float</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> s <span class="op">=</span> a <span class="op">+</span> b<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> e <span class="op">=</span> b <span class="op">-</span> <span class="op">(</span>s <span class="op">-</span> a<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec2</span><span class="op">(</span>s<span class="op">,</span> e<span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h4 id="twosum-knuths-algorithm">TwoSum (Knuth's Algorithm)</h4>
+<p>When the relative magnitudes of <span
+class="math inline">\(a\)</span> and <span
+class="math inline">\(b\)</span> are unknown, Knuth’s six-operation
+algorithm calculates the sum and exact rounding error:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">twoSum</span><span class="op">(</span><span class="dt">float</span> a<span class="op">,</span> <span class="dt">float</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> s <span class="op">=</span> a <span class="op">+</span> b<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> v <span class="op">=</span> s <span class="op">-</span> a<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> e <span class="op">=</span> <span class="op">(</span>a <span class="op">-</span> <span class="op">(</span>s <span class="op">-</span> v<span class="op">))</span> <span class="op">+</span> <span class="op">(</span>b <span class="op">-</span> v<span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec2</span><span class="op">(</span>s<span class="op">,</span> e<span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="addition-of-float-float-pairs">Addition of Float-Float
+Pairs</h3>
+<p>Adding two emulated pairs, <span class="math inline">\(A =
+(a_{\text{hi}}, a_{\text{lo}})\)</span> and <span
+class="math inline">\(B = (b_{\text{hi}}, b_{\text{lo}})\)</span>,
+requires accumulating the high components, the low components, and the
+rounding error produced when adding the high components:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">ds_add</span><span class="op">(</span><span class="dt">vec2</span> a<span class="op">,</span> <span class="dt">vec2</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> s <span class="op">=</span> <span class="fu">twoSum</span><span class="op">(</span>a<span class="op">.</span><span class="fu">x</span><span class="op">,</span> b<span class="op">.</span><span class="fu">x</span><span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    s<span class="op">.</span><span class="fu">y</span> <span class="op">+=</span> a<span class="op">.</span><span class="fu">y</span> <span class="op">+</span> b<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fu">quickTwoSum</span><span class="op">(</span>s<span class="op">.</span><span class="fu">x</span><span class="op">,</span> s<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>In this implementation, <code>twoSum(a.x, b.x)</code> splits the
+dominant sum into primary result <code>s.x</code> and truncation error
+<code>s.y</code>. The smaller terms (<code>a.y</code>, <code>b.y</code>,
+and <code>s.y</code>) are then combined into the low word before a final
+<code>quickTwoSum</code> normalizes the output.</p>
+<h3 id="multiplication-of-float-float-pairs">Multiplication of
+Float-Float Pairs</h3>
+<p>Multiplication requires computing the cross-terms and the exact
+product of the high components. The product of two single-precision
+numbers <span class="math inline">\(a \times b\)</span> produces up to
+48 bits, which can be decomposed into an exact head and tail using
+<code>twoProd</code>.</p>
+<p>If GLSL 4.0 or the <code>fma()</code> intrinsic is supported,
+<code>twoProd</code> is calculated using fused multiply-add:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">twoProdFMA</span><span class="op">(</span><span class="dt">float</span> a<span class="op">,</span> <span class="dt">float</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> p <span class="op">=</span> a <span class="op">*</span> b<span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> e <span class="op">=</span> <span class="bu">fma</span><span class="op">(</span>a<span class="op">,</span> b<span class="op">,</span> <span class="op">-</span>p<span class="op">);</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec2</span><span class="op">(</span>p<span class="op">,</span> e<span class="op">);</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>On hardware lacking <code>fma()</code>, Dekker's splitting algorithm
+is used. The input floats are split into two 12-bit halves to perform
+exact multiplication without hardware overflow:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">split</span><span class="op">(</span><span class="dt">float</span> a<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> c <span class="op">=</span> <span class="fl">4097.0</span><span class="op">;</span> <span class="co">// 2^12 + 1</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> p <span class="op">=</span> a <span class="op">*</span> c<span class="op">;</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a_hi <span class="op">=</span> p <span class="op">-</span> <span class="op">(</span>p <span class="op">-</span> a<span class="op">);</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a_lo <span class="op">=</span> a <span class="op">-</span> a_hi<span class="op">;</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec2</span><span class="op">(</span>a_hi<span class="op">,</span> a_lo<span class="op">);</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">twoProdDekker</span><span class="op">(</span><span class="dt">float</span> a<span class="op">,</span> <span class="dt">float</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> p <span class="op">=</span> a <span class="op">*</span> b<span class="op">;</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> a_split <span class="op">=</span> <span class="fu">split</span><span class="op">(</span>a<span class="op">);</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> b_split <span class="op">=</span> <span class="fu">split</span><span class="op">(</span>b<span class="op">);</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> err <span class="op">=</span> <span class="op">((</span>a_split<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> b_split<span class="op">.</span><span class="fu">x</span> <span class="op">-</span> p<span class="op">)</span> </span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>               <span class="op">+</span> a_split<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> b_split<span class="op">.</span><span class="fu">y</span> </span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>               <span class="op">+</span> a_split<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> b_split<span class="op">.</span><span class="fu">x</span><span class="op">)</span> </span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>               <span class="op">+</span> a_split<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> b_split<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec2</span><span class="op">(</span>p<span class="op">,</span> err<span class="op">);</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Using <code>twoProd</code>, the full float-float multiplication
+(<span class="math inline">\(A \times B\)</span>) is computed as:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">ds_mul</span><span class="op">(</span><span class="dt">vec2</span> a<span class="op">,</span> <span class="dt">vec2</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> p <span class="op">=</span> <span class="fu">twoProdFMA</span><span class="op">(</span>a<span class="op">.</span><span class="fu">x</span><span class="op">,</span> b<span class="op">.</span><span class="fu">x</span><span class="op">);</span> <span class="co">// or twoProdDekker</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    p<span class="op">.</span><span class="fu">y</span> <span class="op">+=</span> a<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> b<span class="op">.</span><span class="fu">y</span> <span class="op">+</span> a<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> b<span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fu">quickTwoSum</span><span class="op">(</span>p<span class="op">.</span><span class="fu">x</span><span class="op">,</span> p<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="performance-characteristics">Performance Characteristics</h3>
+<p>Float-float emulation carries an instruction overhead of
+approximately <span class="math inline">\(3\times\)</span> to <span
+class="math inline">\(8\times\)</span> compared to native
+single-precision math. However, because it relies strictly on primary
+32-bit ALUs without requiring complex control flow or memory operations,
+it parallelizes cleanly across GPU warps/wavefronts and runs
+significantly faster than multi-pass rendering solutions or CPU
+readbacks.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

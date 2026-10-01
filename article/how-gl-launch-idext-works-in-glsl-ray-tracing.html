@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How gl_LaunchIDEXT Works in GLSL Ray Tracing - glsl</title>
+    <meta name="description" content="This article explains how the glLaunchIDEXT built-in variable identifies the current ray launch thread coordinates in GLSL ray tracing pipelines. It covers the data structure of the variable, how the hardware maps it from the API dispatch call, its role">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-gl-launch-idext-works-in-glsl-ray-tracing">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How gl_LaunchIDEXT Works in GLSL Ray Tracing - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-gl-launch-idext-works-in-glsl-ray-tracing" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the glLaunchIDEXT built-in variable identifies the current ray launch thread coordinates in GLSL ray tracing pipelines. It covers the data structure of the variable, how the hardware maps it from the API dispatch call, its role" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-gl_launchidext-works-in-glsl-ray-tracing">How gl_LaunchIDEXT
+Works in GLSL Ray Tracing</h1>
+<p>This article explains how the <code>gl_LaunchIDEXT</code> built-in
+variable identifies the current ray launch thread coordinates in GLSL
+ray tracing pipelines. It covers the data structure of the variable, how
+the hardware maps it from the API dispatch call, its role in converting
+pixel indices into world-space rays, and how it interacts with the
+overall launch grid dimensions.</p>
+<h3 id="definition-and-data-type">Definition and Data Type</h3>
+<p>In GLSL, <code>gl_LaunchIDEXT</code> is an input variable provided by
+the <code>GL_EXT_ray_tracing</code> extension. It is defined as a 3D
+unsigned integer vector:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">uvec3</span> gl_LaunchIDEXT<span class="op">;</span></span></code></pre></div>
+<p>This variable represents the unique integer coordinates of the
+current execution thread within the overall ray tracing dispatch. Each
+invocation of a ray generation shader receives its own distinct
+<code>gl_LaunchIDEXT</code> value, corresponding directly to its
+position within the launch grid.</p>
+<h3 id="thread-identification-mechanism">Thread Identification
+Mechanism</h3>
+<p>When an application issues a ray tracing dispatch command via the
+graphics API (such as <code>vkCmdTraceRaysKHR</code> in Vulkan), it
+specifies a three-dimensional grid size comprising width, height, and
+depth. The hardware scheduler instantiates a thread for every cell in
+this grid.</p>
+<p>The coordinate assignment works as follows:</p>
+<ul>
+<li><strong>Indexing Range:</strong> Coordinates run from
+<code>(0, 0, 0)</code> up to
+<code>(width - 1, height - 1, depth - 1)</code>.</li>
+<li><strong>Discrete Identification:</strong>
+<code>gl_LaunchIDEXT.x</code> corresponds to the current column,
+<code>gl_LaunchIDEXT.y</code> corresponds to the current row, and
+<code>gl_LaunchIDEXT.z</code> corresponds to the layer or slice of the
+dispatch.</li>
+<li><strong>Dimensional Flexibility:</strong> Although ray tracing is
+typically performed for 2D render targets—where depth is set to
+<code>1</code> and <code>gl_LaunchIDEXT.z</code> remains
+<code>0</code>—the third dimension allows for multi-layer rendering,
+stereoscopic setups, or volumetric data generation.</li>
+</ul>
+<h3 id="mapping-coordinates-to-ray-generation">Mapping Coordinates to
+Ray Generation</h3>
+<p>The primary function of <code>gl_LaunchIDEXT</code> occurs in the ray
+generation shader, where it maps an execution thread to an output pixel
+or sample. Because <code>gl_LaunchIDEXT</code> provides integer
+coordinates, it must be converted into normalized coordinates to compute
+the primary camera ray.</p>
+<p>A standard implementation converts <code>gl_LaunchIDEXT</code> to
+normalized device coordinates (NDC) using the corresponding grid
+dimensions stored in <code>gl_LaunchSizeEXT</code>:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Add 0.5 to sample the center of the pixel</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> pixelCenter <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span>gl_LaunchIDEXT<span class="op">.</span><span class="fu">xy</span><span class="op">)</span> <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.5</span><span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> inUV <span class="op">=</span> pixelCenter <span class="op">/</span> <span class="dt">vec2</span><span class="op">(</span>gl_LaunchSizeEXT<span class="op">.</span><span class="fu">xy</span><span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> d <span class="op">=</span> inUV <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Transform NDC to view-space/world-space ray directions</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> target <span class="op">=</span> invProjection <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>d<span class="op">.</span><span class="fu">x</span><span class="op">,</span> d<span class="op">.</span><span class="fu">y</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> rayDirection <span class="op">=</span> <span class="op">(</span>invView <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span><span class="bu">normalize</span><span class="op">(</span>target<span class="op">.</span><span class="fu">xyz</span><span class="op">),</span> <span class="fl">0.0</span><span class="op">)).</span><span class="fu">xyz</span><span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> rayOrigin <span class="op">=</span> <span class="op">(</span>invView <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)).</span><span class="fu">xyz</span><span class="op">;</span></span></code></pre></div>
+<p>Through this mechanism, each thread uses its ID to calculate the
+precise angle and starting point of the ray it is responsible for
+tracing into the scene.</p>
+<h3 id="storing-and-writing-results">Storing and Writing Results</h3>
+<p>Beyond ray computation, <code>gl_LaunchIDEXT</code> determines where
+to write the final color or payload data. Once scene traversal and
+shading conclude, the ray generation shader uses
+<code>gl_LaunchIDEXT.xy</code> directly as the write coordinates for
+storage images using functions like <code>imageStore()</code>:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">imageStore</span><span class="op">(</span>outputImage<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(</span>gl_LaunchIDEXT<span class="op">.</span><span class="fu">xy</span><span class="op">),</span> <span class="dt">vec4</span><span class="op">(</span>finalColor<span class="op">,</span> <span class="fl">1.0</span><span class="op">));</span></span></code></pre></div>
+<p>This guarantees that the computed radiance for a given launch index
+maps deterministically to the corresponding pixel in the target frame
+buffer.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

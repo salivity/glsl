@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Signed Distance Function for a Round Cone - glsl</title>
+    <meta name="description" content="This article provides a complete reference and technical implementation of the signed distance function (SDF) for a round cone in GLSL. It covers the underlying geometric principles of tapering a segment between two spheres of different radii, details ho">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-signed-distance-function-for-a-round-cone">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Signed Distance Function for a Round Cone - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-signed-distance-function-for-a-round-cone" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a complete reference and technical implementation of the signed distance function (SDF) for a round cone in GLSL. It covers the underlying geometric principles of tapering a segment between two spheres of different radii, details ho" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-signed-distance-function-for-a-round-cone">GLSL Signed
+Distance Function for a Round Cone</h1>
+<p>This article provides a complete reference and technical
+implementation of the signed distance function (SDF) for a round cone in
+GLSL. It covers the underlying geometric principles of tapering a
+segment between two spheres of different radii, details how the 3D
+distance problem is reduced to a 2D profile evaluation, and provides
+optimized, production-ready shader code for both axis-aligned and
+arbitrarily oriented round cones.</p>
+<h2 id="understanding-the-round-cone">Understanding the Round Cone</h2>
+<p>A round cone is defined as the convex hull of two spheres with
+centers <span class="math inline">\(a\)</span> and <span
+class="math inline">\(b\)</span> and radii <span
+class="math inline">\(r_1\)</span> and <span
+class="math inline">\(r_2\)</span>. It functions essentially as a
+capsule (tapered cylinder) whose ends smoothly transition into spherical
+caps.</p>
+<p>Because a round cone possesses rotational symmetry around the central
+axis connecting its two sphere centers, the 3D distance query can be
+reduced to a 2D cross-section. The query point <span
+class="math inline">\(p\)</span> is evaluated against three Voronoi
+regions:</p>
+<ol type="1">
+<li>The bottom spherical cap (radius <span
+class="math inline">\(r_1\)</span>).</li>
+<li>The top spherical cap (radius <span
+class="math inline">\(r_2\)</span>).</li>
+<li>The conical tangent surface connecting the two spheres.</li>
+</ol>
+<h2 id="axis-aligned-round-cone-implementation">Axis-Aligned Round Cone
+Implementation</h2>
+<p>When the cone is oriented along the Y-axis, starting at the origin
+<span class="math inline">\((0, 0, 0)\)</span> with base radius <span
+class="math inline">\(r_1\)</span> and extending to height <span
+class="math inline">\(h\)</span> with top radius <span
+class="math inline">\(r_2\)</span>, the 2D projection simplifies to the
+radial distance <span class="math inline">\(q_x = \sqrt{p_x^2 +
+p_z^2}\)</span> and axial height <span class="math inline">\(q_y =
+p_y\)</span>.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">sdRoundCone</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">,</span> <span class="dt">float</span> r1<span class="op">,</span> <span class="dt">float</span> r2<span class="op">,</span> <span class="dt">float</span> h<span class="op">)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Reduce 3D problem to a 2D profile</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> q <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="bu">length</span><span class="op">(</span>p<span class="op">.</span><span class="fu">xz</span><span class="op">),</span> p<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute geometric tangent parameters</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> b <span class="op">=</span> <span class="op">(</span>r1 <span class="op">-</span> r2<span class="op">)</span> <span class="op">/</span> h<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a <span class="op">=</span> <span class="bu">sqrt</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> b <span class="op">*</span> b<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Project q onto the tangent direction</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> k <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>q<span class="op">,</span> <span class="dt">vec2</span><span class="op">(-</span>b<span class="op">,</span> a<span class="op">));</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Bottom sphere region</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>k <span class="op">&lt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="kw">return</span> <span class="bu">length</span><span class="op">(</span>q<span class="op">)</span> <span class="op">-</span> r1<span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Top sphere region</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>k <span class="op">&gt;</span> a <span class="op">*</span> h<span class="op">)</span> <span class="kw">return</span> <span class="bu">length</span><span class="op">(</span>q <span class="op">-</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> h<span class="op">))</span> <span class="op">-</span> r2<span class="op">;</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Conical surface region</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">dot</span><span class="op">(</span>q<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>a<span class="op">,</span> b<span class="op">))</span> <span class="op">-</span> r1<span class="op">;</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="explanation-of-variables">Explanation of Variables</h3>
+<ul>
+<li><code>b</code>: Represents the sine of the cone angle: <span
+class="math inline">\(\sin(\theta) = \frac{r_1 - r_2}{h}\)</span>.</li>
+<li><code>a</code>: Represents the cosine of the cone angle: <span
+class="math inline">\(\cos(\theta) = \sqrt{1.0 -
+\sin^2(\theta)}\)</span>.</li>
+<li><code>k</code>: The scalar projection testing which side of the
+tangent boundary lines the point falls into.</li>
+</ul>
+<h2 id="arbitrary-orientation-round-cone-implementation">Arbitrary
+Orientation Round Cone Implementation</h2>
+<p>For arbitrary endpoints <span class="math inline">\(a\)</span> and
+<span class="math inline">\(b\)</span> in 3D space, computing coordinate
+system transforms per point can be avoided by utilizing vector
+projections along the axis <span class="math inline">\(\vec{ba} = b -
+a\)</span>.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">sdRoundCone</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">,</span> <span class="dt">vec3</span> a<span class="op">,</span> <span class="dt">vec3</span> b<span class="op">,</span> <span class="dt">float</span> r1<span class="op">,</span> <span class="dt">float</span> r2<span class="op">)</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span>  ba <span class="op">=</span> b <span class="op">-</span> a<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> l2 <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>ba<span class="op">,</span> ba<span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> rr <span class="op">=</span> r1 <span class="op">-</span> r2<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a2 <span class="op">=</span> l2 <span class="op">-</span> rr <span class="op">*</span> rr<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> il2 <span class="op">=</span> <span class="fl">1.0</span> <span class="op">/</span> l2<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span>  pa <span class="op">=</span> p <span class="op">-</span> a<span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> y  <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>pa<span class="op">,</span> ba<span class="op">);</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> z  <span class="op">=</span> y <span class="op">-</span> l2<span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Radial offset squared multiplied by l2</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span>  v  <span class="op">=</span> pa <span class="op">*</span> l2 <span class="op">-</span> ba <span class="op">*</span> y<span class="op">;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> x2 <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>v<span class="op">,</span> v<span class="op">);</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> y2 <span class="op">=</span> y <span class="op">*</span> y <span class="op">*</span> l2<span class="op">;</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> z2 <span class="op">=</span> z <span class="op">*</span> z <span class="op">*</span> l2<span class="op">;</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Check separation boundaries</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> k <span class="op">=</span> <span class="bu">sign</span><span class="op">(</span>rr<span class="op">)</span> <span class="op">*</span> rr <span class="op">*</span> rr <span class="op">*</span> x2<span class="op">;</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">sign</span><span class="op">(</span>z<span class="op">)</span> <span class="op">*</span> a2 <span class="op">*</span> z2 <span class="op">&gt;</span> k<span class="op">)</span> <span class="kw">return</span> <span class="bu">sqrt</span><span class="op">(</span>x2 <span class="op">+</span> z2<span class="op">)</span> <span class="op">*</span> il2 <span class="op">-</span> r2<span class="op">;</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">sign</span><span class="op">(</span>y<span class="op">)</span> <span class="op">*</span> a2 <span class="op">*</span> y2 <span class="op">&lt;</span> k<span class="op">)</span> <span class="kw">return</span> <span class="bu">sqrt</span><span class="op">(</span>x2 <span class="op">+</span> y2<span class="op">)</span> <span class="op">*</span> il2 <span class="op">-</span> r1<span class="op">;</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Cone body surface</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span><span class="bu">sqrt</span><span class="op">(</span>x2 <span class="op">*</span> a2 <span class="op">*</span> il2<span class="op">)</span> <span class="op">+</span> y <span class="op">*</span> rr<span class="op">)</span> <span class="op">*</span> il2 <span class="op">-</span> r1<span class="op">;</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="mathematical-breakdown">Mathematical Breakdown</h3>
+<ul>
+<li><code>ba</code>: The displacement vector representing the central
+axis of the cone.</li>
+<li><code>l2</code>: The squared length of the axis vector <span
+class="math inline">\(\|ba\|^2\)</span>.</li>
+<li><code>rr</code>: The difference between the two radii (<span
+class="math inline">\(r_1 - r_2\)</span>).</li>
+<li><code>a2</code>: The squared base of the tangent right triangle,
+derived from the Pythagorean theorem: <span
+class="math inline">\(\|ba\|^2 - (r_1 - r_2)^2\)</span>.</li>
+<li><code>x2</code>, <code>y2</code>, <code>z2</code>: Squared
+components scaled by <span class="math inline">\(l_2\)</span> to delay
+expensive square root calculations until the region branching is
+resolved.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

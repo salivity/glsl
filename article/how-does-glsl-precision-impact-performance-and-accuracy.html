@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does GLSL Precision Impact Performance and Accuracy? - glsl</title>
+    <meta name="description" content="In OpenGL ES and WebGL shader programming, default precision declarations establish the baseline numerical format for floating-point and integer calculations, creating a direct trade-off between execution speed, memory footprint, and visual fidelity. Whi">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-glsl-precision-impact-performance-and-accuracy">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does GLSL Precision Impact Performance and Accuracy? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-glsl-precision-impact-performance-and-accuracy" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL ES and WebGL shader programming, default precision declarations establish the baseline numerical format for floating-point and integer calculations, creating a direct trade-off between execution speed, memory footprint, and visual fidelity. Whi" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-glsl-precision-impact-performance-and-accuracy">How
+Does GLSL Precision Impact Performance and Accuracy?</h1>
+<p>In OpenGL ES and WebGL shader programming, default precision
+declarations establish the baseline numerical format for floating-point
+and integer calculations, creating a direct trade-off between execution
+speed, memory footprint, and visual fidelity. While choosing a lower
+precision qualifier can significantly boost arithmetic throughput,
+reduce register pressure, and lower power consumption on mobile GPUs, it
+also introduces numerical instability, banding artifacts, and coordinate
+jitter. Understanding how GPUs process different precision tiers ensures
+shaders maintain visual correctness without sacrificing hardware
+performance.</p>
+<h2 id="understanding-glsl-precision-qualifiers">Understanding GLSL
+Precision Qualifiers</h2>
+<p>GLSL defines three primary precision qualifiers: <code>lowp</code>,
+<code>mediump</code>, and <code>highp</code>. These qualifiers dictate
+the minimum required range and relative precision of floating-point and
+integer representations:</p>
+<ul>
+<li><strong><code>highp</code> (32-bit float):</strong> Corresponds to
+IEEE 754 single-precision floating-point format (24-bit mantissa, 8-bit
+exponent). It provides the widest numerical range and highest precision,
+suitable for world-space position calculations, projection matrices, and
+depth calculations.</li>
+<li><strong><code>mediump</code> (16-bit half float):</strong> Typically
+represents FP16 format (10-bit mantissa, 5-bit exponent). It handles
+values roughly between -65504 and +65504, making it suitable for local
+texture coordinates, normals, and simple lighting calculations.</li>
+<li><strong><code>lowp</code> (8- to 10-bit fixed/float):</strong>
+Provides minimal range (at least -2.0 to +2.0 with 8-bit precision),
+primarily designed for basic low dynamic range (LDR) color storage and
+manipulation.</li>
+</ul>
+<p>In vertex shaders, the default precision for floats is predefined as
+<code>highp</code>. In fragment shaders, OpenGL ES specifications
+require an explicit precision declaration (such as
+<code>precision mediump float;</code>) because there is no universal
+default.</p>
+<h2 id="hardware-performance-implications">Hardware Performance
+Implications</h2>
+<p>The performance impact of precision declarations depends heavily on
+the target hardware architecture:</p>
+<h3 id="mobile-and-tile-based-gpus">Mobile and Tile-Based GPUs</h3>
+<p>Mobile architectures (such as Qualcomm Adreno, ARM Mali, Imagination
+PowerVR, and Apple silicon) feature dedicated 16-bit execution units
+alongside standard 32-bit ALUs. When shaders declare
+<code>mediump</code>, these architectures can execute dual-issue vector
+instructions or pack two FP16 operations into a single FP32 pipeline
+stage. This results in:</p>
+<ul>
+<li><strong>Higher Instruction Throughput:</strong> Mobile ALUs often
+achieve up to twice the arithmetic throughput for <code>mediump</code>
+calculations compared to <code>highp</code>.</li>
+<li><strong>Reduced Register Pressure:</strong> Lower-precision values
+consume fewer hardware vector registers. Lower register usage increases
+thread occupancy per streaming multiprocessor, allowing the GPU to hide
+memory latency more effectively.</li>
+<li><strong>Lower Memory Bandwidth and Power Consumption:</strong>
+Shorter data types decrease memory bus traffic and reduce thermal
+output, preventing GPU throttling on mobile devices.</li>
+</ul>
+<h3 id="desktop-gpus">Desktop GPUs</h3>
+<p>Most dedicated desktop graphics cards (NVIDIA, AMD, Intel) natively
+compute all floating-point math at full 32-bit precision (FP32) at the
+hardware level, regardless of standard GLSL precision qualifiers. On
+desktop architectures, setting <code>mediump</code> or <code>lowp</code>
+rarely alters ALU execution speed unless specific modern 16-bit math
+extensions and driver optimizations are explicitly enabled.</p>
+<h2 id="visual-accuracy-and-common-precision-artifacts">Visual Accuracy
+and Common Precision Artifacts</h2>
+<p>Applying an aggressive default precision like <code>mediump</code>
+across an entire fragment shader can introduce rendering errors due to
+reduced numerical range and precision limits:</p>
+<ul>
+<li><strong>Texture Coordinate Aliasing and Jitter:</strong> Using
+<code>mediump</code> for texture UV coordinates over large geometry or
+animated surfaces leads to noticeable stepping artifacts and texture
+wobbling, because 16-bit half floats lack sufficient fractional
+precision at high coordinate values.</li>
+<li><strong>Color Banding:</strong> Smooth gradients and post-processing
+passes (such as tone mapping, bloom, or ambient occlusion) suffer from
+quantization steps when calculated in lower precision, producing visible
+stepped color bands.</li>
+<li><strong>Specular Highlight Clipping:</strong> Specular powers and
+exponential functions (<span class="math inline">\(x^n\)</span>) easily
+exceed the dynamic range limit of <code>mediump</code> (65504.0),
+causing blown-out flat white areas or arithmetic overflow returning
+<code>NaN</code> or <code>Infinity</code>.</li>
+<li><strong>Depth and Distance Calculation Errors:</strong> Linear depth
+buffers, shadow-map comparisons, and raymarching loops lose accuracy
+rapidly under <code>mediump</code>, causing z-fighting, light leakage,
+or self-shadowing acne.</li>
+</ul>
+<h2 id="practical-best-practices">Practical Best Practices</h2>
+<p>To achieve optimal performance without degrading rendering quality,
+adopt a selective precision strategy:</p>
+<ul>
+<li><strong>Set <code>precision mediump float;</code> as the Fragment
+Default:</strong> On mobile and WebGL platforms, declaring
+<code>mediump</code> as the baseline minimizes overhead for basic color
+blending and standard shading calculations.</li>
+<li><strong>Override Critical Variables with
+<code>highp</code>:</strong> Explicitly declare variables requiring wide
+dynamic range or high fractional accuracy as <code>highp</code>. These
+include screen-space UVs, world-space position reconstructions, depth
+transformations, and complex lighting exponents.</li>
+<li><strong>Use <code>lowp</code> Exclusively for Final Output
+Colors:</strong> Restrict <code>lowp</code> to standard 8-bit RGBA color
+buffers, simple tint calculations, or alpha masking where fractional
+range beyond <span class="math inline">\([-2.0, 2.0]\)</span> is
+unnecessary.</li>
+<li><strong>Keep Vertex Transformations at <code>highp</code>:</strong>
+Position vectors, normal transformation matrices, and camera
+transformations must remain at full precision to avoid model deformation
+and spatial snapping during camera movement.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

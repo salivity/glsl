@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>subgroupInclusiveAdd vs subgroupExclusiveAdd in GLSL - glsl</title>
+    <meta name="description" content="In GLSL, both subgroupInclusiveAdd and subgroupExclusiveAdd perform prefix-sum (scan) additions across active invocations within a subgroup, but they differ fundamentally in whether the calling invocation's own value is included in the final sum. While s">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/subgroup-inclusive-add-vs-subgroup-exclusive-add-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="subgroupInclusiveAdd vs subgroupExclusiveAdd in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/subgroup-inclusive-add-vs-subgroup-exclusive-add-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL, both subgroupInclusiveAdd and subgroupExclusiveAdd perform prefix-sum (scan) additions across active invocations within a subgroup, but they differ fundamentally in whether the calling invocation's own value is included in the final sum. While s" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="subgroupinclusiveadd-vs-subgroupexclusiveadd-in-glsl">subgroupInclusiveAdd
+vs subgroupExclusiveAdd in GLSL</h1>
+<p>In GLSL, both <code>subgroupInclusiveAdd</code> and
+<code>subgroupExclusiveAdd</code> perform prefix-sum (scan) additions
+across active invocations within a subgroup, but they differ
+fundamentally in whether the calling invocation's own value is included
+in the final sum. While <code>subgroupInclusiveAdd</code> computes the
+cumulative sum up to and including the current invocation,
+<code>subgroupExclusiveAdd</code> calculates the cumulative sum of all
+preceding invocations, omitting the current invocation's input.
+Understanding this distinction is essential for optimizing parallel
+algorithms such as stream compaction, dynamic resource allocation, and
+parallel reduction on modern GPUs.</p>
+<h3 id="how-prefix-sums-work-in-subgroups">How Prefix Sums Work in
+Subgroups</h3>
+<p>A subgroup represents a collection of invocations (threads) executing
+concurrently on a single compute unit (similar to a warp in CUDA or a
+wavefront in AMD architectures). Invocations within a subgroup are
+ordered by an index known as <code>gl_SubgroupInvocationID</code>.</p>
+<p>When performing parallel prefix sums across these invocations, each
+invocation supplies a value, and the hardware computes a running sum
+based on invocation order.</p>
+<h3 id="subgroupinclusiveadd">subgroupInclusiveAdd</h3>
+<p>The <code>subgroupInclusiveAdd</code> function computes the sum of
+the value provided by the current invocation plus the values of all
+preceding active invocations in the subgroup.</p>
+<p>Mathematically, for invocation <span
+class="math inline">\(i\)</span>, the inclusive sum is: <span
+class="math display">\[\text{Result}_i = \sum_{k=0}^{i}
+\text{Value}_k\]</span></p>
+<p><strong>Example:</strong> Assume four active invocations with the
+following inputs:</p>
+<ul>
+<li>Invocations: <code>[0, 1, 2, 3]</code></li>
+<li>Values: <code>[3, 1, 4, 2]</code></li>
+</ul>
+<p>Applying <code>subgroupInclusiveAdd</code> yields:</p>
+<ul>
+<li>Invocation 0: <code>3</code> (3)</li>
+<li>Invocation 1: <code>4</code> (3 + 1)</li>
+<li>Invocation 2: <code>8</code> (3 + 1 + 4)</li>
+<li>Invocation 3: <code>10</code> (3 + 1 + 4 + 2)</li>
+</ul>
+<h3 id="subgroupexclusiveadd">subgroupExclusiveAdd</h3>
+<p>The <code>subgroupExclusiveAdd</code> function calculates the sum of
+all preceding active invocations, strictly excluding the calling
+invocation's own value. For the first invocation (index 0), the result
+is always the additive identity (<code>0</code>).</p>
+<p>Mathematically, for invocation <span
+class="math inline">\(i\)</span>, the exclusive sum is: <span
+class="math display">\[\text{Result}_i = \sum_{k=0}^{i-1}
+\text{Value}_k\]</span> <em>(where the sum equals 0 when <span
+class="math inline">\(i = 0\)</span>)</em></p>
+<p><strong>Example:</strong> Using the same four invocations:</p>
+<ul>
+<li>Invocations: <code>[0, 1, 2, 3]</code></li>
+<li>Values: <code>[3, 1, 4, 2]</code></li>
+</ul>
+<p>Applying <code>subgroupExclusiveAdd</code> yields:</p>
+<ul>
+<li>Invocation 0: <code>0</code> (Identity / no preceding elements)</li>
+<li>Invocation 1: <code>3</code> (3)</li>
+<li>Invocation 2: <code>4</code> (3 + 1)</li>
+<li>Invocation 3: <code>8</code> (3 + 1 + 4)</li>
+</ul>
+<h3 id="key-differences-summary">Key Differences Summary</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Feature</th>
+<th style="text-align: left;"><code>subgroupInclusiveAdd</code></th>
+<th style="text-align: left;"><code>subgroupExclusiveAdd</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Current Value
+Included?</strong></td>
+<td style="text-align: left;">Yes</td>
+<td style="text-align: left;">No</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>First Invocation
+Result</strong></td>
+<td style="text-align: left;">Its own value</td>
+<td style="text-align: left;"><code>0</code> (Additive Identity)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Last Invocation
+Result</strong></td>
+<td style="text-align: left;">Total sum of all invocations</td>
+<td style="text-align: left;">Total sum excluding the last value</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Primary Use Case</strong></td>
+<td style="text-align: left;">Cumulative metrics, bounding checks</td>
+<td style="text-align: left;">Memory offsets, stream compaction</td>
+</tr>
+</tbody>
+</table>
+<h3 id="common-use-cases">Common Use Cases</h3>
+<ul>
+<li><strong>Stream Compaction and Index Allocation:</strong>
+<code>subgroupExclusiveAdd</code> is the standard choice for calculating
+array offsets. When filtering elements, each invocation sets a flag of
+<code>1</code> (keep) or <code>0</code> (discard). An exclusive add
+provides the exact zero-based destination index where each valid
+invocation can write its output without memory collisions.</li>
+<li><strong>Running Metrics and Thresholds:</strong>
+<code>subgroupInclusiveAdd</code> is commonly used when an invocation
+needs to know if the cumulative threshold has been met immediately upon
+considering its own workload, or when computing cumulative distribution
+functions directly.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

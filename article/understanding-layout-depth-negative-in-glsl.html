@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding layout(depth_negative) in GLSL - glsl</title>
+    <meta name="description" content="This article provides an overview of how conservative depth qualifiers function in GLSL, focusing on the purpose of negative depth declarations—such as layout(depthnegative) or standard GLSL layout(depthless). It covers how these qualifiers inform the">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-layout-depth-negative-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding layout(depth_negative) in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-layout-depth-negative-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of how conservative depth qualifiers function in GLSL, focusing on the purpose of negative depth declarations—such as layout(depthnegative) or standard GLSL layout(depthless). It covers how these qualifiers inform the" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-layoutdepth_negative-in-glsl">Understanding
+layout(depth_negative) in GLSL</h1>
+<p>This article provides an overview of how conservative depth
+qualifiers function in GLSL, focusing on the purpose of negative depth
+declarations—such as <code>layout(depth_negative)</code> or standard
+GLSL <code>layout(depth_less)</code>. It covers how these qualifiers
+inform the GPU rasterizer about manual modifications to
+<code>gl_FragDepth</code>, how they preserve critical Early-Z depth
+testing optimizations, and their impact on rendering performance.</p>
+<h3 id="the-role-of-depth-layout-qualifiers">The Role of Depth Layout
+Qualifiers</h3>
+<p>Modern GPUs utilize Early Depth Testing (Early-Z) and Hierarchical Z
+(Hi-Z) to discard occluded fragments before running expensive fragment
+shader calculations. Normally, writing manually to
+<code>gl_FragDepth</code> forces the rasterizer to disable Early-Z
+because the fragment's final depth value is unknown until the fragment
+shader finishes executing. Disabling Early-Z can significantly degrade
+rendering performance, as every overlapping fragment must be shaded
+regardless of visibility.</p>
+<p>Depth layout qualifiers solve this problem by providing a contract
+between the fragment shader and the GPU rasterizer. By explicitly
+declaring bounds on how the fragment shader modifies depth, the
+rasterizer can determine fragment visibility early.</p>
+<h3 id="the-purpose-of-depth_negative--depth_less">The Purpose of
+<code>depth_negative</code> / <code>depth_less</code></h3>
+<p>In GLSL (standardized under <code>GL_ARB_conservative_depth</code> as
+<code>layout(depth_less)</code> and often referred to conceptually as
+<code>depth_negative</code>), the layout qualifier informs the
+rasterizer that any value assigned to <code>gl_FragDepth</code> will be
+strictly less than or equal to the hardware-interpolated fragment depth
+(<code>gl_FragCoord.z</code>).</p>
+<p>Declaring a negative or decreasing depth modification serves several
+key purposes:</p>
+<ul>
+<li><strong>Enabling Early-Z Culling:</strong> When rendering with depth
+comparison functions like <code>GL_GREATER</code> or
+<code>GL_GEQUAL</code> (common in reverse-Z projection setups), a
+fragment can only achieve a smaller depth value than its incoming
+position. If the incoming interpolated depth fails the depth test
+against the depth buffer, the rasterizer guarantees the modified
+fragment would also fail. As a result, the fragment can be safely culled
+before shader execution.</li>
+<li><strong>Preserving Hi-Z Buffer Integrity:</strong> Hierarchical
+depth buffers maintain minimum and maximum depth bounds per tile.
+Knowing that depth only moves in a negative direction allows the GPU to
+perform tile-level occlusion checks without CPU or pipeline stalls.</li>
+<li><strong>Preventing Race Conditions on Depth Writes:</strong>
+Although the final depth written to the depth buffer cannot occur until
+the fragment shader completes, knowing the bound ensures the rasterizer
+does not update the depth buffer prematurely with values that violate
+the current depth testing rules.</li>
+</ul>
+<h3 id="syntax-in-standard-glsl">Syntax in Standard GLSL</h3>
+<p>While conceptually describing a negative depth displacement, the
+standard GLSL core qualifier defined in the specification is
+<code>depth_less</code>:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 420 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Informs the GPU that gl_FragDepth &lt;= gl_FragCoord.z</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span>depth_less<span class="op">)</span> <span class="dt">out</span> <span class="dt">float</span> <span class="bu">gl_FragDepth</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Depth is only modified to a smaller or equal value</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_FragDepth</span> <span class="op">=</span> <span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">z</span> <span class="op">-</span> <span class="fl">0.05</span><span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="common-use-cases">Common Use Cases</h3>
+<p>Guaranteed negative depth modifications are commonly used in:</p>
+<ul>
+<li><strong>Decal and Detail Rendering:</strong> Pushing decals closer
+to the camera to prevent z-fighting against base geometry.</li>
+<li><strong>Conservative Parallax Mapping:</strong> Adjusting surface
+depth inward or outward where displacement values only subtract from the
+projected surface.</li>
+<li><strong>Reverse-Z Pipelines:</strong> Applications utilizing
+floating-point reverse depth buffers, where smaller values correspond to
+points farther from the camera.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hardware Primitive Culling with gl_CullDistance in GLSL - glsl</title>
+    <meta name="description" content="This article explores the role of the built-in GLSL array glCullDistance in evaluating and utilizing hardware-accelerated primitive culling without triggering geometric vertex clipping. By examining the fundamental differences between clipping and cullin">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/hardware-primitive-culling-with-gl-cull-distance-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Hardware Primitive Culling with gl_CullDistance in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/hardware-primitive-culling-with-gl-cull-distance-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores the role of the built-in GLSL array glCullDistance in evaluating and utilizing hardware-accelerated primitive culling without triggering geometric vertex clipping. By examining the fundamental differences between clipping and cullin" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="hardware-primitive-culling-with-gl_culldistance-in-glsl">Hardware
+Primitive Culling with gl_CullDistance in GLSL</h1>
+<p>This article explores the role of the built-in GLSL array
+<code>gl_CullDistance</code> in evaluating and utilizing
+hardware-accelerated primitive culling without triggering geometric
+vertex clipping. By examining the fundamental differences between
+clipping and culling stages in the OpenGL pipeline, you will understand
+how <code>gl_CullDistance</code> provides an efficient, all-or-nothing
+primitive rejection mechanism that preserves original geometry topology
+and aids in performance profiling.</p>
+<p>In standard programmable graphics pipelines, custom geometry
+rejection against user-defined planes typically relies on
+<code>gl_ClipDistance</code>. When a primitive intersects a plane
+defined via <code>gl_ClipDistance</code>, the hardware clipper must
+interpolate vertex attributes and generate new vertices to reconstruct a
+clipped polygon. While geometrically accurate, this introduces
+computational overhead, dynamic topology changes, and bandwidth
+consumption in the primitive assembly stage.</p>
+<p>The introduction of <code>gl_CullDistance</code> provides an explicit
+pathway to bypass the clipping step in favor of primitive-level culling.
+Defined as an array of floating-point values output by the vertex,
+tessellation, or geometry shader, <code>gl_CullDistance</code> assigns a
+scalar distance metric to each vertex relative to a culling plane or
+bounding volume.</p>
+<p>The hardware culling rule dictates that if a single cull distance
+metric is less than zero across <em>all</em> vertices comprising a given
+primitive (point, line, or triangle), the hardware immediately discards
+the entire primitive before rasterization. Conversely, if at least one
+vertex evaluates to a value greater than or equal to zero, the entire
+primitive is retained and rasterized as-is, without generating new
+clipped edges or vertices.</p>
+<p>Using <code>gl_CullDistance</code> to test hardware primitive culling
+provides several key architectural and diagnostic advantages:</p>
+<ul>
+<li><strong>Zero Topology Modification:</strong> Because primitives are
+rejected entirely rather than intersected, the pipeline maintains strict
+vertex-to-primitive ratios. This allows developers to isolate and
+benchmark primitive culling throughput without introducing the variable
+cost of clipping algorithms.</li>
+<li><strong>Deterministic Pipeline Workloads:</strong> Traditional
+clipping results in fluctuating primitive and vertex counts that can
+confound GPU profiling. Testing with <code>gl_CullDistance</code>
+ensures that primitive rates either stay identical or drop cleanly,
+revealing the true efficiency of fixed-function culling blocks.</li>
+<li><strong>Low-Overhead Custom Visibility:</strong> Shaders can compute
+custom visibility checks—such as distance-based Level of Detail (LOD)
+cutoffs, sphere or box bounds, and specialized frustum planes—and
+offload the actual rejection phase directly to hardware fixed-function
+culling units instead of managing complex geometry shader dispatches or
+compute-shader compaction passes.</li>
+</ul>
+<p>To enable this functionality in OpenGL, specific cull distance planes
+must be explicitly activated using
+<code>glEnable(GL_CULL_DISTANCE0 + i)</code>. If both
+<code>gl_ClipDistance</code> and <code>gl_CullDistance</code> are
+combined, the hardware processes culling first; any primitive completely
+culled by <code>gl_CullDistance</code> avoids the clipping stage
+entirely.</p>
+<p>By leveraging <code>gl_CullDistance</code>, developers can
+effectively stress-test the hardware's native rejection capabilities,
+simulate coarse-grained culling volumes at the vertex level, and
+eliminate the performance variance typically caused by vertex clipping
+operations.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

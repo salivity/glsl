@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU Particle Simulation and Dead-List Recycling in GLSL - glsl</title>
+    <meta name="description" content="This article details the compute shader architecture used to manage dynamic GPU particle simulation entirely on the graphics hardware. By using Shader Storage Buffer Objects (SSBOs), atomic counters, and an index-based dead-list recycling algorithm, deve">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gpu-particle-simulation-and-dead-list-recycling-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GPU Particle Simulation and Dead-List Recycling in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gpu-particle-simulation-and-dead-list-recycling-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article details the compute shader architecture used to manage dynamic GPU particle simulation entirely on the graphics hardware. By using Shader Storage Buffer Objects (SSBOs), atomic counters, and an index-based dead-list recycling algorithm, deve" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="gpu-particle-simulation-and-dead-list-recycling-in-glsl">GPU
+Particle Simulation and Dead-List Recycling in GLSL</h1>
+<p>This article details the compute shader architecture used to manage
+dynamic GPU particle simulation entirely on the graphics hardware. By
+using Shader Storage Buffer Objects (SSBOs), atomic counters, and an
+index-based dead-list recycling algorithm, developers can achieve
+high-performance particle emission, numerical lifespan integration, and
+memory recycling in GLSL without costly CPU-to-GPU data transfers.</p>
+<h3 id="the-index-list-architecture">The Index List Architecture</h3>
+<p>Managing GPU particles without transferring state back to the CPU
+relies on an index-list architecture using GLSL Compute Shaders and
+Shader Storage Buffer Objects (SSBOs). Instead of allocating and freeing
+memory dynamically, the system pre-allocates a fixed-capacity pool of
+particle data along with two auxiliary index buffers:</p>
+<ol type="1">
+<li><strong>Particle Pool (Data Buffer):</strong> An array of structs
+holding physical attributes such as position, velocity, remaining
+lifetime, and color.</li>
+<li><strong>Dead List (Free List Stack):</strong> An array of integers
+storing the indices of inactive particles available for allocation.</li>
+<li><strong>Alive List:</strong> An array of integers storing the
+indices of currently active particles that require simulation and
+rendering.</li>
+<li><strong>Counter Buffer:</strong> An SSBO containing atomic uint
+counters that track the count of items in the Dead List and the Alive
+List, as well as arguments for indirect dispatching and rendering.</li>
+</ol>
+<h3 id="dynamic-emission-via-the-dead-list">Dynamic Emission via the
+Dead List</h3>
+<p>Emission runs as a compute shader pass before the simulation step. To
+spawn <span class="math inline">\(N\)</span> new particles:</p>
+<ol type="1">
+<li>An atomic decrement is performed on the Dead List counter to claim
+available slots:
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> deadIndex <span class="op">=</span> <span class="bu">atomicAdd</span><span class="op">(</span>deadCount<span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">)</span> <span class="op">-</span> <span class="dv">1</span><span class="op">;</span></span></code></pre></div></li>
+<li>The thread reads the particle index stored at
+<code>deadList[deadIndex]</code>.</li>
+<li>The emitter initializes the particle's state in the main Particle
+Pool using this index (setting position, initial velocity, maximum
+lifespan, and current age).</li>
+<li>The thread pushes the initialized particle index into the current
+frame's Alive List and increments the Alive counter using
+<code>atomicAdd</code>.</li>
+</ol>
+<p>If the Dead List counter is zero or insufficient, emission requests
+are discarded by early-exiting the thread, preventing buffer
+overflow.</p>
+<h3 id="lifespan-integration-and-death-detection">Lifespan Integration
+and Death Detection</h3>
+<p>The simulation phase operates over the Alive List generated by the
+previous frame or the emission stage. A compute shader is dispatched
+with a thread count matching the active particle count.</p>
+<p>Each thread processes one active particle:</p>
+<ol type="1">
+<li><strong>State Update:</strong> The thread reads the particle index
+from the Alive List, fetches its data from the Particle Pool, and
+updates its lifespan:
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>particle<span class="op">.</span><span class="fu">life</span> <span class="op">-=</span> deltaTime<span class="op">;</span></span></code></pre></div></li>
+<li><strong>Kinematic Integration:</strong> If
+<code>particle.life &gt; 0.0</code>, numerical integration (typically
+Velocity Verlet or Semi-implicit Euler) updates position and velocity
+based on active forces like gravity and drag. The particle index is
+appended to a <em>New Alive List</em> for the upcoming render pass:
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> writeIndex <span class="op">=</span> <span class="bu">atomicAdd</span><span class="op">(</span>nextAliveCount<span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>nextAliveList<span class="op">[</span>writeIndex<span class="op">]</span> <span class="op">=</span> particleIndex<span class="op">;</span></span></code></pre></div></li>
+<li><strong>Recycling (Dead-List Push):</strong> If
+<code>particle.life &lt;= 0.0</code>, the particle is marked inactive.
+The thread recycles the slot by atomically pushing the index back onto
+the Dead List:
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> recycleIndex <span class="op">=</span> <span class="bu">atomicAdd</span><span class="op">(</span>deadCount<span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>deadList<span class="op">[</span>recycleIndex<span class="op">]</span> <span class="op">=</span> particleIndex<span class="op">;</span></span></code></pre></div></li>
+</ol>
+<h3 id="indirect-dispatch-and-rendering">Indirect Dispatch and
+Rendering</h3>
+<p>To eliminate CPU synchronization, the atomic counters updated during
+the simulation pass are bound directly to an
+<code>IndirectDrawArgs</code> buffer. Using OpenGL's
+<code>glDrawArraysIndirect</code> or
+<code>glDrawElementsIndirect</code>, the GPU uses the
+<code>nextAliveCount</code> directly as the instance count or vertex
+count for the rasterization stage. Once rendering completes, the roles
+of the current and next alive lists are swapped, maintaining a fully
+autonomous, zero-overhead simulation loop on the GPU.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

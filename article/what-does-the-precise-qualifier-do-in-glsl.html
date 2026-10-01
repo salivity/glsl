@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Does the Precise Qualifier Do in GLSL? - glsl</title>
+    <meta name="description" content="The precise qualifier in the OpenGL Shading Language (GLSL) ensures exact reproducibility of floating-point calculations across different shaders or stages of a graphics pipeline. Modern GPU shader compilers aggressively optimize math operations through">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-does-the-precise-qualifier-do-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Does the Precise Qualifier Do in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-does-the-precise-qualifier-do-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The precise qualifier in the OpenGL Shading Language (GLSL) ensures exact reproducibility of floating-point calculations across different shaders or stages of a graphics pipeline. Modern GPU shader compilers aggressively optimize math operations through" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-does-the-precise-qualifier-do-in-glsl">What Does the
+Precise Qualifier Do in GLSL?</h1>
+<p>The <code>precise</code> qualifier in the OpenGL Shading Language
+(GLSL) ensures exact reproducibility of floating-point calculations
+across different shaders or stages of a graphics pipeline. Modern GPU
+shader compilers aggressively optimize math operations through
+reordering, algebraic simplification, and hardware-specific instruction
+fusion like Fused Multiply-Add (FMA). While these optimizations increase
+execution speed, they introduce tiny rounding discrepancies that cause
+rendering artifacts such as visual seams, cracking between tessellated
+geometry, or Z-fighting. Declaring a variable, function return value, or
+computation with <code>precise</code> forces the compiler to disable
+unsafe optimizations and evaluate the expression in strict evaluation
+order, guaranteeing bit-exact consistency.</p>
+<h2 id="the-problem-compiler-optimizations-and-invariance-issues">The
+Problem: Compiler Optimizations and Invariance Issues</h2>
+<p>GPU architectures prioritize throughput and parallel execution. To
+achieve high performance, GLSL compilers routinely perform optimizations
+on floating-point expressions:</p>
+<ul>
+<li><strong>Algebraic Reassociation:</strong> The compiler may treat
+operations as mathematically associative even when floating-point math
+is not. An expression written as <code>(a + b) + c</code> might be
+executed as <code>a + (b + c)</code>. Because floating-point rounding
+depends heavily on the magnitudes of intermediate values, the two
+results rarely match at the lowest bit level.</li>
+<li><strong>Expression Substitution and Factoring:</strong> Compilers
+may simplify expressions like <code>a * c + b * c</code> into
+<code>(a + b) * c</code> to reduce total instruction count.</li>
+<li><strong>Fused Multiply-Add (FMA):</strong> Modern GPUs support
+dedicated hardware instructions that compute <code>(a * b) + c</code> in
+a single cycle with only one final rounding step instead of two separate
+roundings. If one shader evaluates an expression using an FMA
+instruction while another evaluates separate multiply and add steps,
+their outputs will diverge.</li>
+</ul>
+<p>In graphics rendering, identical math must often produce identical
+outputs. For instance, when adjacent polygons share vertices computed in
+different shader stages or draw calls, slight floating-point divergences
+cause the vertices to separate, creating visible cracks or flickering
+geometry.</p>
+<h2 id="how-the-precise-qualifier-works">How the Precise Qualifier
+Works</h2>
+<p>The <code>precise</code> keyword acts as a compiler constraint. It
+alters code generation rules for any calculation contributing to the
+declared variable:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">precise</span> <span class="dt">vec4</span> position<span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>position <span class="op">=</span> mvpMatrix <span class="op">*</span> vertex<span class="op">;</span></span></code></pre></div>
+<p>When a variable is marked <code>precise</code>, the compiler must
+adhere to strict behavioral rules:</p>
+<ol type="1">
+<li><strong>Strict Evaluation Order:</strong> Operations must follow
+standard operator precedence and grouping parentheses exactly as written
+in the source code.</li>
+<li><strong>Prevention of Unsafe Algebraic Reductions:</strong> The
+compiler is forbidden from restructuring expressions using distributive,
+associative, or commutative identities that could alter precision.</li>
+<li><strong>Consistent FMA Usage:</strong> The compiler must either
+avoid fusing operations arbitrarily or ensure operations fuse
+identically everywhere the precise value is evaluated.</li>
+</ol>
+<h3 id="decorating-functions-and-return-values">Decorating Functions and
+Return Values</h3>
+<p>The <code>precise</code> qualifier can also be applied to function
+declarations to ensure that all internal computations producing the
+return value maintain precision:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">precise</span> <span class="dt">float</span> <span class="fu">calculateDepth</span><span class="op">(</span><span class="dt">float</span> near<span class="op">,</span> <span class="dt">float</span> far<span class="op">,</span> <span class="dt">float</span> z<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span>far <span class="op">+</span> near<span class="op">)</span> <span class="op">/</span> <span class="op">(</span>far <span class="op">-</span> z<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="precise-vs-the-invariant-qualifier"><code>precise</code> vs. The
+<code>invariant</code> Qualifier</h2>
+<p>GLSL provides two primary qualifiers for consistency:
+<code>invariant</code> and <code>precise</code>. While they address
+similar problems, they operate at different scopes:</p>
+<ul>
+<li><strong><code>invariant</code>:</strong> Applied to shader outputs
+(e.g., <code>invariant out vec4 gl_Position;</code>). It requires two
+separate shader programs to produce the exact same final output value,
+provided both shaders contain identical code paths and uniforms.
+However, <code>invariant</code> relies on complete source code parity
+and does not give fine-grained control over internal intermediate
+calculations.</li>
+<li><strong><code>precise</code>:</strong> Applied directly to
+variables, expressions, or function outputs. It provides fine-grained,
+algorithmic-level guarantees. <code>precise</code> ensures deterministic
+evaluation even if the surrounding shader code changes or if
+calculations are structured across different functions.</li>
+</ul>
+<h2 id="performance-considerations">Performance Considerations</h2>
+<p>Restricting compiler optimizations prevents the GPU driver from
+scheduling instructions in the most latency-tolerant or parallel manner.
+Overusing the <code>precise</code> qualifier across an entire shader can
+lead to measurable frame rate drops due to higher register pressure and
+lost FMA optimization opportunities.</p>
+<p>To maintain optimal rendering performance, the <code>precise</code>
+qualifier should be restricted strictly to critical calculations where
+geometric continuity and bit-level invariance are necessary, such as
+shared screen-space coordinates, displacement mapping calculations,
+tessellation evaluation shaders, and shadow-map depth matching.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

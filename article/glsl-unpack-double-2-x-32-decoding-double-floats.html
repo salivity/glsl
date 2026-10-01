@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL unpackDouble2x32: Decoding Double Floats - glsl</title>
+    <meta name="description" content="The GLSL function unpackDouble2x32 decodes a 64-bit double-precision floating-point scalar into two 32-bit unsigned integers. This article explains how the function operates at the bit level, how it maps IEEE 754 double-precision fields into a two-compon">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-unpack-double-2-x-32-decoding-double-floats">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL unpackDouble2x32: Decoding Double Floats - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-unpack-double-2-x-32-decoding-double-floats" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The GLSL function unpackDouble2x32 decodes a 64-bit double-precision floating-point scalar into two 32-bit unsigned integers. This article explains how the function operates at the bit level, how it maps IEEE 754 double-precision fields into a two-compon" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-unpackdouble2x32-decoding-double-floats">GLSL
+unpackDouble2x32: Decoding Double Floats</h1>
+<p>The GLSL function <code>unpackDouble2x32</code> decodes a 64-bit
+double-precision floating-point scalar into two 32-bit unsigned
+integers. This article explains how the function operates at the bit
+level, how it maps IEEE 754 double-precision fields into a two-component
+vector (<code>uvec2</code>), and the practical scenarios where this
+bit-level unpacking is required in shader programming.</p>
+<h3 id="function-signature-and-purpose">Function Signature and
+Purpose</h3>
+<p>In GLSL, the function is defined as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uvec2</span> <span class="bu">unpackDouble2x32</span><span class="op">(</span><span class="dt">double</span> v<span class="op">);</span></span></code></pre></div>
+<p>The function takes a single 64-bit double-precision floating-point
+value (<code>double</code>) and unpacks it into a two-component 32-bit
+unsigned integer vector (<code>uvec2</code>).</p>
+<p>Importantly, <code>unpackDouble2x32</code> does <strong>not</strong>
+perform a numerical type conversion (such as rounding or casting float
+values to integer values). Instead, it performs a bitwise
+reinterpretation—essentially a bitcast—treating the underlying 64 raw
+bits of the IEEE 754 double as two distinct 32-bit unsigned
+integers.</p>
+<h3 id="ieee-754-double-precision-layout">IEEE 754 Double-Precision
+Layout</h3>
+<p>A standard IEEE 754 64-bit float consists of three segments:</p>
+<ul>
+<li><strong>Sign bit:</strong> 1 bit (bit 63)</li>
+<li><strong>Exponent:</strong> 11 bits (bits 62 to 52)</li>
+<li><strong>Mantissa (Significand):</strong> 52 bits (bits 51 to 0)</li>
+</ul>
+<h3 id="component-mapping-and-bit-distribution">Component Mapping and
+Bit Distribution</h3>
+<p>When <code>unpackDouble2x32</code> unpacks the 64-bit value into a
+<code>uvec2</code>, it divides the bits strictly by significance:</p>
+<ol type="1">
+<li><p><strong><code>result.x</code> (Low-order 32 bits):</strong></p>
+<ul>
+<li>Receives bits <code>[31:0]</code>.</li>
+<li>Contains the least significant 32 bits of the 52-bit mantissa.</li>
+</ul></li>
+<li><p><strong><code>result.y</code> (High-order 32 bits):</strong></p>
+<ul>
+<li>Receives bits <code>[63:32]</code>.</li>
+<li>Contains the sign bit (bit 63), the entire 11-bit exponent (bits
+62–52), and the most significant 20 bits of the mantissa (bits
+51–32).</li>
+</ul></li>
+</ol>
+<p>Regardless of the host system's endianness, GLSL specifies this
+behavior uniformly: <code>.x</code> consistently holds the least
+significant 32 bits, and <code>.y</code> holds the most significant 32
+bits.</p>
+<h3 id="example-in-glsl">Example in GLSL</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> myDouble <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span> <span class="co">// Bit representation: 0x3FF0000000000000</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uvec2</span> unpacked <span class="op">=</span> <span class="bu">unpackDouble2x32</span><span class="op">(</span>myDouble<span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// unpacked.x = 0x00000000u (lower 32 bits)</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// unpacked.y = 0x3FF00000u (upper 32 bits: sign, exponent, and high mantissa)</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="common-use-cases">Common Use Cases</h3>
+<ul>
+<li><strong>Bitwise Analysis:</strong> Extracting or analyzing specific
+components of a <code>double</code>, such as manually masking out the
+exponent or checking raw bit patterns for special values like NaNs or
+infinities.</li>
+<li><strong>Data Transmission and Interoperability:</strong> Storing or
+passing 64-bit data through storage buffers (SSBOs), vertex attributes,
+or communication pipelines that only expose 32-bit integer
+interfaces.</li>
+<li><strong>Emulated Precision:</strong> Manipulating double-precision
+values on GPU architectures or shader stages that lack full native
+64-bit arithmetic or bitwise instructions for doubles.</li>
+</ul>
+<p>To reverse this process and reconstruct the original 64-bit float
+from its 32-bit halves, GLSL provides the inverse function,
+<code>packDouble2x32(uvec2 v)</code>.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

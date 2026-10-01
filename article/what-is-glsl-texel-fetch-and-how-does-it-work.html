@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Is GLSL texelFetch and How Does It Work? - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), standard texture sampling uses normalized floating-point coordinates and applies filtering such as bilinear interpolation or mipmapping to blend pixel data. The texelFetch function alters this workflow by bypassing the">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-is-glsl-texel-fetch-and-how-does-it-work">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Is GLSL texelFetch and How Does It Work? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-is-glsl-texel-fetch-and-how-does-it-work" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), standard texture sampling uses normalized floating-point coordinates and applies filtering such as bilinear interpolation or mipmapping to blend pixel data. The texelFetch function alters this workflow by bypassing the" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-is-glsl-texelfetch-and-how-does-it-work">What Is GLSL
+texelFetch and How Does It Work?</h1>
+<p>In OpenGL Shading Language (GLSL), standard texture sampling uses
+normalized floating-point coordinates and applies filtering such as
+bilinear interpolation or mipmapping to blend pixel data. The
+<code>texelFetch</code> function alters this workflow by bypassing the
+sampler hardware, allowing shaders to read exact, unmapped texel values
+directly from a texture using integer coordinates. This article examines
+the mechanics of <code>texelFetch</code>, how it circumvents hardware
+filtering pipelines, its core syntax, and its key applications in modern
+graphics rendering.</p>
+<h2
+id="understanding-standard-sampling-vs-direct-fetching">Understanding
+Standard Sampling vs. Direct Fetching</h2>
+<p>Standard texture sampling in GLSL is performed using functions like
+<code>texture()</code>. These functions require normalized
+floating-point coordinates (ranging from 0.0 to 1.0) and route the
+texture lookup through the GPU's fixed-function texture filtering
+hardware. Depending on the texture's configuration parameters
+(<code>GL_TEXTURE_MIN_FILTER</code> and
+<code>GL_TEXTURE_MAG_FILTER</code>), the GPU blends neighboring texels
+via nearest-neighbor, bilinear, or trilinear interpolation.</p>
+<p>While interpolation is essential for mapping textures onto 3D
+surfaces smoothly, it modifies raw numerical values. When textures are
+used for data storage or pixel-precise operations, interpolation
+introduces unwanted artifacts and inaccuracies.</p>
+<p><code>texelFetch</code> eliminates the filtering stage entirely. It
+treats a texture as a raw multidimensional array in GPU memory,
+addressing individual texels via non-normalized integer coordinates.</p>
+<h2 id="how-texelfetch-bypasses-the-filtering-pipeline">How texelFetch
+Bypasses the Filtering Pipeline</h2>
+<p>The standard texture pipeline involves several stages:</p>
+<ol type="1">
+<li>Mapping normalized coordinates <span class="math inline">\((u,
+v)\)</span> to texture resolution <span class="math inline">\((W,
+H)\)</span>.</li>
+<li>Calculating level-of-detail (LOD) based on screen-space
+derivatives.</li>
+<li>Fetching adjacent texels across one or two mipmap levels.</li>
+<li>Blending fetched values using interpolation weights.</li>
+</ol>
+<p>When invoking <code>texelFetch</code>, the GPU skips coordinate
+conversion, derivative calculation, and blending arithmetic. The integer
+coordinate maps directly to a discrete memory offset:</p>
+<p><span class="math display">\[\text{Offset} = y \times \text{Width} +
+x\]</span></p>
+<p>Because it bypasses the sampling hardware, <code>texelFetch</code>
+does not respect wrap modes such as <code>GL_REPEAT</code> or
+<code>GL_MIRRORED_REPEAT</code>. Requesting coordinates outside the
+texture dimensions results in undefined behavior or returning zero,
+depending on the graphics driver and hardware specification.</p>
+<h2 id="syntax-and-core-parameters">Syntax and Core Parameters</h2>
+<p>The function signature for a standard two-dimensional texture lookup
+is:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>gvec4 <span class="bu">texelFetch</span><span class="op">(</span>gsampler2D <span class="dt">sampler</span><span class="op">,</span> <span class="dt">ivec2</span> P<span class="op">,</span> <span class="dt">int</span> lod<span class="op">);</span></span></code></pre></div>
+<h3 id="parameter-breakdown">Parameter Breakdown</h3>
+<ul>
+<li><strong><code>sampler</code></strong>: The texture sampler to read
+from (such as <code>sampler2D</code>, <code>isampler2D</code>,
+<code>usampler2D</code>, or <code>sampler2DMS</code> for multisampled
+textures).</li>
+<li><strong><code>P</code></strong>: The zero-based integer coordinates
+of the texel. For a 2D texture with dimensions <span
+class="math inline">\(512 \times 512\)</span>, valid coordinates range
+from <code>ivec2(0, 0)</code> to <code>ivec2(511, 511)</code>.</li>
+<li><strong><code>lod</code></strong>: The specific mipmap level to
+sample. For textures without mipmaps or base-level access, this value is
+set to <code>0</code>.</li>
+</ul>
+<h3 id="example-implementation">Example Implementation</h3>
+<p>In a deferred rendering fragment shader, accessing the exact G-buffer
+data for the current screen pixel is written as:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> gPosition<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> gNormal<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span> pixelCoord <span class="op">=</span> <span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">xy</span><span class="op">);</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Read raw data without interpolation</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> position <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>gPosition<span class="op">,</span> pixelCoord<span class="op">,</span> <span class="dv">0</span><span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> normal   <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>gNormal<span class="op">,</span> pixelCoord<span class="op">,</span> <span class="dv">0</span><span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Perform lighting calculations</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>position <span class="op">+</span> normal<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="primary-use-cases-in-modern-graphics">Primary Use Cases in
+Modern Graphics</h2>
+<p>Direct texel fetching is standard across several rendering
+architectures:</p>
+<h3 id="1-deferred-shading-and-post-processing">1. Deferred Shading and
+Post-Processing</h3>
+<p>Deferred renderers output geometric attributes (normals, depth,
+albedo, specular factors) into multiple render targets known as the
+G-buffer. When computing lighting in subsequent passes, the fragment
+shader needs the exact data stored for the corresponding pixel. Using
+standard sampling could cause color bleeding along geometric edges due
+to filtering; <code>texelFetch</code> ensures 1:1 pixel-to-texel mapping
+using <code>gl_FragCoord.xy</code>.</p>
+<h3 id="2-general-data-storage-data-textures">2. General Data Storage
+(Data Textures)</h3>
+<p>Textures are frequently used to pass non-visual structured data to
+shaders, including:</p>
+<ul>
+<li>Animation bone matrices</li>
+<li>Lookup tables (LUTs) with non-linear distributions</li>
+<li>Voxel grid definitions</li>
+<li>Particle physics parameters</li>
+</ul>
+<p>Because matrix components and discrete indices cannot tolerate linear
+blending, <code>texelFetch</code> preserves the raw numerical integrity
+of the data.</p>
+<h3 id="3-custom-filtering-algorithms">3. Custom Filtering
+Algorithms</h3>
+<p>When implementing specialized filtering techniques—such as custom
+bicubic interpolation, bilateral blur, or screen-space ambient occlusion
+(SSAO)—developers often require direct access to neighboring pixels.
+<code>texelFetch</code> allows shaders to step across pixels using
+explicit integer offsets (<code>pixelCoord + ivec2(dx, dy)</code>),
+giving full control over the mathematical weighting directly in
+code.</p>
+<h3 id="4-multisample-anti-aliasing-msaa-resolves">4. Multisample
+Anti-Aliasing (MSAA) Resolves</h3>
+<p>When working with multisampled textures (<code>sampler2DMS</code>),
+shaders cannot use standard interpolated sampling.
+<code>texelFetch</code> provides a specific overload that accepts a
+sample index parameter, enabling manual resolving and tone-mapping of
+individual MSAA samples before final output.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

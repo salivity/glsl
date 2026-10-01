@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Does the dot Function Compute in GLSL? - glsl</title>
+    <meta name="description" content="The dot function in OpenGL Shading Language (GLSL) calculates the mathematical dot product—also known as the scalar product—between two vectors of identical dimensions. In real-time computer graphics, this operation is one of the most fundamental vec">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-does-the-dot-function-compute-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Does the dot Function Compute in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-does-the-dot-function-compute-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The dot function in OpenGL Shading Language (GLSL) calculates the mathematical dot product—also known as the scalar product—between two vectors of identical dimensions. In real-time computer graphics, this operation is one of the most fundamental vec" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-does-the-dot-function-compute-in-glsl">What Does the dot
+Function Compute in GLSL?</h1>
+<p>The <code>dot</code> function in OpenGL Shading Language (GLSL)
+calculates the mathematical dot product—also known as the scalar
+product—between two vectors of identical dimensions. In real-time
+computer graphics, this operation is one of the most fundamental vector
+computations, serving as the backbone for calculating lighting angles,
+surface orientations, projections, and shading falloffs.</p>
+<h2 id="mathematical-definition">Mathematical Definition</h2>
+<p>The dot product of two vectors <span
+class="math inline">\(\mathbf{a}\)</span> and <span
+class="math inline">\(\mathbf{b}\)</span> multiplies corresponding
+components and sums the results. For an <span
+class="math inline">\(n\)</span>-dimensional vector:</p>
+<p><span class="math display">\[\mathbf{a} \cdot \mathbf{b} =
+\sum_{i=1}^{n} a_i b_i\]</span></p>
+<p>For a 3D vector (<code>vec3</code>), the calculation in GLSL
+evaluates as:</p>
+<p><span class="math display">\[\mathbf{a} \cdot \mathbf{b} = a_x b_x +
+a_y b_y + a_z b_z\]</span></p>
+<p>The geometric definition relates the dot product to the lengths of
+both vectors and the cosine of the angle <span
+class="math inline">\(\theta\)</span> between them:</p>
+<p><span class="math display">\[\mathbf{a} \cdot \mathbf{b} =
+\Vert{}\mathbf{a}\Vert{} \Vert{}\mathbf{b}\Vert{}
+\cos\theta\]</span></p>
+<p>When both input vectors are normalized to unit length (<span
+class="math inline">\(\Vert{}\mathbf{a}\Vert{} = 1\)</span> and <span
+class="math inline">\(\Vert{}\mathbf{b}\Vert{} = 1\)</span>), the
+formula simplifies directly to:</p>
+<p><span class="math display">\[\mathbf{a} \cdot \mathbf{b} =
+\cos\theta\]</span></p>
+<h2 id="glsl-syntax-and-supported-types">GLSL Syntax and Supported
+Types</h2>
+<p>The <code>dot</code> function accepts floating-point vectors
+(<code>vec2</code>, <code>vec3</code>, <code>vec4</code>) as well as
+double-precision floating-point vectors (<code>dvec2</code>,
+<code>dvec3</code>, <code>dvec4</code>). Both arguments must have the
+exact same type and dimension, and the function returns a single scalar
+value (<code>float</code> or <code>double</code>).</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Example vector declarations</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> normal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>vNormal<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> lightDir <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>uLightPosition <span class="op">-</span> vPosition<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Compute scalar dot product</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> NdotL <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>normal<span class="op">,</span> lightDir<span class="op">);</span></span></code></pre></div>
+<h2 id="interpreting-the-output">Interpreting the Output</h2>
+<p>When evaluating normalized vectors, the return value of
+<code>dot(a, b)</code> falls strictly within the range <span
+class="math inline">\([-1.0, 1.0]\)</span>:</p>
+<ul>
+<li><strong><span class="math inline">\(1.0\)</span>:</strong> The
+vectors point in the exact same direction (<span
+class="math inline">\(\theta = 0^\circ\)</span>).</li>
+<li><strong><span class="math inline">\(0.0\)</span>:</strong> The
+vectors are orthogonal or perpendicular to each other (<span
+class="math inline">\(\theta = 90^\circ\)</span>).</li>
+<li><strong><span class="math inline">\(-1.0\)</span>:</strong> The
+vectors point in directly opposite directions (<span
+class="math inline">\(\theta = 180^\circ\)</span>).</li>
+<li><strong>Positive value (<span class="math inline">\(&gt;
+0.0\)</span>):</strong> The vectors point generally toward the same
+hemisphere (<span class="math inline">\(\theta &lt;
+90^\circ\)</span>).</li>
+<li><strong>Negative value (<span class="math inline">\(&lt;
+0.0\)</span>):</strong> The vectors point away from each other into
+opposite hemispheres (<span class="math inline">\(\theta &gt;
+90^\circ\)</span>).</li>
+</ul>
+<h2 id="common-use-cases-in-shaders">Common Use Cases in Shaders</h2>
+<h3 id="1-lambertian-diffuse-lighting">1. Lambertian Diffuse
+Lighting</h3>
+<p>Diffuse illumination relies on Lambert's cosine law, where surface
+brightness is proportional to the cosine of the angle between the
+surface normal <span class="math inline">\(\mathbf{N}\)</span> and the
+incident light direction <span
+class="math inline">\(\mathbf{L}\)</span>. Because lighting cannot be
+negative, results are clamped to zero:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> diffuse <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>normal<span class="op">,</span> lightDirection<span class="op">),</span> <span class="fl">0.0</span><span class="op">);</span></span></code></pre></div>
+<h3 id="2-specular-highlights">2. Specular Highlights</h3>
+<p>In the Blinn-Phong reflection model, specular reflection is
+determined by taking the dot product between the surface normal <span
+class="math inline">\(\mathbf{N}\)</span> and the halfway vector <span
+class="math inline">\(\mathbf{H}\)</span> between the view direction and
+light direction:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> specular <span class="op">=</span> <span class="bu">pow</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>normal<span class="op">,</span> halfVector<span class="op">),</span> <span class="fl">0.0</span><span class="op">),</span> shininess<span class="op">);</span></span></code></pre></div>
+<h3 id="3-vector-length-and-distance">3. Vector Length and Distance</h3>
+<p>The squared length of a vector can be computed using a dot product
+with itself, which avoids an expensive square root operation when
+comparing relative distances:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> lengthSquared <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>v<span class="op">,</span> v<span class="op">);</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> len <span class="op">=</span> <span class="bu">sqrt</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>v<span class="op">,</span> v<span class="op">));</span> <span class="co">// Equivalent to length(v)</span></span></code></pre></div>
+<h3 id="4-fresnel-and-rim-lighting-effects">4. Fresnel and Rim Lighting
+Effects</h3>
+<p>Rim lighting and Fresnel equations frequently evaluate the dot
+product between the surface normal and the view direction (<span
+class="math inline">\(\mathbf{N} \cdot \mathbf{V}\)</span>) to detect
+glancing angles along polygon silhouettes.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

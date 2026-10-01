@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Separable Gaussian Blur in GLSL Compute Shaders - glsl</title>
+    <meta name="description" content="A separable Gaussian blur optimizes image processing by breaking a two-dimensional convolution kernel into two sequential one-dimensional passes: a horizontal pass and a vertical pass. This mathematical separation reduces computational complexity from $\">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/separable-gaussian-blur-in-glsl-compute-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Separable Gaussian Blur in GLSL Compute Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/separable-gaussian-blur-in-glsl-compute-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="A separable Gaussian blur optimizes image processing by breaking a two-dimensional convolution kernel into two sequential one-dimensional passes: a horizontal pass and a vertical pass. This mathematical separation reduces computational complexity from $\" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="separable-gaussian-blur-in-glsl-compute-shaders">Separable
+Gaussian Blur in GLSL Compute Shaders</h1>
+<p>A separable Gaussian blur optimizes image processing by breaking a
+two-dimensional convolution kernel into two sequential one-dimensional
+passes: a horizontal pass and a vertical pass. This mathematical
+separation reduces computational complexity from <span
+class="math inline">\(\mathcal{O}(K^2)\)</span> to <span
+class="math inline">\(\mathcal{O}(2K)\)</span> operations per pixel,
+where <span class="math inline">\(K\)</span> is the kernel diameter.
+When implemented in OpenGL Shading Language (GLSL) compute shaders,
+these passes are executed sequentially using a ping-pong texture
+approach, leveraging compute workgroups and thread-group shared memory
+to cache texels and drastically reduce texture bandwidth
+consumption.</p>
+<h2 id="the-principle-of-separability">The Principle of
+Separability</h2>
+<p>The 2D Gaussian function is defined as:</p>
+<p><span class="math display">\[G(x, y) = \frac{1}{2\pi\sigma^2}
+e^{-\frac{x^2 + y^2}{2\sigma^2}}\]</span></p>
+<p>Because the exponential term decomposes into independent factors
+(<span class="math inline">\(e^{-\frac{x^2 + y^2}{2\sigma^2}} =
+e^{-\frac{x^2}{2\sigma^2}} \cdot e^{-\frac{y^2}{2\sigma^2}}\)</span>),
+the operation can be factored into two 1D operations:</p>
+<p><span class="math display">\[G(x, y) = G(x) \times G(y)\]</span></p>
+<p>Instead of gathering an <span class="math inline">\(11 \times
+11\)</span> grid (121 texture samples per pixel), a separable filter
+performs an 11-tap horizontal blur followed by an 11-tap vertical blur,
+totaling only 22 texture samples per pixel.</p>
+<h2 id="architecture-of-two-pass-execution">Architecture of Two-Pass
+Execution</h2>
+<p>Executing the filter in GLSL compute pipelines requires two distinct
+dispatches managed by a ping-pong buffer pattern:</p>
+<ol type="1">
+<li><strong>Horizontal Pass:</strong> Reads the original source texture
+via an image sampler or <code>image2D</code> binding, applies the 1D
+Gaussian kernel along the X-axis, and writes the output to an
+intermediate texture.</li>
+<li><strong>Pipeline Barrier:</strong> The host application invokes an
+execution barrier (e.g.,
+<code>glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)</code>) to
+ensure all writes to the intermediate texture are finalized before the
+next pass reads them.</li>
+<li><strong>Vertical Pass:</strong> Reads from the intermediate texture,
+applies the identical 1D Gaussian weights along the Y-axis, and writes
+the final blurred result to the destination texture.</li>
+</ol>
+<h2 id="workgroup-shared-memory-optimization">Workgroup Shared Memory
+Optimization</h2>
+<p>A naive compute shader implementation fetches neighboring texels
+individually per thread. Because neighboring pixels share most of the
+same samples within the filter kernel, GLSL compute shaders can preload
+image data into fast <code>shared</code> memory (L1/tile memory on the
+GPU).</p>
+<h3 id="horizontal-compute-pass">Horizontal Compute Pass</h3>
+<p>In the horizontal pass, a 1D or 2D compute workgroup caches the
+target pixels plus the apron (padding equal to the filter radius) along
+the X-axis.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">128</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> rgba8<span class="op">)</span> <span class="kw">uniform</span> <span class="dt">readonly</span> <span class="dt">image2D</span> inputImage<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> rgba8<span class="op">)</span> <span class="kw">uniform</span> <span class="dt">writeonly</span> <span class="dt">image2D</span> outputImage<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> RADIUS <span class="op">=</span> <span class="dv">5</span><span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> TILE_SIZE <span class="op">=</span> <span class="dv">128</span> <span class="op">+</span> <span class="dv">2</span> <span class="op">*</span> RADIUS<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="dt">shared</span> <span class="dt">vec4</span> sharedTile<span class="op">[</span>TILE_SIZE<span class="op">];</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="co">// Precomputed 1D Gaussian weights (sum = 1.0)</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> weights<span class="op">[</span><span class="dv">6</span><span class="op">]</span> <span class="op">=</span> <span class="dt">float</span><span class="op">[](</span><span class="fl">0.227027</span><span class="op">,</span> <span class="fl">0.1945946</span><span class="op">,</span> <span class="fl">0.1216216</span><span class="op">,</span> <span class="fl">0.054054</span><span class="op">,</span> <span class="fl">0.016216</span><span class="op">,</span> <span class="fl">0.003126</span><span class="op">);</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span> coord <span class="op">=</span> <span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">xy</span><span class="op">);</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> localX <span class="op">=</span> <span class="dt">int</span><span class="op">(</span><span class="bu">gl_LocalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">);</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Populate interior pixels</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    sharedTile<span class="op">[</span>localX <span class="op">+</span> RADIUS<span class="op">]</span> <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>inputImage<span class="op">,</span> coord<span class="op">);</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Populate the left and right aprons</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>localX <span class="op">&lt;</span> RADIUS<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>        sharedTile<span class="op">[</span>localX<span class="op">]</span> <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>inputImage<span class="op">,</span> coord <span class="op">-</span> <span class="dt">ivec2</span><span class="op">(</span>RADIUS<span class="op">,</span> <span class="dv">0</span><span class="op">));</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>        sharedTile<span class="op">[</span>localX <span class="op">+</span> <span class="dv">128</span> <span class="op">+</span> RADIUS<span class="op">]</span> <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>inputImage<span class="op">,</span> coord <span class="op">+</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">128</span><span class="op">,</span> <span class="dv">0</span><span class="op">));</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="bu">barrier</span><span class="op">();</span> <span class="co">// Wait until shared memory is fully loaded</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Apply the 1D horizontal filter</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> result <span class="op">=</span> sharedTile<span class="op">[</span>localX <span class="op">+</span> RADIUS<span class="op">]</span> <span class="op">*</span> weights<span class="op">[</span><span class="dv">0</span><span class="op">];</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> i <span class="op">&lt;=</span> RADIUS<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>        result <span class="op">+=</span> sharedTile<span class="op">[</span>localX <span class="op">+</span> RADIUS <span class="op">+</span> i<span class="op">]</span> <span class="op">*</span> weights<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>        result <span class="op">+=</span> sharedTile<span class="op">[</span>localX <span class="op">+</span> RADIUS <span class="op">-</span> i<span class="op">]</span> <span class="op">*</span> weights<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    <span class="bu">imageStore</span><span class="op">(</span>outputImage<span class="op">,</span> coord<span class="op">,</span> result<span class="op">);</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="vertical-compute-pass">Vertical Compute Pass</h3>
+<p>The vertical pass uses identical weights, but rotates the tile
+caching and sampling logic across the Y-axis.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">128</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> rgba8<span class="op">)</span> <span class="kw">uniform</span> <span class="dt">readonly</span> <span class="dt">image2D</span> intermediateImage<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> rgba8<span class="op">)</span> <span class="kw">uniform</span> <span class="dt">writeonly</span> <span class="dt">image2D</span> finalImage<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> RADIUS <span class="op">=</span> <span class="dv">5</span><span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> TILE_SIZE <span class="op">=</span> <span class="dv">128</span> <span class="op">+</span> <span class="dv">2</span> <span class="op">*</span> RADIUS<span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="dt">shared</span> <span class="dt">vec4</span> sharedTile<span class="op">[</span>TILE_SIZE<span class="op">];</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> weights<span class="op">[</span><span class="dv">6</span><span class="op">]</span> <span class="op">=</span> <span class="dt">float</span><span class="op">[](</span><span class="fl">0.227027</span><span class="op">,</span> <span class="fl">0.1945946</span><span class="op">,</span> <span class="fl">0.1216216</span><span class="op">,</span> <span class="fl">0.054054</span><span class="op">,</span> <span class="fl">0.016216</span><span class="op">,</span> <span class="fl">0.003126</span><span class="op">);</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span> coord <span class="op">=</span> <span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">xy</span><span class="op">);</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> localY <span class="op">=</span> <span class="dt">int</span><span class="op">(</span><span class="bu">gl_LocalInvocationID</span><span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    sharedTile<span class="op">[</span>localY <span class="op">+</span> RADIUS<span class="op">]</span> <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>intermediateImage<span class="op">,</span> coord<span class="op">);</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>localY <span class="op">&lt;</span> RADIUS<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>        sharedTile<span class="op">[</span>localY<span class="op">]</span> <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>intermediateImage<span class="op">,</span> coord <span class="op">-</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> RADIUS<span class="op">));</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>        sharedTile<span class="op">[</span>localY <span class="op">+</span> <span class="dv">128</span> <span class="op">+</span> RADIUS<span class="op">]</span> <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>intermediateImage<span class="op">,</span> coord <span class="op">+</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">128</span><span class="op">));</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    <span class="bu">barrier</span><span class="op">();</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> result <span class="op">=</span> sharedTile<span class="op">[</span>localY <span class="op">+</span> RADIUS<span class="op">]</span> <span class="op">*</span> weights<span class="op">[</span><span class="dv">0</span><span class="op">];</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> i <span class="op">&lt;=</span> RADIUS<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>        result <span class="op">+=</span> sharedTile<span class="op">[</span>localY <span class="op">+</span> RADIUS <span class="op">+</span> i<span class="op">]</span> <span class="op">*</span> weights<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>        result <span class="op">+=</span> sharedTile<span class="op">[</span>localY <span class="op">+</span> RADIUS <span class="op">-</span> i<span class="op">]</span> <span class="op">*</span> weights<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>    <span class="bu">imageStore</span><span class="op">(</span>finalImage<span class="op">,</span> coord<span class="op">,</span> result<span class="op">);</span></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="host-execution-flow">Host Execution Flow</h2>
+<p>On the CPU side, executing the separable blur involves:</p>
+<ol type="1">
+<li><strong>Binding the First Pass</strong>: Bind the source texture to
+unit 0 and the intermediate texture to unit 1.</li>
+<li><strong>Dispatching Horizontal Compute</strong>: Call
+<code>glDispatchCompute(imageWidth / 128, imageHeight, 1)</code>.</li>
+<li><strong>Inserting a Barrier</strong>: Invoke
+<code>glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)</code> so
+subsequent texture fetch operations wait until all image write
+operations complete.</li>
+<li><strong>Binding the Second Pass</strong>: Bind the intermediate
+texture to unit 0 and the target display/framebuffer texture to unit
+1.</li>
+<li><strong>Dispatching Vertical Compute</strong>: Call
+<code>glDispatchCompute(imageWidth, imageHeight / 128, 1)</code>.</li>
+<li><strong>Final Barrier</strong>: Call
+<code>glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT)</code>
+if the target texture will be consumed immediately by downstream
+rendering pipelines.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

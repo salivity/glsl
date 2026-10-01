@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How WebGL 1.0 Constrains Desktop GLSL Features - glsl</title>
+    <meta name="description" content="The WebGL 1.0 shading language specification is strictly based on the OpenGL ES Shading Language version 1.00 (GLSL ES 1.00), making it a constrained subset of full desktop GLSL. Designed to execute safely inside web browsers across diverse hardware plat">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-web-gl-1-0-constrains-desktop-glsl-features">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How WebGL 1.0 Constrains Desktop GLSL Features - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-web-gl-1-0-constrains-desktop-glsl-features" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The WebGL 1.0 shading language specification is strictly based on the OpenGL ES Shading Language version 1.00 (GLSL ES 1.00), making it a constrained subset of full desktop GLSL. Designed to execute safely inside web browsers across diverse hardware plat" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-webgl-10-constrains-desktop-glsl-features">How WebGL 1.0
+Constrains Desktop GLSL Features</h1>
+<p>The WebGL 1.0 shading language specification is strictly based on the
+OpenGL ES Shading Language version 1.00 (GLSL ES 1.00), making it a
+constrained subset of full desktop GLSL. Designed to execute safely
+inside web browsers across diverse hardware platforms, WebGL 1.0 strips
+away advanced features, imposes strict compiler validation, and
+introduces limits on control flow, precision, dynamic indexing, and
+texture operations that desktop GLSL developers take for granted.</p>
+<h3 id="reliance-on-the-glsl-es-100-profile">Reliance on the GLSL ES
+1.00 Profile</h3>
+<p>WebGL 1.0 does not map directly to desktop GLSL (such as GLSL 1.20,
+3.30, or 4.x). Instead, it targets mobile and embedded specifications.
+Consequently, core desktop GLSL capabilities—such as 1D textures, 3D
+textures, texture arrays, transform feedback, and modern geometry or
+compute shaders—are entirely excluded from the core specification.
+Features introduced in desktop OpenGL versions must either be simulated
+through multi-pass techniques or accessed via optional WebGL extensions
+when supported by the underlying driver.</p>
+<h3 id="control-flow-and-loop-constraints">Control Flow and Loop
+Constraints</h3>
+<p>In desktop GLSL, developers can write complex iterative structures,
+including dynamic <code>for</code>, <code>while</code>, and
+<code>do-while</code> loops with variable termination conditions. WebGL
+1.0 heavily restricts control flow to avoid browser hangs,
+denial-of-service exploits, and shader compilation failures on
+underpowered hardware. Under the WebGL 1.0 specification:</p>
+<ul>
+<li>Loops must generally possess statically determinable iteration
+counts.</li>
+<li>The loop index variable must be an integer or float initialized in
+the loop header.</li>
+<li>The test condition must compare the index against a constant or
+uniform expression using a simple relational operator
+(<code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>,
+<code>&gt;=</code>, <code>==</code>, <code>!=</code>).</li>
+<li>The step expression must increment or decrement the loop counter by
+a constant expression.</li>
+<li>Dynamic branching that cannot be statically analyzed or unrolled may
+cause validation failures across different browser shader
+translators.</li>
+</ul>
+<h3 id="dynamic-array-and-matrix-indexing">Dynamic Array and Matrix
+Indexing</h3>
+<p>Desktop GLSL permits arbitrary, dynamic indexing of arrays, vectors,
+and matrices within both vertex and fragment stages. WebGL 1.0 restricts
+indexing behavior, especially within fragment shaders:</p>
+<ul>
+<li>Fragment shaders generally prohibit dynamic non-constant indexing of
+arrays and matrices, requiring indices to be constant expressions or
+loop indices with constant bounds.</li>
+<li>Vertex shaders offer somewhat broader indexing support, but dynamic
+indexing remains subject to uniform limitations and compiler unrolling
+requirements.</li>
+<li>These rules prevent out-of-bounds memory accesses and address
+calculation bugs at the hardware level.</li>
+</ul>
+<h3 id="precision-qualifiers">Precision Qualifiers</h3>
+<p>Desktop GLSL assumes high precision across all operations, matching
+the host system's native 32-bit floating-point registers. WebGL 1.0
+enforces explicit precision management via qualifiers:
+<code>lowp</code>, <code>mediump</code>, and <code>highp</code>.</p>
+<p>In fragment shaders, precision declaration is mandatory; omitting a
+default float precision qualifier results in a compilation error.
+Furthermore, <code>highp</code> precision is not guaranteed in the
+fragment stage on mobile or low-end hardware, forcing developers to
+account for numerical drift, truncation artifacts, and depth buffer
+precision loss that would not occur on desktop targets.</p>
+<h3 id="texture-operations-and-sampling-limits">Texture Operations and
+Sampling Limits</h3>
+<p>WebGL 1.0 restricts how and where textures can be sampled compared to
+desktop GLSL:</p>
+<ul>
+<li><strong>Vertex Texturing:</strong> Texture sampling in vertex
+shaders is optional in GLSL ES 1.00 hardware. WebGL 1.0 requires
+implementations to report <code>MAX_VERTEX_TEXTURE_IMAGE_UNITS</code>,
+but this value can be zero on older mobile chips.</li>
+<li><strong>Explicit Derivatives:</strong> Standard desktop derivative
+functions (<code>dFdx</code>, <code>dFdy</code>, <code>fwidth</code>)
+and explicit LOD functions (<code>texture2DLod</code>,
+<code>texture2DProjLod</code>) inside fragment shaders are absent from
+the baseline language and require the
+<code>OES_standard_derivatives</code> extension.</li>
+<li><strong>Non-Power-of-Two (NPOT) Textures:</strong> Desktop GLSL
+seamlessly handles NPOT textures with full mipmapping and arbitrary wrap
+modes. WebGL 1.0 supports NPOT textures only with strict limitations:
+wrapping must be clamped to edge, and minification filters cannot use
+mipmaps unless downscaled to a power of two.</li>
+</ul>
+<h3 id="security-and-deterministic-validation">Security and
+Deterministic Validation</h3>
+<p>Desktop GLSL drivers often compile shaders directly through
+vendor-specific compilers that tolerate non-standard syntax or undefined
+behavior. WebGL 1.0 imposes a secondary validation layer, typically via
+Google's ANGLE (Almost Native Graphics Layer Engine).</p>
+<p>ANGLE parses, validates, and rewrites GLSL source code before passing
+it to the native desktop driver. Shaders that use reserved desktop
+keywords, non-standard types, implicit type casting, or
+hardware-specific driver extensions are rejected outright to prevent
+cross-origin data leaks, GPU memory snooping, and driver-level
+crashes.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

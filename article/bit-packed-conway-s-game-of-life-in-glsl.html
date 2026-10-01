@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bit-Packed Conway's Game of Life in GLSL - glsl</title>
+    <meta name="description" content="Evaluating Conway's Game of Life using bit-packed integers in GLSL accelerates simulation performance by representing individual cell states as single bits within integer types such as uint. Instead of executing one shader invocation per cell, a single t">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/bit-packed-conway-s-game-of-life-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Bit-Packed Conway's Game of Life in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/bit-packed-conway-s-game-of-life-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Evaluating Conway's Game of Life using bit-packed integers in GLSL accelerates simulation performance by representing individual cell states as single bits within integer types such as uint. Instead of executing one shader invocation per cell, a single t" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="bit-packed-conways-game-of-life-in-glsl">Bit-Packed Conway's
+Game of Life in GLSL</h1>
+<p>Evaluating Conway's Game of Life using bit-packed integers in GLSL
+accelerates simulation performance by representing individual cell
+states as single bits within integer types such as <code>uint</code>.
+Instead of executing one shader invocation per cell, a single thread
+updates 32 horizontal cells simultaneously using parallel bitwise logic,
+full-adder arithmetic, and bit shifts. This approach drastically
+minimizes texture memory bandwidth, bypasses per-cell branching, and
+maximizes GPU arithmetic throughput.</p>
+<h3 id="memory-representation-and-word-layout">Memory Representation and
+Word Layout</h3>
+<p>In a standard floating-point or byte-per-cell implementation, a 2D
+texture allocates 8 to 32 bits per cell. In a bit-packed implementation,
+an <code>R32UI</code> texture format is used where each 32-bit unsigned
+integer (<code>uint</code>) holds a contiguous row of 32 binary cells. A
+live cell is represented by <code>1</code> and a dead cell by
+<code>0</code>.</p>
+<p>To evaluate a row, a fragment or compute shader fetches the target
+word along with its neighboring words:</p>
+<ul>
+<li>The current 32-cell word: <span
+class="math inline">\(C\)</span></li>
+<li>The words directly to the left and right: <span
+class="math inline">\(W\)</span> and <span
+class="math inline">\(E\)</span></li>
+<li>The corresponding words in the row above: <span
+class="math inline">\(N\)</span>, <span
+class="math inline">\(NW\)</span>, and <span
+class="math inline">\(NE\)</span></li>
+<li>The corresponding words in the row below: <span
+class="math inline">\(S\)</span>, <span
+class="math inline">\(SW\)</span>, and <span
+class="math inline">\(SE\)</span></li>
+</ul>
+<h3 id="boundary-alignment-and-bit-shifting">Boundary Alignment and Bit
+Shifting</h3>
+<p>Calculating the neighbors of all 32 cells requires horizontal
+alignments across word boundaries. Within the central word <span
+class="math inline">\(C\)</span>, a cell's left neighbor corresponds to
+a right bit-shift (<code>C &gt;&gt; 1u</code>), and its right neighbor
+corresponds to a left bit-shift (<code>C &lt;&lt; 1u</code>).</p>
+<p>Because bits shift off the edges, the boundary bits must be restored
+using the adjacent words <span class="math inline">\(W\)</span> and
+<span class="math inline">\(E\)</span>:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Horizontal neighbors for the current row</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> left_C  <span class="op">=</span> <span class="op">(</span>C <span class="op">&gt;&gt;</span> <span class="dv">1</span>u<span class="op">)</span> <span class="op">|</span> <span class="op">(</span>W <span class="op">&lt;&lt;</span> <span class="dv">31</span>u<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> right_C <span class="op">=</span> <span class="op">(</span>C <span class="op">&lt;&lt;</span> <span class="dv">1</span>u<span class="op">)</span> <span class="op">|</span> <span class="op">(</span>E <span class="op">&gt;&gt;</span> <span class="dv">31</span>u<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Horizontal neighbors for the northern row</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> left_N  <span class="op">=</span> <span class="op">(</span>N <span class="op">&gt;&gt;</span> <span class="dv">1</span>u<span class="op">)</span> <span class="op">|</span> <span class="op">(</span>NW <span class="op">&lt;&lt;</span> <span class="dv">31</span>u<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> right_N <span class="op">=</span> <span class="op">(</span>N <span class="op">&lt;&lt;</span> <span class="dv">1</span>u<span class="op">)</span> <span class="op">|</span> <span class="op">(</span>NE <span class="op">&gt;&gt;</span> <span class="dv">31</span>u<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Horizontal neighbors for the southern row</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> left_S  <span class="op">=</span> <span class="op">(</span>S <span class="op">&gt;&gt;</span> <span class="dv">1</span>u<span class="op">)</span> <span class="op">|</span> <span class="op">(</span>SW <span class="op">&lt;&lt;</span> <span class="dv">31</span>u<span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> right_S <span class="op">=</span> <span class="op">(</span>S <span class="op">&lt;&lt;</span> <span class="dv">1</span>u<span class="op">)</span> <span class="op">|</span> <span class="op">(</span>SE <span class="op">&gt;&gt;</span> <span class="dv">31</span>u<span class="op">);</span></span></code></pre></div>
+<p>This yields eight 32-bit masks representing the states of all eight
+neighbors (<span class="math inline">\(N\)</span>, <span
+class="math inline">\(S\)</span>, <span
+class="math inline">\(left\_C\)</span>, <span
+class="math inline">\(right\_C\)</span>, <span
+class="math inline">\(left\_N\)</span>, <span
+class="math inline">\(right\_N\)</span>, <span
+class="math inline">\(left\_S\)</span>, <span
+class="math inline">\(right\_S\)</span>) corresponding precisely to the
+32 cell positions in <span class="math inline">\(C\)</span>.</p>
+<h3 id="parallel-bitwise-addition-bit-slicing">Parallel Bitwise Addition
+(Bit-Slicing)</h3>
+<p>A cell can have between 0 and 8 active neighbors, requiring a 4-bit
+accumulator (<span class="math inline">\(b_3, b_2, b_1, b_0\)</span>) to
+count neighbors across all 32 cells simultaneously. Performing regular
+integer addition (<code>+</code>) would cause carries to bleed into
+neighboring cell positions. Instead, the addition is implemented using
+bitwise boolean logic gates representing half-adders and
+full-adders.</p>
+<p>A half-adder combines a bit <span class="math inline">\(A\)</span>
+and a running total <span class="math inline">\(S\)</span>, updating the
+sum bit and producing a carry <span
+class="math inline">\(C\)</span>:</p>
+<p><span class="math display">\[\text{Sum} = A \oplus S\]</span> <span
+class="math display">\[\text{Carry} = A \land S\]</span></p>
+<p>A full-adder combines an input bit <span
+class="math inline">\(A\)</span> with an existing sum bit <span
+class="math inline">\(S\)</span> and an incoming carry bit <span
+class="math inline">\(C_{in}\)</span>, producing a new sum bit and an
+outgoing carry <span class="math inline">\(C_{out}\)</span>:</p>
+<p><span class="math display">\[\text{Sum} = A \oplus S \oplus
+C_{in}\]</span> <span class="math display">\[C_{out} = (A \land S) \lor
+(C_{in} \land (A \oplus S))\]</span></p>
+<p>By chaining these logic operations across four 32-bit registers
+(<span class="math inline">\(b_0, b_1, b_2, b_3\)</span>), the shader
+tallies the eight neighbor masks into a 4-bit parallel vertical counter
+without any bit bleeding.</p>
+<h3 id="state-transition-logic">State Transition Logic</h3>
+<p>Conway’s Game of Life rules state:</p>
+<ol type="1">
+<li>Any live cell with 2 or 3 live neighbors survives.</li>
+<li>Any dead cell with exactly 3 live neighbors becomes a live
+cell.</li>
+<li>All other live cells die, and all other dead cells stay dead.</li>
+</ol>
+<p>Expressed in terms of the neighbor count: <span
+class="math display">\[\text{Next State} = (\text{Count} == 3) \lor
+(\text{Alive} \land (\text{Count} == 2))\]</span></p>
+<p>Because neighbor counts are held in the bit-slice planes <span
+class="math inline">\(b_3, b_2, b_1, b_0\)</span>, conditions for counts
+of 2 and 3 are extracted using bitwise operations:</p>
+<ul>
+<li><strong>Count is 2</strong> (Binary <code>0010</code>): <span
+class="math inline">\(\sim b_3 \land \sim b_2 \land b_1 \land \sim
+b_0\)</span></li>
+<li><strong>Count is 3</strong> (Binary <code>0011</code>): <span
+class="math inline">\(\sim b_3 \land \sim b_2 \land b_1 \land
+b_0\)</span></li>
+</ul>
+<p>Factoring these terms allows the evaluation to be simplified:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Common factor: no 8s, no 4s, and has a 2</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> count2_or_3 <span class="op">=</span> <span class="op">~</span>b3 <span class="op">&amp;</span> <span class="op">~</span>b2 <span class="op">&amp;</span> b1<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> count2 <span class="op">=</span> count2_or_3 <span class="op">&amp;</span> <span class="op">~</span>b0<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> count3 <span class="op">=</span> count2_or_3 <span class="op">&amp;</span>  b0<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Apply Game of Life rule</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> next_C <span class="op">=</span> count3 <span class="op">|</span> <span class="op">(</span>C <span class="op">&amp;</span> count2<span class="op">);</span></span></code></pre></div>
+<p>The resulting <code>next_C</code> integer contains the updated states
+of all 32 cells and is written directly to the target output texture or
+buffer in a single write operation.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

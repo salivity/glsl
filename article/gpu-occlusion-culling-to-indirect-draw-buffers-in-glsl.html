@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU Occlusion Culling to Indirect Draw Buffers in GLSL - glsl</title>
+    <meta name="description" content="This article explains how GPU-driven occlusion culling pipelines evaluate object visibility and output command data directly to indirect draw buffers using GLSL compute shaders. By bypassing CPU readbacks, modern rendering engines use compute shaders to">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gpu-occlusion-culling-to-indirect-draw-buffers-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GPU Occlusion Culling to Indirect Draw Buffers in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gpu-occlusion-culling-to-indirect-draw-buffers-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how GPU-driven occlusion culling pipelines evaluate object visibility and output command data directly to indirect draw buffers using GLSL compute shaders. By bypassing CPU readbacks, modern rendering engines use compute shaders to" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="gpu-occlusion-culling-to-indirect-draw-buffers-in-glsl">GPU
+Occlusion Culling to Indirect Draw Buffers in GLSL</h1>
+<p>This article explains how GPU-driven occlusion culling pipelines
+evaluate object visibility and output command data directly to indirect
+draw buffers using GLSL compute shaders. By bypassing CPU readbacks,
+modern rendering engines use compute shaders to perform bounding-volume
+depth tests, atomically compact visible instances, and write parameters
+directly into GPU-accessible Shader Storage Buffer Objects (SSBOs) that
+back OpenGL indirect draw calls.</p>
+<h2 id="the-indirect-draw-data-layout">The Indirect Draw Data
+Layout</h2>
+<p>OpenGL provides indirect drawing through commands such as
+<code>glDrawElementsIndirect</code> and
+<code>glMultiDrawElementsIndirect</code>. These commands read their
+parameters directly from a buffer bound to
+<code>GL_DRAW_INDIRECT_BUFFER</code>. In GLSL, this buffer can be bound
+simultaneously as a Shader Storage Buffer Object (SSBO) using the
+<code>std430</code> layout qualifier.</p>
+<p>For indexed geometry, each indirect command structure in GLSL
+corresponds to the C equivalent
+<code>DrawElementsIndirectCommand</code>:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> DrawElementsIndirectCommand <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> count<span class="op">;</span>         <span class="co">// Number of indices to draw</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> instanceCount<span class="op">;</span> <span class="co">// Number of instances to draw</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> firstIndex<span class="op">;</span>    <span class="co">// Offset in the index buffer</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span>  baseVertex<span class="op">;</span>    <span class="co">// Value added to each index</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> baseInstance<span class="op">;</span>  <span class="co">// Start instance ID</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>When writing commands or instances dynamically, two SSBOs are
+typically defined: one holding the indirect command structures and
+another holding a counter or visibility array.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> IndirectDrawBuffer <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    DrawElementsIndirectCommand commands<span class="op">[];</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">buffer</span> DrawCountBuffer <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> drawCount<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<h2 id="visibility-testing-via-compute-shaders">Visibility Testing via
+Compute Shaders</h2>
+<p>The visibility evaluation begins by dispatching a compute shader
+where each thread or thread group is responsible for a single bounding
+box (AABB or oriented bounding box) representing a mesh or instance:</p>
+<ol type="1">
+<li><strong>Transforming the Bounding Box:</strong> The compute shader
+transforms the eight corners of the mesh's bounding box into clip
+space.</li>
+<li><strong>Frustum Culling:</strong> An initial check determines if all
+points lie outside any clip plane. If outside, the object is culled
+immediately.</li>
+<li><strong>Screen-Space Footprint:</strong> The bounding box is
+projected onto screen space to calculate a bounding rectangle and
+determine the appropriate mip level of a Hierarchical Z-Buffer
+(Hi-Z).</li>
+<li><strong>Depth Comparison:</strong> The maximum depth value of the
+bounding box is compared against the minimum depth fetched from the Hi-Z
+pyramid. If the bounding box depth is further than the stored depth, the
+object is occluded.</li>
+</ol>
+<h2 id="writing-to-the-indirect-buffer">Writing to the Indirect
+Buffer</h2>
+<p>Once a mesh or instance is determined to be visible, the compute
+shader must record this result into the indirect buffer. This can be
+achieved through two primary patterns depending on whether you are
+compacting instances or individual draw commands.</p>
+<h3 id="pattern-1-per-command-instance-compacting">Pattern 1:
+Per-Command Instance Compacting</h3>
+<p>When drawing instances of the same mesh (e.g., foliage or crowds),
+the indirect draw command already exists in the buffer, and the compute
+shader simply increments the <code>instanceCount</code> field:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> visible <span class="op">=</span> <span class="fu">performOcclusionTest</span><span class="op">(</span>instanceID<span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>visible<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Atomically increment the instance count for this draw command</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> instanceIndex <span class="op">=</span> <span class="bu">atomicAdd</span><span class="op">(</span>commands<span class="op">[</span>meshID<span class="op">].</span><span class="fu">instanceCount</span><span class="op">,</span> <span class="dv">1</span>u<span class="op">);</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Store visible instance data in an instance-data buffer</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    visibleInstanceIDs<span class="op">[</span>meshID<span class="op">][</span>instanceIndex<span class="op">]</span> <span class="op">=</span> instanceID<span class="op">;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Prior to dispatching the culling compute shader, the CPU or a
+separate initialization compute shader resets <code>instanceCount</code>
+to <code>0</code>.</p>
+<h3 id="pattern-2-multi-draw-command-compacting">Pattern 2: Multi-Draw
+Command Compacting</h3>
+<p>When culling heterogeneous objects using
+<code>glMultiDrawElementsIndirectCount</code> (or standard multi-draw),
+each visible object receives its own draw command slot in the output
+buffer. The compute shader appends fully populated command structures
+using an atomic counter:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> visible <span class="op">=</span> <span class="fu">performOcclusionTest</span><span class="op">(</span>objectID<span class="op">);</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>visible<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Reserve an index in the indirect buffer</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> cmdIndex <span class="op">=</span> <span class="bu">atomicAdd</span><span class="op">(</span>drawCount<span class="op">,</span> <span class="dv">1</span>u<span class="op">);</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Populate the indirect command</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    commands<span class="op">[</span>cmdIndex<span class="op">].</span><span class="fu">count</span> <span class="op">=</span> meshData<span class="op">[</span>objectID<span class="op">].</span><span class="fu">indexCount</span><span class="op">;</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    commands<span class="op">[</span>cmdIndex<span class="op">].</span><span class="fu">instanceCount</span> <span class="op">=</span> <span class="dv">1</span>u<span class="op">;</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    commands<span class="op">[</span>cmdIndex<span class="op">].</span><span class="fu">firstIndex</span> <span class="op">=</span> meshData<span class="op">[</span>objectID<span class="op">].</span><span class="fu">firstIndex</span><span class="op">;</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    commands<span class="op">[</span>cmdIndex<span class="op">].</span><span class="fu">baseVertex</span> <span class="op">=</span> meshData<span class="op">[</span>objectID<span class="op">].</span><span class="fu">baseVertex</span><span class="op">;</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    commands<span class="op">[</span>cmdIndex<span class="op">].</span><span class="fu">baseInstance</span> <span class="op">=</span> objectID<span class="op">;</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The <code>drawCount</code> buffer corresponds directly to the
+parameter buffer required by
+<code>glMultiDrawElementsIndirectCountARB</code>, enabling the GPU to
+determine both the commands and the total number of commands to
+execute.</p>
+<h2 id="synchronization-and-execution">Synchronization and
+Execution</h2>
+<p>Because compute shaders write to the buffer asynchronously, memory
+barriers must be injected before invoking the render pass on the CPU
+side:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Dispatch compute culling</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>glDispatchCompute<span class="op">(</span>numWorkGroups<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Ensure writes to SSBO and Indirect buffers are complete</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>glMemoryBarrier<span class="op">(</span>GL_COMMAND_BARRIER_BIT <span class="op">|</span> GL_SHADER_STORAGE_BARRIER_BIT<span class="op">);</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Execute the indirect draw</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>glBindBuffer<span class="op">(</span>GL_DRAW_INDIRECT_BUFFER<span class="op">,</span> indirectBufferHandle<span class="op">);</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>glBindBuffer<span class="op">(</span>GL_PARAMETER_BUFFER<span class="op">,</span> countBufferHandle<span class="op">);</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>glMultiDrawElementsIndirectCount<span class="op">(</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    GL_TRIANGLES<span class="op">,</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    GL_UNSIGNED_INT<span class="op">,</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">(</span><span class="dt">const</span> <span class="dt">void</span><span class="op">*)</span><span class="dv">0</span><span class="op">,</span>      <span class="co">// Indirect buffer offset</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    <span class="dv">0</span><span class="op">,</span>                   <span class="co">// Count buffer offset</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    maxDrawCommands<span class="op">,</span>     <span class="co">// Upper bound limit</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">sizeof</span><span class="op">(</span>DrawElementsIndirectCommand<span class="op">)</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<p>Using <code>GL_COMMAND_BARRIER_BIT</code> guarantees that the
+indirect dispatch hardware waits until the compute shader has finished
+writing visibility draw counts and command structures before the draw
+calls begin processing.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How memoryBarrierImage Synchronizes Image Writes in GLSL - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), the memoryBarrierImage() function is a specialized synchronization primitive designed to enforce memory ordering for operations performed on image variables. This article provides a clear overview of how memoryBarrierIm">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-memory-barrier-image-synchronizes-image-writes-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How memoryBarrierImage Synchronizes Image Writes in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-memory-barrier-image-synchronizes-image-writes-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), the memoryBarrierImage() function is a specialized synchronization primitive designed to enforce memory ordering for operations performed on image variables. This article provides a clear overview of how memoryBarrierIm" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-memorybarrierimage-synchronizes-image-writes-in-glsl">How
+memoryBarrierImage Synchronizes Image Writes in GLSL</h1>
+<p>In OpenGL Shading Language (GLSL), the
+<code>memoryBarrierImage()</code> function is a specialized
+synchronization primitive designed to enforce memory ordering for
+operations performed on image variables. This article provides a clear
+overview of how <code>memoryBarrierImage()</code> operates, why
+weakly-ordered GPU memory makes it essential for image load/store
+operations, how it differs from full execution barriers, and how to
+properly implement it to prevent data races and cache inconsistencies in
+shaders.</p>
+<h3 id="the-problem-of-out-of-order-memory-access">The Problem of
+Out-of-Order Memory Access</h3>
+<p>Modern GPUs achieve massive parallelism by executing thousands of
+threads simultaneously across multiple compute units. When using GLSL
+image load and store operations (such as <code>imageStore()</code> and
+<code>imageLoad()</code>), shaders bypass the traditional fixed-function
+texture pipeline and interact directly with GPU memory subsystems and
+caches.</p>
+<p>By default, the GPU memory model is weakly ordered. When a shader
+invocation issues an <code>imageStore()</code>, the written data may
+linger in local Level 1 (L1) or Level 2 (L2) caches rather than being
+immediately flushed to a shared memory tier accessible to other
+invocations. As a result, if another shader invocation attempts to read
+that same texel using <code>imageLoad()</code>, it may read stale data,
+leading to race conditions and rendering artifacts.</p>
+<h3 id="the-role-of-memorybarrierimage">The Role of
+memoryBarrierImage()</h3>
+<p>The primary role of <code>memoryBarrierImage()</code> is to enforce a
+strict ordering constraint on image memory accesses. Specifically,
+calling <code>memoryBarrierImage()</code> guarantees that:</p>
+<ol type="1">
+<li><strong>Ordering of Operations:</strong> All memory writes to image
+variables (via <code>imageStore()</code> or atomic operations) issued by
+the calling invocation prior to the barrier call are committed to
+memory.</li>
+<li><strong>Visibility:</strong> These committed writes become visible
+to any subsequent memory accesses to image variables issued after the
+barrier call.</li>
+</ol>
+<p>Without this function, the compiler and the GPU hardware are free to
+reorder write operations or delay cache flushes, which breaks algorithms
+that rely on multi-pass computation or inter-invocation communication
+within a single dispatch.</p>
+<h3 id="memory-barriers-vs-execution-barriers">Memory Barriers vs.
+Execution Barriers</h3>
+<p>A frequent source of bugs in compute shaders is conflating a memory
+barrier with an execution barrier.</p>
+<ul>
+<li><strong><code>memoryBarrierImage()</code> is solely a memory
+barrier:</strong> It ensures memory writes are visible, but it does
+<em>not</em> pause the execution of shader invocations to wait for other
+invocations to catch up.</li>
+<li><strong><code>barrier()</code> is an execution barrier:</strong> It
+synchronizes the execution flow of invocations within the same local
+workgroup, ensuring all invocations reach the barrier before any
+proceed.</li>
+</ul>
+<p>If one invocation writes to an image and another invocation in the
+same workgroup reads that image, calling
+<code>memoryBarrierImage()</code> alone is insufficient. While the write
+is guaranteed to be in memory, the reading invocation might execute its
+<code>imageLoad()</code> before the writing invocation even reaches the
+<code>imageStore()</code>.</p>
+<p>To establish correct synchronization across invocations in a compute
+workgroup, the operations must be paired:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Step 1: Write to the image</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="bu">imageStore</span><span class="op">(</span>myImage<span class="op">,</span> texelCoord<span class="op">,</span> computedValue<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Step 2: Ensure the write is committed to memory</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="bu">memoryBarrierImage</span><span class="op">();</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Step 3: Ensure all invocations reach this point before reading</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="bu">barrier</span><span class="op">();</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co">// Step 4: Safely read the updated data</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> value <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>myImage<span class="op">,</span> neighborCoord<span class="op">);</span></span></code></pre></div>
+<h3
+id="memorybarrierimage-vs-general-memorybarrier">memoryBarrierImage()
+vs. General memoryBarrier()</h3>
+<p>GLSL provides several barrier functions. While
+<code>memoryBarrier()</code> acts globally across all memory
+transactions—including shader storage buffers, atomic counters, shared
+memory, and images—<code>memoryBarrierImage()</code> restricts its scope
+strictly to image variables.</p>
+<p>Using <code>memoryBarrierImage()</code> instead of the general
+<code>memoryBarrier()</code> allows the GPU driver to issue narrower
+cache invalidation and flush instructions. By avoiding unnecessary
+flushes of storage buffers or shared variables, performance is maximized
+while still preserving correct synchronization for image assets.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

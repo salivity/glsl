@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Function Inlining Impact on Register Allocation - glsl</title>
+    <meta name="description" content="Function inlining in large GLSL programs significantly alters how the GPU compiler allocates physical hardware registers, fundamentally impacting shader execution speed and GPU occupancy. While inlining eliminates call-stack overhead and opens doors for">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-function-inlining-impact-on-register-allocation">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Function Inlining Impact on Register Allocation - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-function-inlining-impact-on-register-allocation" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Function inlining in large GLSL programs significantly alters how the GPU compiler allocates physical hardware registers, fundamentally impacting shader execution speed and GPU occupancy. While inlining eliminates call-stack overhead and opens doors for" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-function-inlining-impact-on-register-allocation">GLSL
+Function Inlining Impact on Register Allocation</h1>
+<p>Function inlining in large GLSL programs significantly alters how the
+GPU compiler allocates physical hardware registers, fundamentally
+impacting shader execution speed and GPU occupancy. While inlining
+eliminates call-stack overhead and opens doors for aggressive
+cross-functional optimizations, it substantially widens variable live
+ranges and increases peak register pressure. In large, complex shaders,
+this increased register consumption can lead to reduced thread occupancy
+or catastrophic register spilling to high-latency memory.</p>
+<h3 id="how-inlining-increases-register-pressure">How Inlining Increases
+Register Pressure</h3>
+<p>When a GLSL function is inlined, its local variables and parameters
+are placed directly into the caller's scope. In modern GPU
+architectures, execution relies on a flat pool of general-purpose
+registers (GPRs) rather than a dynamic call stack.</p>
+<p>Under normal function execution with an active call stack, the
+compiler can reuse the same physical registers for distinct variables
+whose lifetimes never overlap across separate calls. However, once
+inlined:</p>
+<ul>
+<li><strong>Live Range Expansion:</strong> Variables from the caller and
+callee now exist simultaneously. The compiler must maintain values
+across the integrated code block, lengthening the "live ranges" (the
+span from a variable's definition to its last use).</li>
+<li><strong>Concurrent Lifetime Overlap:</strong> If multiple inlined
+functions or loops execute sequentially or nested within the main shader
+body, intermediate values from the outer scopes cannot always be
+discarded, forcing the register allocator to assign unique physical
+registers to a larger pool of active variables.</li>
+</ul>
+<h3 id="the-impact-on-gpu-occupancy">The Impact on GPU Occupancy</h3>
+<p>GPUs hide memory latency through massively parallel execution,
+scheduling multiple warps or wavefronts onto a single execution unit
+(such as an NVIDIA Streaming Multiprocessor or AMD Compute Unit). The
+total number of registers available per compute block is strictly
+finite.</p>
+<ol type="1">
+<li><strong>Lower Warp/Wavefront Counts:</strong> As the register count
+per thread climbs due to inlining, the hardware can fit fewer concurrent
+warps on the compute unit.</li>
+<li><strong>Reduced Latency Hiding:</strong> With fewer active threads
+waiting to execute instructions, the GPU cannot effectively mask memory
+stalls (e.g., texture fetches or buffer reads), directly degrading
+overall frame throughput.</li>
+</ol>
+<h3 id="register-spilling-to-local-memory">Register Spilling to Local
+Memory</h3>
+<p>When the peak register requirement of an inlined shader exceeds the
+hardware's maximum physical limit per thread, the compiler must resort
+to register spilling.</p>
+<ul>
+<li>The compiler moves excess variables out of GPRs and stores them in
+local/scratch memory.</li>
+<li>Because local memory is physically backed by the GPU’s VRAM cache
+hierarchy (L1/L2 and global memory), spilled registers incur massive
+latency penalties and consume memory bandwidth compared to native
+hardware registers.</li>
+<li>In heavy compute or fragment shaders, register spilling caused by
+excessive inlining is one of the most common causes of unexpected
+performance cliffs.</li>
+</ul>
+<h3 id="compensating-compiler-optimizations">Compensating Compiler
+Optimizations</h3>
+<p>Inlining is not entirely detrimental to register allocation. In
+certain scenarios, it can actually reduce the net register
+footprint:</p>
+<ul>
+<li><strong>Constant Folding and Propagation:</strong> Inlining allows
+constant arguments to propagate directly into the function body,
+eliminating dead branches and turning variable calculations into
+compile-time constants.</li>
+<li><strong>Dead Code Elimination:</strong> Unused outputs or
+intermediate variables inside the inlined function can be removed
+completely.</li>
+<li><strong>Common Subexpression Elimination (CSE):</strong> The
+compiler can identify redundant operations between the caller and the
+inlined code, sharing temporary results rather than recomputing
+them.</li>
+</ul>
+<h3 id="practical-implications-for-large-glsl-shaders">Practical
+Implications for Large GLSL Shaders</h3>
+<p>In small to medium shaders, the benefits of constant folding and the
+lack of call overhead usually outweigh the cost of extra live registers.
+However, in large GLSL programs—such as deferred lighting passes,
+complex physically-based rendering (PBR) materials, or volumetric
+raymarchers—the scale tips.</p>
+<p>The accumulation of dozens of inlined helper functions creates
+massive basic blocks. The compiler's register allocator struggles to
+find optimal colorings for the vast interference graph of live ranges,
+almost universally resulting in high register pressure, reduced
+occupancy, or memory spilling. Controlling variable scope tightly,
+manually factoring shared logic, or restructuring algorithmic branches
+helps limit how many variables stay alive simultaneously across inlined
+segments.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

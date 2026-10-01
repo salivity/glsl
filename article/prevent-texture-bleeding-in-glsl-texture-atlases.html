@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prevent Texture Bleeding in GLSL Texture Atlases - glsl</title>
+    <meta name="description" content="Texture bleeding in a GLSL texture atlas occurs when texture filtering (such as bilinear filtering or mipmapping) samples pixels outside the designated sub-texture region, pulling in unwanted colors from adjacent sub-textures or empty space. The standard">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/prevent-texture-bleeding-in-glsl-texture-atlases">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Prevent Texture Bleeding in GLSL Texture Atlases - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/prevent-texture-bleeding-in-glsl-texture-atlases" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Texture bleeding in a GLSL texture atlas occurs when texture filtering (such as bilinear filtering or mipmapping) samples pixels outside the designated sub-texture region, pulling in unwanted colors from adjacent sub-textures or empty space. The standard" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="prevent-texture-bleeding-in-glsl-texture-atlases">Prevent
+Texture Bleeding in GLSL Texture Atlases</h1>
+<p>Texture bleeding in a GLSL texture atlas occurs when texture
+filtering (such as bilinear filtering or mipmapping) samples pixels
+outside the designated sub-texture region, pulling in unwanted colors
+from adjacent sub-textures or empty space. The standard and most
+effective padding algorithm to eliminate this artifact is <strong>edge
+extrusion</strong> (also referred to as <strong>border
+replication</strong> or <strong>dilation</strong>). This article
+explains how edge extrusion functions, how to size gutters for
+mipmapping, and how shader-level UV clamping can complement asset
+padding.</p>
+<h3 id="the-root-cause-texture-filtering-artifacts">The Root Cause:
+Texture Filtering Artifacts</h3>
+<p>When a shader samples a texture using <code>GL_LINEAR</code>, the GPU
+interpolates between four neighboring texels. If a sample falls near the
+boundary of a sub-texture, the interpolation window extends beyond the
+sub-texture's UV coordinates, pulling colors from neighboring
+assets.</p>
+<p>When mipmapping is enabled, the issue multiplies. Each successive mip
+level halves the resolution of the atlas, blending adjacent 2x2 texel
+blocks into a single texel. Without adequate margins, distinct
+sub-textures merge directly into each other at lower mip levels.</p>
+<h3 id="the-solution-edge-extrusion-border-duplication">The Solution:
+Edge Extrusion (Border Duplication)</h3>
+<p>The edge extrusion algorithm prevents filtering artifacts by adding a
+transparent border (gutter) around each sub-texture and replicating the
+boundary pixels outward into this gutter.</p>
+<p>Instead of padding with transparent black
+(<code>rgba(0, 0, 0, 0)</code>) or solid color, the algorithm operates
+as follows:</p>
+<ol type="1">
+<li><strong>Allocate Gutters:</strong> Reserve a transparent spacing
+border around each packed sub-texture inside the atlas.</li>
+<li><strong>Replicate 1D Edges:</strong> Extend the outermost row of
+pixels upward and downward, and extend the outermost columns leftward
+and rightward into the gutter.</li>
+<li><strong>Replicate Corners:</strong> Fill the corner diagonal spaces
+of the gutter by duplicating the outermost corner pixel of the
+sub-texture.</li>
+</ol>
+<p>By filling the gutter with the exact color and alpha of the
+sub-texture's borders, any bilinear interpolation that steps outside the
+boundary samples the identical color, resulting in zero visible
+discoloration or seams.</p>
+<h3 id="sizing-gutters-for-mipmaps">Sizing Gutters for Mipmaps</h3>
+<p>For standard bilinear filtering without mipmaps, an extruded border
+of <strong>1 pixel</strong> is mathematically sufficient.</p>
+<p>For mipmapped atlases, the gutter must be large enough so that
+sub-textures do not bleed into one another at the smallest generated mip
+level. The required extrusion size is calculated as:</p>
+<p><span class="math display">\[\text{Padding} = 2^{N}\]</span></p>
+<p>where <span class="math inline">\(N\)</span> is the number of mipmap
+levels generated. For example, preserving clear boundaries across 4 mip
+levels requires at least 16 pixels of extruded border between
+neighboring sub-textures (8 pixels of padding per side).</p>
+<h3 id="glsl-in-shader-boundary-clamping">GLSL In-Shader Boundary
+Clamping</h3>
+<p>When modifying the texture atlas directly is not possible, texture
+bleeding can be constrained entirely within the GLSL fragment shader by
+clamping the interpolated UV coordinates to the inner half-texel
+boundary of the sub-texture:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Calculate half-texel offset</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> halfTexel <span class="op">=</span> <span class="fl">0.5</span> <span class="op">/</span> u_atlasSize<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Clamp UV to sub-texture bounding box</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> safeMin <span class="op">=</span> u_subTextureMin <span class="op">+</span> halfTexel<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> safeMax <span class="op">=</span> u_subTextureMax <span class="op">-</span> halfTexel<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> clampedUV <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>v_uv<span class="op">,</span> safeMin<span class="op">,</span> safeMax<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Sample using explicit derivatives to prevent mipmap distortion at borders</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> color <span class="op">=</span> <span class="bu">textureGrad</span><span class="op">(</span>u_atlas<span class="op">,</span> clampedUV<span class="op">,</span> <span class="bu">dFdx</span><span class="op">(</span>v_uv<span class="op">),</span> <span class="bu">dFdy</span><span class="op">(</span>v_uv<span class="op">));</span></span></code></pre></div>
+<p>Using <code>textureGrad</code> with the original <code>v_uv</code>
+derivatives prevents the GPU from computing abnormal derivatives at the
+clamped boundary, which would otherwise force the sampler to choose an
+excessively blurry mip level.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>16-Bit vs 32-Bit Float in Mobile GLSL ES - glsl</title>
+    <meta name="description" content="In mobile OpenGL ES Shading Language (GLSL ES), choosing between 16-bit half-precision (mediump) and 32-bit single-precision (highp) floating-point arithmetic represents a fundamental trade-off between performance, power efficiency, and numerical accurac">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/16-bit-vs-32-bit-float-in-mobile-glsl-es">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="16-Bit vs 32-Bit Float in Mobile GLSL ES - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/16-bit-vs-32-bit-float-in-mobile-glsl-es" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In mobile OpenGL ES Shading Language (GLSL ES), choosing between 16-bit half-precision (mediump) and 32-bit single-precision (highp) floating-point arithmetic represents a fundamental trade-off between performance, power efficiency, and numerical accurac" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="16-bit-vs-32-bit-float-in-mobile-glsl-es">16-Bit vs 32-Bit Float
+in Mobile GLSL ES</h1>
+<p>In mobile OpenGL ES Shading Language (GLSL ES), choosing between
+16-bit half-precision (<code>mediump</code>) and 32-bit single-precision
+(<code>highp</code>) floating-point arithmetic represents a fundamental
+trade-off between performance, power efficiency, and numerical accuracy.
+While 32-bit floats provide the dynamic range and precision required for
+complex calculations like world-space positioning and depth mapping,
+16-bit floats offer significant performance enhancements, reduced
+register pressure, and lower power consumption on mobile GPUs. This
+article breaks down the mathematical, hardware, and visual differences
+between these two precision formats and outlines when to use each in
+mobile graphics development.</p>
+<h3 id="numerical-representation-and-dynamic-range">Numerical
+Representation and Dynamic Range</h3>
+<p>The primary mathematical difference between 16-bit and 32-bit
+arithmetic lies in how bits are allocated for precision and scale
+according to floating-point standards (such as IEEE 754):</p>
+<ul>
+<li><strong>16-bit Float (<code>mediump</code>):</strong> Composed of 1
+sign bit, 5 exponent bits, and 10 mantissa (fraction) bits. This
+provides roughly 3 to 4 decimal digits of precision and a dynamic range
+of approximately <span class="math inline">\(\pm65,504\)</span>, with
+the smallest positive normalized value around <span
+class="math inline">\(6.10 \times 10^{-5}\)</span>.</li>
+<li><strong>32-bit Float (<code>highp</code>):</strong> Composed of 1
+sign bit, 8 exponent bits, and 23 mantissa bits. This delivers
+approximately 7 decimal digits of precision and an expansive range of
+roughly <span class="math inline">\(\pm3.4 \times 10^{38}\)</span>.</li>
+</ul>
+<p>In GLSL ES, the standard defines minimum required ranges for
+qualifiers rather than absolute bit depths. However, virtually all
+modern mobile architectures (such as ARM Mali, Qualcomm Adreno, and
+Imagination PowerVR) implement <code>mediump</code> as native IEEE 754
+16-bit floats and <code>highp</code> as IEEE 754 32-bit floats.</p>
+<h3 id="alu-throughput-and-performance">ALU Throughput and
+Performance</h3>
+<p>Mobile GPUs are thermally constrained and engineered to maximize
+throughput per watt. Most modern mobile architectures include dual-issue
+or dedicated 16-bit Arithmetic Logic Units (ALUs):</p>
+<ul>
+<li><strong>Vector Packing and Vectorization:</strong> Many mobile GPUs
+can execute two 16-bit operations in the time and space required for a
+single 32-bit operation (often referred to as 2x FP16 throughput). Using
+<code>mediump</code> effectively doubles the theoretical arithmetic
+capacity of the shader core.</li>
+<li><strong>Register Pressure and Occupancy:</strong> Registers on
+mobile GPUs are a finite, shared resource. Storing 16-bit values cuts
+register allocation per thread in half. Lower register usage allows the
+GPU driver to dispatch more concurrent execution threads (higher
+occupancy), which hides memory latency more effectively.</li>
+</ul>
+<h3 id="memory-bandwidth-and-cache-footprint">Memory Bandwidth and Cache
+Footprint</h3>
+<p>Graphics workloads on mobile devices are frequently bottlenecked by
+memory bandwidth rather than raw compute:</p>
+<ul>
+<li><strong>Varyings and Interpolators:</strong> Passing data from the
+vertex shader to the fragment shader via <code>mediump</code> varyings
+reduces the data transfer footprint across the chip.</li>
+<li><strong>Texture Reads and Framebuffers:</strong> Arithmetic often
+matches storage formats. Sampling FP16 textures or rendering to FP16
+render targets consumes half the memory bandwidth of FP32 equivalents,
+saving cache lines and keeping the GPU memory subsystem clear of
+stalls.</li>
+<li><strong>Thermal Throttling:</strong> Reduced bandwidth and compute
+load directly translate to lower dynamic power consumption, preventing
+devices from overheating and throttling clock speeds during sustained
+gameplay.</li>
+</ul>
+<h3 id="common-visual-artifacts-of-16-bit-float">Common Visual Artifacts
+of 16-Bit Float</h3>
+<p>Using 16-bit arithmetic inappropriately leads to recognizable visual
+degradation:</p>
+<ul>
+<li><strong>Color Banding:</strong> A 10-bit mantissa lacks the
+granularity to represent subtle, smooth gradients, resulting in visible
+stepping in skies, vignettes, or softly lit surfaces.</li>
+<li><strong>Underflow and Overflow:</strong> Lighting equations
+involving high specular exponents, physically based rendering (PBR)
+equations, or high dynamic range (HDR) values can quickly exceed <span
+class="math inline">\(65,504\)</span>, producing black patches
+(clipping/NaNs) or stark white blowing-out.</li>
+<li><strong>Jitter and Vertex Snapping:</strong> Using
+<code>mediump</code> for absolute world coordinates or projection
+matrices causes precision jitter, where geometry visibly shakes or tears
+as the camera moves, because coordinates far from the origin lack
+relative precision.</li>
+<li><strong>Texture Coordinate Distortion:</strong> Large, tiled
+textures mapped with <code>mediump</code> coordinates lose precision as
+UV coordinates grow, resulting in warped or blocky texel sampling.</li>
+</ul>
+<h3 id="strategic-usage-in-mobile-shaders">Strategic Usage in Mobile
+Shaders</h3>
+<p>To balance fidelity and efficiency, shaders should isolate precision
+based on the task:</p>
+<ul>
+<li><p><strong>Use <code>mediump</code> for:</strong></p>
+<ul>
+<li>Colors, albedo, and ambient lighting values (normalized <span
+class="math inline">\(0.0\)</span> to <span
+class="math inline">\(1.0\)</span> ranges).</li>
+<li>Surface normals, tangents, and bitangents.</li>
+<li>Localized UV coordinates (clamped between <span
+class="math inline">\(0.0\)</span> and <span
+class="math inline">\(1.0\)</span>).</li>
+<li>Simple blend factors, opacity, and UI elements.</li>
+</ul></li>
+<li><p><strong>Use <code>highp</code> for:</strong></p>
+<ul>
+<li>World-space, view-space, and clip-space vertex positions.</li>
+<li>Depth buffer operations, shadow map comparisons, and logarithmic
+depth.</li>
+<li>Analytical functions like <code>sin</code>, <code>cos</code>,
+<code>pow</code>, and <code>exp</code> that amplify precision
+errors.</li>
+<li>Unwrapped or repetitive UV coordinates spanning large numerical
+ranges.</li>
+</ul></li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

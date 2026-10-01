@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time GPU Voxelization with GLSL 3D Storage Images - glsl</title>
+    <meta name="description" content="Voxelizing scene geometry converts standard continuous polygonal meshes into a discrete, volumetric 3D texture representation directly on the GPU. In modern OpenGL and GLSL pipelines, this is accomplished through a hardware-accelerated rasterization pass">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/real-time-gpu-voxelization-with-glsl-3-d-storage-images">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Real-Time GPU Voxelization with GLSL 3D Storage Images - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/real-time-gpu-voxelization-with-glsl-3-d-storage-images" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Voxelizing scene geometry converts standard continuous polygonal meshes into a discrete, volumetric 3D texture representation directly on the GPU. In modern OpenGL and GLSL pipelines, this is accomplished through a hardware-accelerated rasterization pass" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="real-time-gpu-voxelization-with-glsl-3d-storage-images">Real-Time
+GPU Voxelization with GLSL 3D Storage Images</h1>
+<p>Voxelizing scene geometry converts standard continuous polygonal
+meshes into a discrete, volumetric 3D texture representation directly on
+the GPU. In modern OpenGL and GLSL pipelines, this is accomplished
+through a hardware-accelerated rasterization pass. By disabling standard
+depth and color attachments, utilizing a geometry shader to select the
+dominant projection axis, and issuing direct write operations into a 3D
+storage image (<code>image3D</code>) within the fragment shader,
+arbitrary triangle meshes can be rapidly mapped into a voxel grid in a
+single pass.</p>
+<h2 id="pipeline-and-resource-setup">Pipeline and Resource Setup</h2>
+<p>GPU voxelization bypasses the conventional framebuffer write
+pipeline. Instead of rendering to a 2D color attachment, data is
+injected into an unbound 3D texture storage target.</p>
+<ol type="1">
+<li><strong>Storage Texture Allocation:</strong> A 3D texture
+(<code>GL_TEXTURE_3D</code>) is allocated with an appropriate internal
+format. Formats like <code>GL_R32UI</code> or <code>GL_RGBA8</code> are
+standard, depending on whether the grid stores binary occupancy, average
+color, or normal vectors.</li>
+<li><strong>Image Binding:</strong> The 3D texture is bound to an image
+unit via <code>glBindImageTexture</code> with read/write access.</li>
+<li><strong>Pipeline Configuration:</strong>
+<ul>
+<li>Bind an empty Framebuffer Object (FBO) with no color attachments,
+sized to the resolution of the voxel grid (e.g., <span
+class="math inline">\(N \times N\)</span>).</li>
+<li>Disable depth testing (<code>glDisable(GL_DEPTH_TEST)</code>) and
+backface culling (<code>glDisable(GL_CULL_FACE)</code>) so that all
+internal and overlapping fragments are evaluated.</li>
+<li>Disable color writes using
+<code>glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE)</code>.</li>
+</ul></li>
+</ol>
+<h2 id="dominant-axis-projection-in-the-geometry-shader">Dominant Axis
+Projection in the Geometry Shader</h2>
+<p>Standard rasterizers project 3D primitives onto a 2D plane. If a
+triangle is nearly perpendicular to the projection plane, it covers
+minimal screen space, causing missed fragments and gaps (pinholing) in
+the resulting voxel grid. To resolve this, a geometry shader dynamically
+projects each triangle along its dominant normal axis.</p>
+<p>The geometry shader determines the face normal and selects the
+projection plane with the largest projected area:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">triangles</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">triangle_strip</span><span class="op">,</span> <span class="dt">max_vertices</span> <span class="op">=</span> <span class="dv">3</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> vWorldPos<span class="op">[];</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec3</span> fVoxelPos<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> uVoxelViewProjectionX<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> uVoxelViewProjectionY<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> uVoxelViewProjectionZ<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> edge1 <span class="op">=</span> vWorldPos<span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">-</span> vWorldPos<span class="op">[</span><span class="dv">0</span><span class="op">];</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> edge2 <span class="op">=</span> vWorldPos<span class="op">[</span><span class="dv">2</span><span class="op">]</span> <span class="op">-</span> vWorldPos<span class="op">[</span><span class="dv">0</span><span class="op">];</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> normal <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span><span class="bu">cross</span><span class="op">(</span>edge1<span class="op">,</span> edge2<span class="op">));</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Determine the dominant projection axis</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> projection<span class="op">;</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>normal<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;=</span> normal<span class="op">.</span><span class="fu">x</span> <span class="op">&amp;&amp;</span> normal<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;=</span> normal<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        projection <span class="op">=</span> uVoxelViewProjectionZ<span class="op">;</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span>normal<span class="op">.</span><span class="fu">x</span> <span class="op">&gt;=</span> normal<span class="op">.</span><span class="fu">y</span> <span class="op">&amp;&amp;</span> normal<span class="op">.</span><span class="fu">x</span> <span class="op">&gt;=</span> normal<span class="op">.</span><span class="fu">z</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>        projection <span class="op">=</span> uVoxelViewProjectionX<span class="op">;</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>        projection <span class="op">=</span> uVoxelViewProjectionY<span class="op">;</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Transform vertices using the selected dominant axis projection</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>        fVoxelPos <span class="op">=</span> vWorldPos<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>        <span class="bu">gl_Position</span> <span class="op">=</span> projection <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>vWorldPos<span class="op">[</span>i<span class="op">],</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>        <span class="bu">EmitVertex</span><span class="op">();</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="bu">EndPrimitive</span><span class="op">();</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Conservative rasterization can also be enabled via hardware
+extensions (e.g., <code>GL_NV_conservative_raster</code>) to guarantee
+that any pixel partially intersected by a triangle produces a
+fragment.</p>
+<h2 id="writing-to-the-3d-image-in-the-fragment-shader">Writing to the
+3D Image in the Fragment Shader</h2>
+<p>The fragment shader receives the interpolated world-space or
+volume-space coordinates and writes data directly to the bound 3D image
+buffer using GLSL storage operations.</p>
+<p>Because fragments write to arbitrary 3D grid cells, standard output
+bindings are replaced with
+<code>layout(binding = 0) uniform image3D</code>:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> r32ui<span class="op">)</span> <span class="kw">uniform</span> <span class="dt">uimage3D</span> uVoxelGrid<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> fVoxelPos<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> uVoxelGridMin<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> uVoxelGridSize<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">ivec3</span> uVoxelResolution<span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Transform continuous world position to discrete voxel coordinates</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> normalizedPos <span class="op">=</span> <span class="op">(</span>fVoxelPos <span class="op">-</span> uVoxelGridMin<span class="op">)</span> <span class="op">/</span> uVoxelGridSize<span class="op">;</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> voxelCoords <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span>normalizedPos <span class="op">*</span> <span class="dt">vec3</span><span class="op">(</span>uVoxelResolution<span class="op">));</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Boundary check to prevent writing out of bounds</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">any</span><span class="op">(</span><span class="bu">lessThan</span><span class="op">(</span>voxelCoords<span class="op">,</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">0</span><span class="op">)))</span> <span class="op">||</span> <span class="bu">any</span><span class="op">(</span><span class="bu">greaterThanEqual</span><span class="op">(</span>voxelCoords<span class="op">,</span> uVoxelResolution<span class="op">)))</span> <span class="op">{</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Atomic write to avoid data races across overlapping fragments</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Writes a non-zero occupancy flag or bitmask</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="bu">imageAtomicOr</span><span class="op">(</span>uVoxelGrid<span class="op">,</span> voxelCoords<span class="op">,</span> <span class="dv">1</span>u<span class="op">);</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="handling-data-races-and-color-accumulation">Handling Data Races
+and Color Accumulation</h2>
+<p>When storing attributes such as diffuse color or normal directions
+rather than simple binary occupancy, multiple fragments often hit the
+same voxel cell simultaneously. Using simple <code>imageStore()</code>
+calls introduces data races and non-deterministic results.</p>
+<p>To resolve this issue:</p>
+<ul>
+<li><strong>Atomic Bit-Packing:</strong> Pack properties such as RGBA8
+into a single 32-bit unsigned integer and compute updates with
+<code>imageAtomicExchange()</code> or
+<code>imageAtomicMax()</code>.</li>
+<li><strong>Atomic Moving Averages:</strong> Utilize atomic counters
+within an auxiliary 3D buffer to track fragment hits per voxel, allowing
+colors to be blended and accumulated in a subsequent compute pass.</li>
+<li><strong>Spin-Locks:</strong> For high-precision requirements,
+implement fragment-level atomic spin-locks within a separate integer
+buffer to execute localized critical sections before committing data via
+<code>imageStore()</code>.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

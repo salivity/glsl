@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL perprimitiveEXT Qualifier Explained - glsl</title>
+    <meta name="description" content="The perprimitiveEXT qualifier in GLSL designates output variables in mesh shaders as per-primitive rather than per-vertex attributes. Introduced primarily through the GLEXTmeshshader extension for Vulkan, this qualifier enables developers to associate un">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-perprimitive-ext-qualifier-explained">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL perprimitiveEXT Qualifier Explained - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-perprimitive-ext-qualifier-explained" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The perprimitiveEXT qualifier in GLSL designates output variables in mesh shaders as per-primitive rather than per-vertex attributes. Introduced primarily through the GLEXTmeshshader extension for Vulkan, this qualifier enables developers to associate un" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-perprimitiveext-qualifier-explained">GLSL perprimitiveEXT
+Qualifier Explained</h1>
+<p>The <code>perprimitiveEXT</code> qualifier in GLSL designates output
+variables in mesh shaders as per-primitive rather than per-vertex
+attributes. Introduced primarily through the
+<code>GL_EXT_mesh_shader</code> extension for Vulkan, this qualifier
+enables developers to associate unique data—such as primitive IDs, face
+normals, or material indices—directly with an entire primitive (e.g., a
+triangle, line, or point). Instead of interpolating values across
+vertices or relying on flat-shaded provoking vertices, the GPU natively
+assigns these attributes to the specified primitive, which can then be
+read directly by the downstream fragment shader.</p>
+<h3 id="syntax-and-declaration">Syntax and Declaration</h3>
+<p>In a mesh shader, attributes are per-vertex by default. To assign
+data to a primitive as a whole, the <code>perprimitiveEXT</code> layout
+or type qualifier must precede the <code>out</code> declaration.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_mesh_shader : require</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">32</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">triangles</span><span class="op">,</span> <span class="dt">max_vertices</span> <span class="op">=</span> <span class="dv">64</span><span class="op">,</span> max_primitives <span class="op">=</span> <span class="dv">126</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Per-vertex output</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec3</span> v_Position<span class="op">[];</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co">// Per-primitive output</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>perprimitiveEXT <span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">uint</span> p_MaterialID<span class="op">[];</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>perprimitiveEXT <span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec3</span> p_FaceNormal<span class="op">[];</span></span></code></pre></div>
+<p><code>perprimitiveEXT</code> can also be applied to output interface
+blocks:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>perprimitiveEXT <span class="dt">out</span> PrimitiveData <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> materialID<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> faceNormal<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> primOut<span class="op">[];</span></span></code></pre></div>
+<h3 id="array-sizing-and-indexing">Array Sizing and Indexing</h3>
+<p>Outputs declared with <code>perprimitiveEXT</code> must be arrays
+sized according to the <code>max_primitives</code> layout qualifier
+specified in the mesh shader.</p>
+<p>During execution, each element of the array corresponds to the
+primitive at that specific index. For example, if a mesh shader thread
+generates a triangle and writes its indices to
+<code>gl_PrimitiveTriangleIndicesEXT[primIndex]</code>, the thread can
+assign corresponding primitive data by indexing into the per-primitive
+array using the same <code>primIndex</code>:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> primIndex <span class="op">=</span> <span class="bu">gl_LocalInvocationIndex</span><span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>primIndex <span class="op">&lt;</span> maxPrimitivesCount<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    p_MaterialID<span class="op">[</span>primIndex<span class="op">]</span> <span class="op">=</span> <span class="dv">2</span>u<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    p_FaceNormal<span class="op">[</span>primIndex<span class="op">]</span> <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="fragment-shader-consumption">Fragment Shader Consumption</h3>
+<p>When data tagged with <code>perprimitiveEXT</code> reaches the
+fragment shader, it is received without perspective division or
+attribute interpolation across the primitive's surface.</p>
+<p>In the fragment shader, the corresponding input must be declared with
+the <code>perprimitiveEXT</code> qualifier (or implicitly read as a flat
+primitive value, depending on the shading language environment and
+driver support):</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_mesh_shader : require</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>perprimitiveEXT <span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">uint</span> p_MaterialID<span class="op">;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>perprimitiveEXT <span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> p_FaceNormal<span class="op">;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> fragColor<span class="op">;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Both variables evaluate directly to the values assigned to the current primitive</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>p_FaceNormal<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Unlike the mesh shader where per-primitive outputs are arrays
+matching the primitive count, the fragment shader receives the data as a
+scalar or single vector/struct evaluated for the specific primitive
+generating that fragment.</p>
+<h3 id="key-functional-benefits">Key Functional Benefits</h3>
+<ol type="1">
+<li><strong>Bandwidth Efficiency:</strong> Traditional pipelines require
+duplicating primitive-level constants across all vertices forming that
+primitive or passing them through uniform buffers.
+<code>perprimitiveEXT</code> eliminates this redundancy in the shader
+export stage.</li>
+<li><strong>Deterministic Attribution:</strong> Legacy pipelines rely on
+the "provoking vertex" convention to handle <code>flat</code>
+attributes, which can complicate geometry algorithms when vertices are
+shared among multiple primitives. <code>perprimitiveEXT</code> decouples
+primitive data from vertex sharing entirely, ensuring that each polygon
+owns its specific state.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

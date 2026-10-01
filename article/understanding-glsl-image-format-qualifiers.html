@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding GLSL Image Format Qualifiers - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), format qualifiers such as rgba16f and r32i define the exact internal data layout, bit depth, and channel configuration of image variables used with shader image load and store operations. Unlike traditional texture samp">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-glsl-image-format-qualifiers">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding GLSL Image Format Qualifiers - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-glsl-image-format-qualifiers" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), format qualifiers such as rgba16f and r32i define the exact internal data layout, bit depth, and channel configuration of image variables used with shader image load and store operations. Unlike traditional texture samp" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-glsl-image-format-qualifiers">Understanding GLSL
+Image Format Qualifiers</h1>
+<p>In OpenGL Shading Language (GLSL), format qualifiers such as
+<code>rgba16f</code> and <code>r32i</code> define the exact internal
+data layout, bit depth, and channel configuration of image variables
+used with shader image load and store operations. Unlike traditional
+texture samplers that hide memory details behind filtering hardware,
+image units allow arbitrary, direct read and write access to memory.
+Format qualifiers bridge the gap between GPU memory and the shader by
+specifying how binary texture data is unpacked into shader registers
+during a read and repacked during a write.</p>
+<h3 id="memory-representation-and-data-types">Memory Representation and
+Data Types</h3>
+<p>Image variables in GLSL do not automatically infer their underlying
+binary layouts from the bound OpenGL or Vulkan texture. The format
+qualifier explicitly declares:</p>
+<ol type="1">
+<li><strong>Channel Count:</strong> Identifies how many components exist
+(e.g., <code>r</code> for single-channel, <code>rgba</code> for
+four-channel).</li>
+<li><strong>Bit Depth:</strong> Defines the number of bits allocated per
+component (e.g., <code>16</code> or <code>32</code> bits).</li>
+<li><strong>Data Representation:</strong> Specifies the numeric format,
+such as floating-point (<code>f</code>), signed integer
+(<code>i</code>), unsigned integer (<code>ui</code>), or normalized
+integers (implied when no type suffix is present, like
+<code>rgba8</code>).</li>
+</ol>
+<p>For instance, <code>layout(rgba16f) uniform image2D imgFloat;</code>
+tells the GPU that each pixel consists of four 16-bit half-precision
+floating-point components, totaling 64 bits per texel. In contrast,
+<code>layout(r32i) uniform iimage2D imgInt;</code> represents a single
+32-bit signed integer per texel.</p>
+<h3 id="type-compatibility-with-glsl-image-types">Type Compatibility
+with GLSL Image Types</h3>
+<p>The format qualifier must match the underlying GLSL image type:</p>
+<ul>
+<li><strong>Floating-point and normalized formats</strong> (e.g.,
+<code>rgba16f</code>, <code>rgba8</code>, <code>r32f</code>) must be
+declared using standard floating-point image types
+(<code>image2D</code>, <code>image3D</code>, etc.), returning
+<code>vec4</code> upon an <code>imageLoad()</code>.</li>
+<li><strong>Signed integer formats</strong> (e.g., <code>r32i</code>,
+<code>rgba16i</code>) require signed integer image types
+(<code>iimage2D</code>, <code>iimage3D</code>, etc.), returning
+<code>ivec4</code>.</li>
+<li><strong>Unsigned integer formats</strong> (e.g., <code>r32ui</code>,
+<code>rgba8ui</code>) require unsigned integer image types
+(<code>uimage2D</code>, <code>uimage3D</code>, etc.), returning
+<code>uvec4</code>.</li>
+</ul>
+<p>A mismatch between the layout qualifier and the image type results in
+a GLSL compilation error.</p>
+<h3 id="enforcement-for-load-and-store-operations">Enforcement for Load
+and Store Operations</h3>
+<p>Format qualifiers are mandatory when reading from an image using
+<code>imageLoad()</code>. The hardware needs to know the exact bit
+patterns to properly decode the memory into a 4-component vector.
+Without a format qualifier, the compiler cannot generate the appropriate
+instructions to convert raw bits into shader variables.</p>
+<p>For write-only operations
+(<code>layout(writeonly) uniform image2D outImg;</code>), some modern
+graphics APIs and extensions (such as
+<code>GL_EXT_shader_image_load_formatted</code> or standard Vulkan
+SPIR-V rules) allow the qualifier to be omitted. However, explicitly
+providing qualifiers like <code>rgba16f</code> or <code>r32i</code>
+ensures full compatibility, clear code intent, and portable behavior
+across different driver implementations.</p>
+<h3 id="matching-api-side-texture-allocation">Matching API-Side Texture
+Allocation</h3>
+<p>The format qualifier declared in the shader must match or be
+compatible with the internal format defined on the CPU side when
+allocating the texture (e.g., <code>GL_RGBA16F</code> or
+<code>GL_R32I</code> in OpenGL). If a shader declares
+<code>layout(rgba16f)</code> on an image bound to a
+<code>GL_RGBA8</code> texture, undefined behavior or memory corruption
+occurs because the shader loads and stores data assuming 64 bits per
+pixel instead of the 32 bits allocated in memory.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

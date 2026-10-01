@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Half-Lambert Diffuse Lighting in GLSL - glsl</title>
+    <meta name="description" content="This article provides an overview of the Half-Lambert diffuse reflection model, its mathematical derivation, and its practical implementation in OpenGL Shading Language (GLSL). Originally developed by Valve Corporation for the original Half-Life, the tec">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/half-lambert-diffuse-lighting-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Half-Lambert Diffuse Lighting in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/half-lambert-diffuse-lighting-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of the Half-Lambert diffuse reflection model, its mathematical derivation, and its practical implementation in OpenGL Shading Language (GLSL). Originally developed by Valve Corporation for the original Half-Life, the tec" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="half-lambert-diffuse-lighting-in-glsl">Half-Lambert Diffuse
+Lighting in GLSL</h1>
+<p>This article provides an overview of the Half-Lambert diffuse
+reflection model, its mathematical derivation, and its practical
+implementation in OpenGL Shading Language (GLSL). Originally developed
+by Valve Corporation for the original <em>Half-Life</em>, the technique
+softens shadows on low-poly geometry by mapping dot product values to
+prevent surfaces from falling completely into blackness, creating a
+subtle wrap-around lighting effect.</p>
+<hr />
+<h3 id="standard-lambert-vs-half-lambert">Standard Lambert vs.
+Half-Lambert</h3>
+<p>Standard Lambertian reflectance assumes a surface reflects light
+equally in all directions based on the cosine of the angle between the
+surface normal (<span class="math inline">\(\mathbf{N}\)</span>) and the
+light direction vector (<span
+class="math inline">\(\mathbf{L}\)</span>):</p>
+<p><span class="math display">\[I_{\text{Lambert}} = \max(\mathbf{N}
+\cdot \mathbf{L}, 0.0)\]</span></p>
+<p>When the surface points away from the light source (<span
+class="math inline">\(\mathbf{N} \cdot \mathbf{L} \le 0\)</span>), the
+intensity drops immediately to zero. This creates harsh terminator lines
+and completely dark, unreadable silhouettes on the unlit sides of
+objects.</p>
+<p>The Half-Lambert technique alters this behavior by remapping the dot
+product from the range <span class="math inline">\([-1, 1]\)</span> to
+<span class="math inline">\([0, 1]\)</span>, and then squaring the
+result to maintain a natural falloff curve.</p>
+<hr />
+<h3 id="mathematical-formulation">Mathematical Formulation</h3>
+<p>The transformation consists of two primary steps:</p>
+<ol type="1">
+<li><p><strong>Scale and Bias:</strong> Scale the dot product by <span
+class="math inline">\(0.5\)</span> and shift it by <span
+class="math inline">\(0.5\)</span>:</p>
+<p><span class="math display">\[\text{HalfDot} = 0.5 \times (\mathbf{N}
+\cdot \mathbf{L}) + 0.5\]</span></p>
+<ul>
+<li>When <span class="math inline">\(\mathbf{N} \cdot \mathbf{L} =
+1.0\)</span> (facing directly at light): <span
+class="math inline">\(\text{HalfDot} = 1.0\)</span></li>
+<li>When <span class="math inline">\(\mathbf{N} \cdot \mathbf{L} =
+0.0\)</span> (perpendicular to light): <span
+class="math inline">\(\text{HalfDot} = 0.5\)</span></li>
+<li>When <span class="math inline">\(\mathbf{N} \cdot \mathbf{L} =
+-1.0\)</span> (facing directly away): <span
+class="math inline">\(\text{HalfDot} = 0.0\)</span></li>
+</ul></li>
+<li><p><strong>Squaring the Factor:</strong> Squaring the result
+tightens the highlights and restores visual contrast while preventing
+back-facing surfaces from becoming pitch black:</p>
+<p><span class="math display">\[I_{\text{Half-Lambert}} =
+(\text{HalfDot})^2 = (0.5 \times (\mathbf{N} \cdot \mathbf{L}) +
+0.5)^2\]</span></p></li>
+<li><p><strong>Final Color Computation:</strong> Multiply the intensity
+by the light color and the material diffuse color:</p>
+<p><span class="math display">\[C_{\text{final}} = C_{\text{diffuse}}
+\times C_{\text{light}} \times I_{\text{Half-Lambert}}\]</span></p></li>
+</ol>
+<hr />
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>Below is the GLSL function implementing the Half-Lambert diffuse
+calculation:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">calculateHalfLambert</span><span class="op">(</span><span class="dt">vec3</span> normal<span class="op">,</span> <span class="dt">vec3</span> lightDir<span class="op">,</span> <span class="dt">vec3</span> diffuseColor<span class="op">,</span> <span class="dt">vec3</span> lightColor<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Ensure input vectors are normalized</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> N <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>normal<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> L <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>lightDir<span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute the dot product without clamping</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotL <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> L<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Map range [-1.0, 1.0] to [0.0, 1.0]</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> halfLambert <span class="op">=</span> NdotL <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Square the result to restore contrast</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    halfLambert <span class="op">=</span> halfLambert <span class="op">*</span> halfLambert<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate the final diffuse contribution</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> diffuseColor <span class="op">*</span> lightColor <span class="op">*</span> halfLambert<span class="op">;</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="complete-fragment-shader-example">Complete Fragment Shader
+Example</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> vNormal<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> vFragPos<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> uLightPos<span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> uLightColor<span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> uDiffuseColor<span class="op">;</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> lightDir <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>uLightPos <span class="op">-</span> vFragPos<span class="op">);</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> diffuse <span class="op">=</span> <span class="fu">calculateHalfLambert</span><span class="op">(</span>vNormal<span class="op">,</span> lightDir<span class="op">,</span> uDiffuseColor<span class="op">,</span> uLightColor<span class="op">);</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>diffuse<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="summary-of-benefits">Summary of Benefits</h3>
+<ul>
+<li><strong>Performance:</strong> Executes with minimal operations (a
+multiply-add and a square), incurring no performance penalty compared to
+standard Lambertian shading.</li>
+<li><strong>Silhouette Preservation:</strong> Maintains visual
+readability and surface detail on back-facing geometry without the need
+for additional ambient lights.</li>
+<li><strong>Stylized Aesthetics:</strong> Provides a softer,
+semi-stylized appearance widely used in both realistic character
+rendering and cel-shaded art styles.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

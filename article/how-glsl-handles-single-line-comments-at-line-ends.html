@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GLSL Handles Single-Line Comments at Line Ends - glsl</title>
+    <meta name="description" content="This article provides a direct overview of how the OpenGL Shading Language (GLSL) compiler processes single-line comments at the end of physical file lines. It covers standard newline termination behavior, the interaction with backslash line continuation">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-glsl-handles-single-line-comments-at-line-ends">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GLSL Handles Single-Line Comments at Line Ends - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-glsl-handles-single-line-comments-at-line-ends" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a direct overview of how the OpenGL Shading Language (GLSL) compiler processes single-line comments at the end of physical file lines. It covers standard newline termination behavior, the interaction with backslash line continuation" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-glsl-handles-single-line-comments-at-line-ends">How GLSL
+Handles Single-Line Comments at Line Ends</h1>
+<p>This article provides a direct overview of how the OpenGL Shading
+Language (GLSL) compiler processes single-line comments at the end of
+physical file lines. It covers standard newline termination behavior,
+the interaction with backslash line continuations, edge cases at the end
+of a file (EOF), and potential pitfalls when using multiple source
+strings in OpenGL.</p>
+<h2 id="standard-line-termination">Standard Line Termination</h2>
+<p>GLSL adopts standard C++ conventions for single-line comments using
+the <code>//</code> token. Once the compiler encounters <code>//</code>,
+it ignores all subsequent characters up to the end of the current
+physical line.</p>
+<p>A physical line is terminated by any standard newline sequence
+recognized by GLSL:</p>
+<ul>
+<li>Line Feed (<code>\n</code>, ASCII <code>0x0A</code>)</li>
+<li>Carriage Return (<code>\r</code>, ASCII <code>0x0D</code>)</li>
+<li>Carriage Return followed by Line Feed (<code>\r\n</code>)</li>
+</ul>
+<p>When any of these line-break sequences is reached, the comment
+immediately ends. The newline itself is typically preserved in lexical
+analysis to increment the preprocessor's internal line counter, ensuring
+compiler diagnostics and error messages report the correct line
+numbers.</p>
+<h2 id="line-continuations-">Line Continuations (<code>\</code>)</h2>
+<p>If a backslash (<code>\</code>) appears as the last character of a
+physical line inside a single-line comment—immediately preceding the
+newline character—the GLSL preprocessor treats it as a line
+continuation.</p>
+<p>The backslash and the subsequent newline character are deleted,
+splicing the two physical lines into a single logical line.
+Consequently, the single-line comment continues onto the next physical
+line, causing any code on that following line to be treated as part of
+the comment and discarded.</p>
+<h2 id="end-of-file-without-a-trailing-newline">End of File Without a
+Trailing Newline</h2>
+<p>When a <code>//</code> comment is placed on the final line of a
+shader source file and is not terminated by a newline before reaching
+the end of the file (EOF), GLSL compilers treat the EOF as an implicit
+line terminator.</p>
+<p>The comment terminates safely without triggering syntax errors in
+modern compilers. However, because some older or strict embedded
+compilers may emit warnings or encounter parsing glitches when a file
+lacks a trailing newline, best practices recommend always terminating
+the final line of a GLSL file with a standard newline character.</p>
+<h2 id="behavior-in-multi-string-shader-sources">Behavior in
+Multi-String Shader Sources</h2>
+<p>A common source of bugs occurs when passing an array of strings to
+<code>glShaderSource</code>. OpenGL conceptually concatenates these
+strings into a single translation unit.</p>
+<p>If a string in the array ends with a <code>//</code> comment without
+a trailing newline character (<code>\n</code>), the comment will extend
+directly into the beginning of the next string in the array. This causes
+the first line of the subsequent string to be commented out
+unintentionally. To prevent this, every string containing single-line
+comments must explicitly include a newline character before ending.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

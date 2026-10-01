@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Mesh Shader layout(points) out for Particles - glsl</title>
+    <meta name="description" content="This article examines the behavior, configuration, and execution model of using layout(points) out in GLSL mesh shaders to generate particle systems. In a mesh shading pipeline, designating points as the output topology shifts the stage from traditional">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-mesh-shader-layout-points-out-for-particles">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Mesh Shader layout(points) out for Particles - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-mesh-shader-layout-points-out-for-particles" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article examines the behavior, configuration, and execution model of using layout(points) out in GLSL mesh shaders to generate particle systems. In a mesh shading pipeline, designating points as the output topology shifts the stage from traditional" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-mesh-shader-layoutpoints-out-for-particles">GLSL Mesh
+Shader layout(points) out for Particles</h1>
+<p>This article examines the behavior, configuration, and execution
+model of using <code>layout(points) out</code> in GLSL mesh shaders to
+generate particle systems. In a mesh shading pipeline, designating
+points as the output topology shifts the stage from traditional triangle
+assembly to independent point primitive generation. This allows a single
+compute-like workgroup to simulate particle dynamics, control primitive
+topology, set point attributes, and output rasterization-ready point
+sprites directly in hardware without intermediate buffer roundtrips.</p>
+<h3 id="topology-and-indexing-behavior">Topology and Indexing
+Behavior</h3>
+<p>When using <code>layout(points) out;</code> in a GLSL mesh shader
+(using <code>GL_EXT_mesh_shader</code> or
+<code>GL_NV_mesh_shader</code>), the primitive assembler interprets the
+output as discrete point primitives. Unlike <code>triangles</code>,
+which require three vertex indices per primitive, points operate on a
+strict 1:1 relationship between primitives and vertices.</p>
+<p>You must declare the maximum output allocations:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">32</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">points</span><span class="op">,</span> <span class="dt">max_vertices</span> <span class="op">=</span> <span class="dv">32</span><span class="op">,</span> max_primitives <span class="op">=</span> <span class="dv">32</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span></code></pre></div>
+<p>In standard implementations:</p>
+<ul>
+<li>The number of emitted primitives matches the number of active
+particles emitted by the thread group.</li>
+<li>The primitive index buffer maps directly to vertex indices. For
+<code>GL_EXT_mesh_shader</code>, you assign indices to
+<code>gl_PrimitivePointIndicesEXT[i]</code>. For particle workloads
+where vertex <code>i</code> corresponds directly to point
+<code>i</code>, thread <code>i</code> simply sets
+<code>gl_PrimitivePointIndicesEXT[i] = i</code>.</li>
+<li>The workgroup must explicitly define the output counts using
+<code>SetMeshOutputsEXT(numVertices, numPrimitives);</code> before
+writing to indices or per-primitive outputs.</li>
+</ul>
+<h3 id="per-vertex-and-per-primitive-attribute-output">Per-Vertex and
+Per-Primitive Attribute Output</h3>
+<p>Once output counts are declared, threads in the workgroup write
+per-particle parameters to the built-in and user-defined output
+arrays:</p>
+<ul>
+<li><strong>Position</strong>: Set via
+<code>gl_MeshVerticesEXT[i].gl_Position</code>. This represents the
+center of the particle in clip space.</li>
+<li><strong>Point Size</strong>: Set via
+<code>gl_MeshVerticesEXT[i].gl_PointSize</code>. The rasterizer reads
+this value to expand the single vertex into a screen-aligned square
+during rasterization.</li>
+<li><strong>Attributes</strong>: Custom vertex outputs (such as particle
+color, UV offsets, or alpha values) are written via standard output
+arrays declared with the <code>out</code> qualifier. Per-primitive
+attributes marked with <code>perprimitiveEXT</code> can be used to pass
+uniform properties across an entire particle without replicating them
+per-corner, which is relevant if the downstream pipeline processes
+primitives individually.</li>
+</ul>
+<h3 id="rasterization-and-point-sprite-mapping">Rasterization and Point
+Sprite Mapping</h3>
+<p>Points emitted by <code>layout(points) out</code> enter the
+fixed-function rasterizer identically to points emitted from a standard
+vertex shader or geometry shader:</p>
+<ol type="1">
+<li>The hardware evaluates <code>gl_Position</code> and checks whether
+the point lies within the clip volume (factoring in the radius
+determined by <code>gl_PointSize</code> if conservative rasterization or
+point clipping rules apply).</li>
+<li>The point is expanded into a screen-aligned quad centered at
+<code>gl_Position</code>.</li>
+<li>In the fragment shader, <code>gl_PointCoord</code> becomes
+available, providing normalized <code>[0, 1]</code> texture coordinates
+across the expanded quad. This enables circular masking, soft particle
+falloffs, and atlas lookups without requiring the mesh shader to emit
+four separate vertices and two triangles per particle.</li>
+</ol>
+<h3 id="advantages-for-particle-simulation-and-rendering">Advantages for
+Particle Simulation and Rendering</h3>
+<p>Using <code>layout(points) out</code> instead of triangles or
+traditional compute pipelines changes several execution
+characteristics:</p>
+<ul>
+<li><strong>Unified Simulation and Render Pass</strong>: Threads in the
+mesh shader can load simulation states from a storage buffer, update
+physics (velocity, life cycle, collision) using workgroup shared memory
+(<code>shared</code>), and immediately emit the visible points to the
+rasterizer, bypassing compute-to-draw barrier stalls.</li>
+<li><strong>Zero Output Amplification Overhead</strong>: Unlike geometry
+shaders, which suffer performance drops when amplifying points into
+quads, the mesh shader outputs the native point topology directly,
+leaving quad expansion to the rasterizer.</li>
+<li><strong>Dynamic Compaction</strong>: Dead particles can be culled
+within the workgroup using ballot instructions or shared memory prefix
+sums. If only a subset of particles in a workgroup are active,
+<code>SetMeshOutputsEXT</code> dynamically scales the output count,
+preventing inactive particles from reaching the rasterizer.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purpose of Readonly Storage Buffers in GLSL - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), the readonly memory qualifier designates a Shader Storage Buffer Object (SSBO) or specific members within it as accessible strictly for read operations. This article covers why and how developers use the readonly qu">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/purpose-of-readonly-storage-buffers-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Purpose of Readonly Storage Buffers in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/purpose-of-readonly-storage-buffers-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), the readonly memory qualifier designates a Shader Storage Buffer Object (SSBO) or specific members within it as accessible strictly for read operations. This article covers why and how developers use the readonly qu" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="purpose-of-readonly-storage-buffers-in-glsl">Purpose of Readonly
+Storage Buffers in GLSL</h1>
+<p>In the OpenGL Shading Language (GLSL), the <code>readonly</code>
+memory qualifier designates a Shader Storage Buffer Object (SSBO) or
+specific members within it as accessible strictly for read operations.
+This article covers why and how developers use the <code>readonly</code>
+qualifier, detailing its role in enabling hardware-level caching
+optimizations, enforcing compile-time code safety, and matching backend
+resource descriptors.</p>
+<h3 id="enforcing-compile-time-restrictions">Enforcing Compile-Time
+Restrictions</h3>
+<p>By default, storage buffers in GLSL are both readable and writable.
+Applying the <code>readonly</code> qualifier explicitly tells the GLSL
+compiler that the current shader stage will not write data back to the
+specified buffer.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> InputBuffer <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> inputData<span class="op">[];</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>If any instruction in the shader attempts to write to
+<code>inputData</code>, the compiler produces a compilation error. This
+compile-time verification prevents accidental data modification,
+ensuring clear architectural boundaries when passing static or
+input-only datasets across rendering and compute passes.</p>
+<h3 id="enabling-hardware-and-cache-optimizations">Enabling Hardware and
+Cache Optimizations</h3>
+<p>The primary performance motivation for using <code>readonly</code>
+lies in how modern GPU architectures handle memory access. Read-write
+buffers require memory access to go through caches that support cache
+coherency and write-back policies, which can reduce throughput.</p>
+<p>When a buffer is declared <code>readonly</code>:</p>
+<ul>
+<li><strong>Optimized Cache Routing:</strong> The GPU driver can route
+access to the buffer through dedicated read-only or texture caches
+instead of generalized read-write caches. Read-only caches often offer
+significantly higher bandwidth and lower latency.</li>
+<li><strong>Instruction Selection:</strong> Compilers can emit
+specialized global load instructions that bypass write-allocate
+protocols.</li>
+<li><strong>Elimination of Synchronization Overhead:</strong> Because
+the hardware knows the data cannot change from the perspective of the
+shader invocation, it avoids inserting defensive memory barriers or
+pipeline stalls intended to resolve read-after-write (RAW) or
+write-after-read (WAR) hazards.</li>
+</ul>
+<h3 id="pipeline-and-api-alignment">Pipeline and API Alignment</h3>
+<p>Modern graphics APIs like Vulkan and OpenGL require precise
+declarations of memory access patterns to manage barriers and layout
+transitions efficiently.</p>
+<p>Marking an SSBO as <code>readonly</code> in GLSL aligns the shader
+code with API-level usage flags, such as
+<code>VK_ACCESS_SHADER_READ_BIT</code> in Vulkan. This alignment ensures
+that the driver can validate pipeline layouts accurately without
+detecting conflicting read-write permissions that would otherwise force
+broader, more expensive memory synchronization across pipeline
+stages.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

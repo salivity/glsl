@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Loop Unrolling: Register and Cache Impact - glsl</title>
+    <meta name="description" content="Loop unrolling in the OpenGL Shading Language (GLSL) is an optimization technique where the compiler duplicates the body of a loop to reduce branching overhead and expose instruction-level parallelism. While this process eliminates iteration counters and">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-loop-unrolling-register-and-cache-impact">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Loop Unrolling: Register and Cache Impact - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-loop-unrolling-register-and-cache-impact" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Loop unrolling in the OpenGL Shading Language (GLSL) is an optimization technique where the compiler duplicates the body of a loop to reduce branching overhead and expose instruction-level parallelism. While this process eliminates iteration counters and" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-loop-unrolling-register-and-cache-impact">GLSL Loop
+Unrolling: Register and Cache Impact</h1>
+<p>Loop unrolling in the OpenGL Shading Language (GLSL) is an
+optimization technique where the compiler duplicates the body of a loop
+to reduce branching overhead and expose instruction-level parallelism.
+While this process eliminates iteration counters and branch
+mispredictions, it drastically alters how GPU hardware manages its
+microarchitectural resources. Specifically, loop unrolling creates a
+delicate trade-off between increased execution throughput and heightened
+pressure on both vector register allocation and the GPU instruction
+cache (I-cache), which can inadvertently reduce overall shading
+performance if not managed carefully.</p>
+<h3 id="the-mechanics-of-loop-unrolling-in-glsl">The Mechanics of Loop
+Unrolling in GLSL</h3>
+<p>When a GLSL shader loop is unrolled—either automatically by the
+driver's optimizing compiler or explicitly via preprocessor directives
+and unroll attributes—the control flow code (incrementing an index,
+testing conditions, and branching back) is removed. The body
+instructions are emitted sequentially for each iteration.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Original Loop</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">4</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    color <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span><span class="dt">sampler</span><span class="op">,</span> uv <span class="op">+</span> offsets<span class="op">[</span>i<span class="op">])</span> <span class="op">*</span> weights<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Conceptually Unrolled Result</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>color <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span><span class="dt">sampler</span><span class="op">,</span> uv <span class="op">+</span> offsets<span class="op">[</span><span class="dv">0</span><span class="op">])</span> <span class="op">*</span> weights<span class="op">[</span><span class="dv">0</span><span class="op">];</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>color <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span><span class="dt">sampler</span><span class="op">,</span> uv <span class="op">+</span> offsets<span class="op">[</span><span class="dv">1</span><span class="op">])</span> <span class="op">*</span> weights<span class="op">[</span><span class="dv">1</span><span class="op">];</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>color <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span><span class="dt">sampler</span><span class="op">,</span> uv <span class="op">+</span> offsets<span class="op">[</span><span class="dv">2</span><span class="op">])</span> <span class="op">*</span> weights<span class="op">[</span><span class="dv">2</span><span class="op">];</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>color <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span><span class="dt">sampler</span><span class="op">,</span> uv <span class="op">+</span> offsets<span class="op">[</span><span class="dv">3</span><span class="op">])</span> <span class="op">*</span> weights<span class="op">[</span><span class="dv">3</span><span class="op">];</span></span></code></pre></div>
+<p>By flattening the code, the compiler can overlap texture fetches,
+interleave mathematical calculations, and schedule instructions to hide
+execution latency.</p>
+<h3 id="impact-on-register-allocation">Impact on Register
+Allocation</h3>
+<p>The primary cost of loop unrolling on the GPU is an increase in
+register pressure. GPU architectures, such as NVIDIA's Streaming
+Multiprocessors (SMs) or AMD's Compute Units (CUs), allocate a fixed
+pool of physical registers among concurrently running threads (warps or
+wavefronts).</p>
+<ol type="1">
+<li><strong>Extended Variable Liveness</strong>: In a standard loop,
+temporary variables can reuse the same hardware register in every
+iteration. When unrolled, the compiler attempts to schedule multiple
+iterations concurrently to hide memory latency (such as multiple texture
+lookups). This requires holding intermediate values for multiple
+iterations simultaneously, extending the "live range" of these variables
+and requiring distinct registers for each.</li>
+<li><strong>Occupancy Degradation</strong>: If an unrolled loop
+increases the number of Vector General Purpose Registers (VGPRs)
+required by a single thread, the GPU must reduce the total number of
+active warps that can execute simultaneously on that core. Lower
+occupancy reduces the GPU's primary mechanism for latency hiding, often
+causing the shader to stall on high-latency operations.</li>
+<li><strong>Register Spilling</strong>: When register demand exceeds the
+hardware limit per thread, the compiler is forced to spill excess
+registers to local memory (VRAM or scratch memory). This converts
+register-speed accesses into high-latency memory transactions, severely
+degrading frame rates.</li>
+</ol>
+<h3 id="impact-on-instruction-cache-pressure">Impact on Instruction
+Cache Pressure</h3>
+<p>While registers handle data storage during execution, the GPU's
+instruction cache (I-cache) handles the compiled shader binary
+instructions. GPU I-caches are relatively small compared to their CPU
+counterparts, typically ranging from 16 KB to 64 KB per core
+cluster.</p>
+<ol type="1">
+<li><strong>Code Bloat</strong>: Fully unrolling a loop multiplies the
+compiled byte count of the shader by the number of iterations. If the
+loop body is large or the iteration count is high, the compiled shader
+footprint expands dramatically.</li>
+<li><strong>I-Cache Thrashing</strong>: When the compiled instructions
+of an unrolled loop exceed the capacity of the local L1 instruction
+cache, the GPU experiences constant cache misses. The execution units
+must stall while waiting for instructions to be fetched from the L2
+cache or system memory.</li>
+<li><strong>Warp Divergence and Cache Contention</strong>: Because
+thousands of threads share the instruction cache, high instruction
+footprint can cause threads on different execution paths to evict each
+other's instructions from the cache, compounding latency across the
+entire processor.</li>
+</ol>
+<h3 id="balancing-the-trade-offs">Balancing the Trade-Offs</h3>
+<p>To maintain peak performance in GLSL:</p>
+<ul>
+<li><strong>Unroll Small, Fixed Loops</strong>: Loops with short bodies
+(few arithmetic operations) and low, constant iteration counts
+(typically under 8 to 16 iterations) benefit most from unrolling with
+minimal register or cache penalties.</li>
+<li><strong>Avoid Unrolling Memory-Heavy Bodies</strong>: If the loop
+body contains multiple high-latency texture samples or complex
+arithmetic, full unrolling often pushes register usage past occupancy
+cliffs.</li>
+<li><strong>Use Partial Unrolling</strong>: When iteration counts are
+large (e.g., 32 or 64 iterations), partial unrolling (such as processing
+2 or 4 iterations per loop cycle) achieves latency hiding without
+detonating the instruction cache or exhausting registers.</li>
+<li><strong>Profile with Hardware Tools</strong>: Use GPU profiling
+suites (such as NVIDIA Nsight or AMD Radeon GPU Profiler) to monitor
+register usage per thread, achieved warp occupancy, and instruction
+cache hit rates when toggling unroll directives.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

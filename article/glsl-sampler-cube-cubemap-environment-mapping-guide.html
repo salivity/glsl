@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL samplerCube: Cubemap Environment Mapping Guide - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), samplerCube is a specialized uniform data type designed to handle cubemap textures, which project six distinct images onto the internal faces of a cube. This article covers the primary purpose of samplerCube, its declar">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-sampler-cube-cubemap-environment-mapping-guide">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL samplerCube: Cubemap Environment Mapping Guide - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-sampler-cube-cubemap-environment-mapping-guide" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), samplerCube is a specialized uniform data type designed to handle cubemap textures, which project six distinct images onto the internal faces of a cube. This article covers the primary purpose of samplerCube, its declar" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-samplercube-cubemap-environment-mapping-guide">GLSL
+samplerCube: Cubemap Environment Mapping Guide</h1>
+<p>In OpenGL Shading Language (GLSL), <code>samplerCube</code> is a
+specialized uniform data type designed to handle cubemap textures, which
+project six distinct images onto the internal faces of a cube. This
+article covers the primary purpose of <code>samplerCube</code>, its
+declaration syntax, and how it is sampled within fragment shaders to
+produce realistic environment mapping effects such as skyboxes, dynamic
+reflections, and refractions.</p>
+<h3 id="purpose-of-samplercube">Purpose of samplerCube</h3>
+<p>A standard 2D texture uses a pair of floating-point coordinates
+<code>(u, v)</code> to sample color data from a flat surface. In
+contrast, a cubemap consists of six square 2D textures forming an
+axis-aligned cube (<code>+X</code>, <code>-X</code>, <code>+Y</code>,
+<code>-Y</code>, <code>+Z</code>, <code>-Z</code>).</p>
+<p>The <code>samplerCube</code> type enables the GPU to sample this
+composite structure using a 3D direction vector <code>(x, y, z)</code>
+cast from the origin of the cube. The hardware automatically determines
+which of the six cube faces the vector intersects and converts the
+remaining coordinates into local texture coordinates for that face. This
+makes <code>samplerCube</code> the industry standard for omnidirectional
+calculations, including:</p>
+<ul>
+<li><strong>Skyboxes and Environment Maps:</strong> Rendering distant
+backgrounds surrounding a 3D scene.</li>
+<li><strong>Specular Reflections:</strong> Simulating glossy or
+mirror-like surfaces reflecting the surroundings.</li>
+<li><strong>Refractions:</strong> Simulating light passing through
+translucent materials like glass or water.</li>
+<li><strong>Omnidirectional Shadow Maps:</strong> Generating point light
+shadows cast in all directions.</li>
+</ul>
+<h3 id="declaration-syntax">Declaration Syntax</h3>
+<p>In GLSL, <code>samplerCube</code> is declared as a uniform variable,
+typically within the fragment shader:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">samplerCube</span> u_EnvironmentMap<span class="op">;</span></span></code></pre></div>
+<p>Because it is an opaque type, it cannot be modified directly within
+the shader code, nor can it be instantiated as a standard local
+variable. Its value represents a texture unit binding sent from the host
+application (such as an OpenGL or WebGL API call).</p>
+<h3 id="texture-sampling-syntax">Texture Sampling Syntax</h3>
+<p>To extract a color value from a <code>samplerCube</code>, GLSL
+provides built-in texture lookup functions that take the sampler and a
+normalized 3D direction vector as arguments.</p>
+<p>In modern GLSL (version 3.30+ and GLSL ES 3.0+), the overloaded
+<code>texture</code> function is used:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> color <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_EnvironmentMap<span class="op">,</span> directionVector<span class="op">);</span></span></code></pre></div>
+<p>In legacy GLSL (version 1.20 and GLSL ES 2.0), the specific
+<code>textureCube</code> function is used:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> color <span class="op">=</span> <span class="dt">textureCube</span><span class="op">(</span>u_EnvironmentMap<span class="op">,</span> directionVector<span class="op">);</span></span></code></pre></div>
+<h3 id="environment-mapping-example">Environment Mapping Example</h3>
+<p>For environment reflection mapping, the sampling vector is computed
+using the surface normal and the incident view direction (the vector
+from the camera to the fragment):</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> v_Normal<span class="op">;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> v_Position<span class="op">;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> u_CameraPosition<span class="op">;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">samplerCube</span> u_EnvironmentMap<span class="op">;</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute the incident vector from the camera to the surface</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> I <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>v_Position <span class="op">-</span> u_CameraPosition<span class="op">);</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate the reflection vector based on the surface normal</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> R <span class="op">=</span> <span class="bu">reflect</span><span class="op">(</span>I<span class="op">,</span> <span class="bu">normalize</span><span class="op">(</span>v_Normal<span class="op">));</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Sample the cubemap using the reflected direction vector</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>u_EnvironmentMap<span class="op">,</span> R<span class="op">).</span><span class="fu">rgb</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By substituting <code>reflect()</code> with GLSL's built-in
+<code>refract()</code> function and supplying an index of refraction
+ratio, the same <code>samplerCube</code> setup is used to render
+accurate refraction effects.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

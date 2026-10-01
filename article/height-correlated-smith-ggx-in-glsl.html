@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Height-Correlated Smith GGX in GLSL - glsl</title>
+    <meta name="description" content="This article provides a direct guide to implementing the height-correlated Smith masking-shadowing function for the GGX microfacet distribution in GLSL. Microfacet BRDF models require a geometric attenuation factor to account for mutual shadowing and mas">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/height-correlated-smith-ggx-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Height-Correlated Smith GGX in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/height-correlated-smith-ggx-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a direct guide to implementing the height-correlated Smith masking-shadowing function for the GGX microfacet distribution in GLSL. Microfacet BRDF models require a geometric attenuation factor to account for mutual shadowing and mas" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="height-correlated-smith-ggx-in-glsl">Height-Correlated Smith GGX
+in GLSL</h1>
+<p>This article provides a direct guide to implementing the
+height-correlated Smith masking-shadowing function for the GGX
+microfacet distribution in GLSL. Microfacet BRDF models require a
+geometric attenuation factor to account for mutual shadowing and masking
+between surface irregularities. By reading this guide, you will learn
+the mathematical formulation that couples view and light visibility for
+physically accurate microfacet shading, followed by an optimized,
+production-ready GLSL implementation commonly used in modern physically
+based rendering (PBR) engines.</p>
+<h2 id="mathematical-formulation">Mathematical Formulation</h2>
+<p>In standard microfacet theory, the specular BRDF is defined as:</p>
+<p><span class="math display">\[f_r(\mathbf{v}, \mathbf{l}) =
+\frac{D(\mathbf{h}) \cdot F(\mathbf{v}, \mathbf{h}) \cdot G(\mathbf{v},
+\mathbf{l}, \mathbf{h})}{4 (\mathbf{n} \cdot \mathbf{v}) (\mathbf{n}
+\cdot \mathbf{l})}\]</span></p>
+<p>To optimize shader evaluation, real-time engines combine the
+geometric shadowing-masking term <span
+class="math inline">\(G(\mathbf{v}, \mathbf{l})\)</span> and the
+microfacet normalization factor into a single visibility term <span
+class="math inline">\(V(\mathbf{v}, \mathbf{l})\)</span>:</p>
+<p><span class="math display">\[V(\mathbf{v}, \mathbf{l}) =
+\frac{G(\mathbf{v}, \mathbf{l})}{4 (\mathbf{n} \cdot \mathbf{v})
+(\mathbf{n} \cdot \mathbf{l})}\]</span></p>
+<p>Earlier models assumed masking and shadowing were independent events,
+leading to an overestimation of energy loss at grazing angles. The
+height-correlated formulation introduced by Eric Heitz models the
+correlation between the elevation of the microfacets seen by both the
+observer and the light source.</p>
+<p>For a GGX distribution with roughness parameter <span
+class="math inline">\(\alpha\)</span> (where <span
+class="math inline">\(\alpha = \text{roughness}^2\)</span>), the
+height-correlated visibility function is formulated as:</p>
+<p><span class="math display">\[V = \frac{0.5}{(\mathbf{n} \cdot
+\mathbf{l}) \sqrt{(\mathbf{n} \cdot \mathbf{v})^2 (1 - \alpha^2) +
+\alpha^2} + (\mathbf{n} \cdot \mathbf{v}) \sqrt{(\mathbf{n} \cdot
+\mathbf{l})^2 (1 - \alpha^2) + \alpha^2}}\]</span></p>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>Below is the optimized GLSL function for the height-correlated
+visibility term. It expects clamped dot products and uses linear
+perceptual roughness squared to define the distribution parameter <span
+class="math inline">\(\alpha\)</span>.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">/**</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co"> * Height-correlated Smith visibility function for GGX microfacets:</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"> * V = G / (4 * NdotL * NdotV)</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"> *</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param NdotV Cosine of angle between normal and view vector (clamped to [0, 1])</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param NdotL Cosine of angle between normal and light vector (clamped to [0, 1])</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param roughness Perceptual linear roughness value [0, 1]</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"> * @return Visibility factor to multiply by D and F</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co"> */</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">Visibility_SmithGGXCorrelated</span><span class="op">(</span><span class="dt">float</span> NdotV<span class="op">,</span> <span class="dt">float</span> NdotL<span class="op">,</span> <span class="dt">float</span> roughness<span class="op">)</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Remap linear roughness to GGX alpha parameter</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a <span class="op">=</span> roughness <span class="op">*</span> roughness<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a2 <span class="op">=</span> a <span class="op">*</span> a<span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Evaluate lambda terms for light and view</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> gv <span class="op">=</span> NdotL <span class="op">*</span> <span class="bu">sqrt</span><span class="op">(</span>NdotV <span class="op">*</span> <span class="op">(</span>NdotV <span class="op">-</span> NdotV <span class="op">*</span> a2<span class="op">)</span> <span class="op">+</span> a2<span class="op">);</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> gl <span class="op">=</span> NdotV <span class="op">*</span> <span class="bu">sqrt</span><span class="op">(</span>NdotL <span class="op">*</span> <span class="op">(</span>NdotL <span class="op">-</span> NdotL <span class="op">*</span> a2<span class="op">)</span> <span class="op">+</span> a2<span class="op">);</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Add a small epsilon to the denominator to prevent division by zero</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fl">0.5</span> <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>gv <span class="op">+</span> gl<span class="op">,</span> <span class="fl">1e-5</span><span class="op">);</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="fast-approximation-alternative">Fast Approximation
+Alternative</h2>
+<p>For performance-constrained hardware (such as mobile platforms),
+square root operations can be eliminated by approximating the
+height-correlated term using a rational polynomial:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">Visibility_SmithGGXCorrelatedFast</span><span class="op">(</span><span class="dt">float</span> NdotV<span class="op">,</span> <span class="dt">float</span> NdotL<span class="op">,</span> <span class="dt">float</span> roughness<span class="op">)</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a <span class="op">=</span> roughness <span class="op">*</span> roughness<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> gv <span class="op">=</span> NdotL <span class="op">*</span> <span class="op">(</span>NdotV <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> a<span class="op">)</span> <span class="op">+</span> a<span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> gl <span class="op">=</span> NdotV <span class="op">*</span> <span class="op">(</span>NdotL <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> a<span class="op">)</span> <span class="op">+</span> a<span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fl">0.5</span> <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>gv <span class="op">+</span> gl<span class="op">,</span> <span class="fl">1e-5</span><span class="op">);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="integration-into-the-brdf">Integration into the BRDF</h2>
+<p>To calculate the final specular component, multiply the output of the
+visibility function directly by the GGX normal distribution function
+(<span class="math inline">\(D\)</span>) and the Fresnel factor (<span
+class="math inline">\(F\)</span>):</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> SpecularBRDF <span class="op">=</span> D <span class="op">*</span> V <span class="op">*</span> F<span class="op">;</span></span></code></pre></div>
+<p>Because the division by <span class="math inline">\(4(\mathbf{n}
+\cdot \mathbf{v})(\mathbf{n} \cdot \mathbf{l})\)</span> is already
+embedded inside the visibility function, this formulation saves
+arithmetic operations and prevents numerical instability when viewing
+surfaces at grazing angles.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

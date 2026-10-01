@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does the GLSL #extension Directive Work? - glsl</title>
+    <meta name="description" content="The #extension preprocessor directive in the OpenGL Shading Language (GLSL) controls compiler support and validation for optional language features, vendor-specific capabilities, and newer hardware extensions. Because the core GLSL specification varies a">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-the-glsl-extension-directive-work">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does the GLSL #extension Directive Work? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-the-glsl-extension-directive-work" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The #extension preprocessor directive in the OpenGL Shading Language (GLSL) controls compiler support and validation for optional language features, vendor-specific capabilities, and newer hardware extensions. Because the core GLSL specification varies a" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-the-glsl-extension-directive-work">How Does the GLSL
+#extension Directive Work?</h1>
+<p>The <code>#extension</code> preprocessor directive in the OpenGL
+Shading Language (GLSL) controls compiler support and validation for
+optional language features, vendor-specific capabilities, and newer
+hardware extensions. Because the core GLSL specification varies across
+versions and GPU architectures, <code>#extension</code> allows
+developers to explicitly request, require, or disable specific
+capabilities beyond the baseline defined by the <code>#version</code>
+directive.</p>
+<h2 id="syntax-and-behavior-modes">Syntax and Behavior Modes</h2>
+<p>The directive follows a standardized syntax that pairs a target
+extension name with a specific compiler behavior:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension extension_name : behavior</span></span></code></pre></div>
+<p>The extension name specifies either an individual extension (such as
+<code>GL_EXT_shader_explicit_arithmetic_types</code>) or the keyword
+<code>all</code> to apply a rule across all available extensions.</p>
+<p>The behavior argument dictates how the shader compiler processes the
+code if the feature is present or missing:</p>
+<ul>
+<li><strong>require:</strong> The compiler must support the extension.
+If the driver or hardware does not support it, compilation halts with a
+fatal error.</li>
+<li><strong>enable:</strong> The compiler activates the extension if
+available and issues a warning if it is not supported, continuing
+compilation.</li>
+<li><strong>warn:</strong> The compiler enables the extension if
+available and emits a compilation warning whenever syntax or features
+belonging to that extension are used.</li>
+<li><strong>disable:</strong> The compiler completely disables the
+extension. Any subsequent use of its keywords, types, or built-in
+functions results in a compilation error.</li>
+</ul>
+<h2 id="enabling-hardware-and-platform-features">Enabling Hardware and
+Platform Features</h2>
+<p>Modern GPUs introduce advanced capabilities—such as 16-bit
+floating-point math, subgroup operations, 64-bit integers, and ray
+tracing—before they become standard in core GLSL. Using
+<code>#extension</code> unlocks these capabilities safely:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_shader_8bit_storage : require</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_KHR_shader_subgroup_ballot : enable</span></span></code></pre></div>
+<p>Declaring these extensions informs the compiler to recognize
+additional keywords, storage qualifiers, and built-in functions that
+would otherwise trigger unknown identifier errors during parsing.</p>
+<h2 id="portability-and-safe-fallbacks">Portability and Safe
+Fallbacks</h2>
+<p>The <code>#extension</code> directive plays a crucial role in
+cross-platform shader development. By setting behaviors to
+<code>warn</code> or <code>enable</code>, developers can write shaders
+that take advantage of vendor-specific optimizations when present while
+maintaining fallbacks for broader hardware compatibility.</p>
+<p>Using <code>#extension all : warn</code> is a common debugging
+practice. It instructs the compiler to generate warnings whenever any
+non-core extension is referenced, ensuring developers do not
+unintentionally write non-portable shader code across different GPU
+vendors.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GPUs Hide Arithmetic Latency in GLSL Shaders - glsl</title>
+    <meta name="description" content="Modern GPUs hide arithmetic latency in computationally intensive GLSL shaders by interleaving massive volumes of parallel threads rather than relying solely on deep instruction-level prediction. Through hardware instruction pipelining paired with fine-gr">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-gp-us-hide-arithmetic-latency-in-glsl-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GPUs Hide Arithmetic Latency in GLSL Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-gp-us-hide-arithmetic-latency-in-glsl-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Modern GPUs hide arithmetic latency in computationally intensive GLSL shaders by interleaving massive volumes of parallel threads rather than relying solely on deep instruction-level prediction. Through hardware instruction pipelining paired with fine-gr" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-gpus-hide-arithmetic-latency-in-glsl-shaders">How GPUs Hide
+Arithmetic Latency in GLSL Shaders</h1>
+<p>Modern GPUs hide arithmetic latency in computationally intensive GLSL
+shaders by interleaving massive volumes of parallel threads rather than
+relying solely on deep instruction-level prediction. Through hardware
+instruction pipelining paired with fine-grained warp or wavefront
+scheduling, the GPU switches execution context instantaneously whenever
+an arithmetic instruction stalls, ensuring the execution units remain
+fully saturated with mathematical operations.</p>
+<h3 id="arithmetic-latency-and-the-pipeline-model">Arithmetic Latency
+and the Pipeline Model</h3>
+<p>In GLSL shaders, complex mathematical operations—such as
+floating-point multiply-add (MAD/FMA), square roots, trigonometric
+functions, and matrix transformations—require multiple clock cycles to
+complete. An arithmetic execution unit (ALU) or special function unit
+(SFU) is structured as a pipeline broken into several sequential stages
+(such as operand fetch, multiple calculation stages, and
+write-back).</p>
+<p>Because an ALU is pipelined, it can accept a new instruction on every
+clock cycle, even if a single operation takes 4 to 20+ cycles to
+complete from start to finish. If a shader thread calculates a value on
+one line and immediately uses it on the next line (a read-after-write
+dependency), that specific thread must wait until the original operation
+exits the pipeline before continuing.</p>
+<h3 id="hardware-multithreading-and-warp-scheduling">Hardware
+Multithreading and Warp Scheduling</h3>
+<p>GPUs do not rely on complex branch prediction or out-of-order
+execution logic to resolve these dependencies. Instead, they use massive
+multithreading to disguise pipeline delays.</p>
+<p>Threads executing the same GLSL shader are grouped into fixed-size
+units known as warps (NVIDIA, typically 32 threads) or wavefronts (AMD,
+32 or 64 threads). When a warp issues an arithmetic instruction that
+requires several cycles to complete, the hardware warp scheduler detects
+the upcoming dependency stall. Rather than pausing the execution unit,
+the scheduler instantly switches execution to another ready warp on the
+very next clock cycle.</p>
+<p>Because the GPU maintains the state and register allocation for all
+active warps directly on-chip in massive register files, this context
+switch incurs zero clock cycles of overhead. By cycling through several
+independent warps, the pipeline is continually fed with valid
+instructions. By the time the scheduler circles back to the original
+warp, its arithmetic calculation has completed and exited the pipeline,
+allowing execution to proceed without a stall.</p>
+<h3 id="compiler-level-instruction-scheduling">Compiler-Level
+Instruction Scheduling</h3>
+<p>The GLSL compiler also plays an active role in pipeline latency
+hiding prior to execution. During compilation to hardware bytecode (such
+as SPIR-V translation to native GPU ISA), the compiler analyzes data
+dependencies:</p>
+<ul>
+<li><strong>Instruction Reordering:</strong> Independent calculations
+within the same shader are separated and interleaved. If a shader
+computes multiple lighting terms or coordinates, the compiler clusters
+independent operations together so that dependent instructions are
+separated by several cycles of unrelated work.</li>
+<li><strong>Vector Component Parallelism:</strong> Operations on
+distinct vector components (e.g., performing distinct math on
+<code>.x</code> and <code>.y</code>) are scheduled across execution
+ports to maximize throughput without stalling on single-component
+completion.</li>
+<li><strong>Loop Unrolling:</strong> Repetitive mathematical loops are
+unrolled to expose independent math instructions, giving the scheduler
+more choices to dispatch while waiting on pipeline depth.</li>
+</ul>
+<h3 id="the-role-of-occupancy-and-register-pressure">The Role of
+Occupancy and Register Pressure</h3>
+<p>For arithmetic latency hiding to succeed, the GPU must maintain
+sufficient "occupancy"—the ratio of active warps to the maximum
+theoretical warps supported by the compute unit.</p>
+<p>Math-heavy GLSL shaders often declare numerous local variables,
+intermediate vectors, and complex algorithms that consume large numbers
+of hardware registers. If a shader demands too many registers per
+thread, the hardware must reduce the number of concurrently active warps
+residing on the multiprocessor. When occupancy drops below a critical
+threshold, the warp scheduler runs out of independent instructions to
+dispatch. Under these conditions, the pipeline empties, bubbles occur,
+and the arithmetic latency directly degrades rendering performance.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

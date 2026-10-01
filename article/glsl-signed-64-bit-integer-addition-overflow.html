@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Signed 64-Bit Integer Addition Overflow - glsl</title>
+    <meta name="description" content="This article examines the arithmetic overflow behavior of signed 64-bit integer (int64t) addition within GLSL compute kernels. While the formal OpenGL Shading Language (GLSL) specification defines signed integer overflow as undefined, the underlying hard">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-signed-64-bit-integer-addition-overflow">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Signed 64-Bit Integer Addition Overflow - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-signed-64-bit-integer-addition-overflow" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article examines the arithmetic overflow behavior of signed 64-bit integer (int64t) addition within GLSL compute kernels. While the formal OpenGL Shading Language (GLSL) specification defines signed integer overflow as undefined, the underlying hard" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-signed-64-bit-integer-addition-overflow">GLSL Signed 64-Bit
+Integer Addition Overflow</h1>
+<p>This article examines the arithmetic overflow behavior of signed
+64-bit integer (<code>int64_t</code>) addition within GLSL compute
+kernels. While the formal OpenGL Shading Language (GLSL) specification
+defines signed integer overflow as undefined, the underlying hardware
+implementation and modern intermediate representations like SPIR-V
+enforce two's complement modular wrap-around. Below, we break down the
+distinction between the language specification, SPIR-V execution rules,
+hardware reality, and best practices for writing predictable compute
+kernels.</p>
+<h2 id="the-glsl-specification-undefined-behavior">The GLSL
+Specification: Undefined Behavior</h2>
+<p>According to the official GLSL core specification (as well as the
+<code>GL_ARB_gpu_shader_int64</code> and
+<code>GL_EXT_shader_explicit_arithmetic_types_int64</code> extensions),
+signed integer arithmetic overflow is strictly undefined.</p>
+<p>Unlike unsigned integer types (<code>uint64_t</code>), which are
+explicitly specified to wrap around using modulo <span
+class="math inline">\(2^{64}\)</span>, the language does not formally
+guarantee what happens when a signed operation exceeds
+<code>INT64_MAX</code> (<span class="math inline">\(2^{63}-1\)</span>)
+or drops below <code>INT64_MIN</code> (<span
+class="math inline">\(-2^{63}\)</span>). In pure theoretical GLSL, the
+compiler is not obligated to generate code that wraps, clamps, or
+produces consistent results when signed overflow occurs.</p>
+<h2 id="the-spir-v-and-vulkan-reality-twos-complement-wrap-around">The
+SPIR-V and Vulkan Reality: Two's Complement Wrap-Around</h2>
+<p>Most modern GLSL compute kernels are compiled ahead-of-time or
+just-in-time into SPIR-V for execution in Vulkan or modern OpenGL
+environments. In the SPIR-V specification, the rules for signed integer
+addition are explicitly defined:</p>
+<ul>
+<li>Addition operations on integers map to the <code>OpIAdd</code>
+instruction.</li>
+<li>The SPIR-V specification explicitly dictates that signed integer
+overflow for <code>OpIAdd</code> evaluates via standard two's complement
+wrap-around.</li>
+</ul>
+<p>Because the translation from GLSL to SPIR-V converts a standard
+<code>+</code> operator on an <code>int64_t</code> into an
+<code>OpIAdd</code> instruction, compute kernels running via Vulkan or
+modern SPIR-V consumption pipelines will reliably exhibit two's
+complement wrapping. An overflow past <code>9223372036854775807</code>
+wraps around to <code>-9223372036854775808</code>.</p>
+<h2 id="gpu-hardware-architecture">GPU Hardware Architecture</h2>
+<p>Modern GPU Arithmetic Logic Units (ALUs) handle signed and unsigned
+integer addition using the exact same binary circuitry. At the silicon
+level, there is no distinct "signed add" instruction versus an "unsigned
+add" instruction in the hardware instruction sets of vendors like
+NVIDIA, AMD, or Intel.</p>
+<p>Both operations perform identical bitwise additions discard the carry
+bit past the 64th bit. Consequently, native hardware execution naturally
+results in two's complement wrap-around regardless of the theoretical
+undefined behavior specified in the GLSL language manual.</p>
+<h2 id="risks-and-compiler-optimizations">Risks and Compiler
+Optimizations</h2>
+<p>Although the physical hardware wraps around, relying on signed
+overflow in high-level GLSL source code carries subtle risks:</p>
+<ol type="1">
+<li><strong>Undefined Behavior Optimizations:</strong> While GPU shader
+compilers historically perform fewer aggressive undefined-behavior-based
+optimizations than CPU compilers (such as Clang or GCC), a GLSL compiler
+assuming undefined behavior could theoretically eliminate overflow
+checks or assume that <code>a + 1 &gt; a</code> is always true.</li>
+<li><strong>Portability Across Drivers:</strong> Pure OpenGL drivers
+that compile high-level GLSL text directly to internal assembly could,
+in rare cases, produce non-wrapping behavior if specialized emulation
+routines or specific instruction sets are invoked.</li>
+</ol>
+<h2 id="recommended-practices">Recommended Practices</h2>
+<p>To ensure fully defined, portable, and predictable behavior in
+compute kernels:</p>
+<ul>
+<li><strong>Use Unsigned Arithmetic for Modular Operations:</strong> If
+intentional wrap-around behavior is required, cast the operands to
+<code>uint64_t</code> prior to the addition and cast the result back to
+<code>int64_t</code>:
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>int64_t <span class="fu">safe_add</span><span class="op">(</span>int64_t a<span class="op">,</span> int64_t b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fu">int64_t</span><span class="op">(</span><span class="fu">uint64_t</span><span class="op">(</span>a<span class="op">)</span> <span class="op">+</span> <span class="fu">uint64_t</span><span class="op">(</span>b<span class="op">));</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></li>
+<li><strong>Target SPIR-V Directly:</strong> When working in Vulkan or
+using tools like <code>glslangValidator</code>, the generated
+<code>OpIAdd</code> guarantees that two's complement wrapping is
+respected by the driver's backend compiler.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

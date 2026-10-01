@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU Bounding Sphere Frustum Culling in GLSL - glsl</title>
+    <meta name="description" content="This article explains how to implement bounding sphere view frustum culling using GLSL compute shaders in modern GPU-driven rendering pipelines. By offloading visibility determination from the CPU to compute threads running in parallel, applications can">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gpu-bounding-sphere-frustum-culling-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GPU Bounding Sphere Frustum Culling in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gpu-bounding-sphere-frustum-culling-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to implement bounding sphere view frustum culling using GLSL compute shaders in modern GPU-driven rendering pipelines. By offloading visibility determination from the CPU to compute threads running in parallel, applications can" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="gpu-bounding-sphere-frustum-culling-in-glsl">GPU Bounding Sphere
+Frustum Culling in GLSL</h1>
+<p>This article explains how to implement bounding sphere view frustum
+culling using GLSL compute shaders in modern GPU-driven rendering
+pipelines. By offloading visibility determination from the CPU to
+compute threads running in parallel, applications can cull hundreds of
+thousands of individual object instances per frame. The process involves
+defining the camera's six frustum planes, evaluating the signed distance
+from each plane to the sphere's center, and conditionally updating
+visibility buffers or indirect draw arguments directly on the GPU.</p>
+<h3 id="mathematical-foundation-of-the-plane-sphere-test">Mathematical
+Foundation of the Plane-Sphere Test</h3>
+<p>A viewing frustum consists of six bounding planes: near, far, left,
+right, top, and bottom. Each plane can be represented mathematically in
+Hessian normal form:</p>
+<p><span class="math display">\[Ax + By + Cz + D = 0\]</span></p>
+<p>Where <span class="math inline">\(\vec{n} = (A, B, C)\)</span> is the
+normalized normal vector (<span class="math inline">\(|\vec{n}| =
+1\)</span>) pointing inward toward the interior of the frustum, and
+<span class="math inline">\(D\)</span> is the signed distance from the
+world-space origin to the plane.</p>
+<p>For a bounding sphere defined by a center position <span
+class="math inline">\(\vec{C}\)</span> and a positive radius <span
+class="math inline">\(r\)</span>, the signed distance <span
+class="math inline">\(d\)</span> from the plane to the center of the
+sphere is computed using the dot product:</p>
+<p><span class="math display">\[d = \vec{n} \cdot \vec{C} +
+D\]</span></p>
+<p>The evaluation yields three possible spatial relationships per
+plane:</p>
+<ol type="1">
+<li><strong><span class="math inline">\(d &gt; r\)</span></strong>: The
+sphere is completely inside the plane (on the positive side).</li>
+<li><strong><span class="math inline">\(-r \le d \le
+r\)</span></strong>: The sphere intersects the plane.</li>
+<li><strong><span class="math inline">\(d &lt; -r\)</span></strong>: The
+sphere is completely outside the plane (on the negative side).</li>
+</ol>
+<p>If a sphere is located completely outside of even a single frustum
+plane (<span class="math inline">\(d &lt; -r\)</span>), the entire
+object lies outside the frustum and can be culled. To be considered
+visible, the sphere must satisfy <span class="math inline">\(d \ge
+-r\)</span> for all six planes simultaneously.</p>
+<h3 id="extracting-and-preparing-frustum-planes">Extracting and
+Preparing Frustum Planes</h3>
+<p>To minimize compute shader overhead, frustum planes should be
+extracted on the CPU once per frame from the combined view-projection
+matrix and passed to the shader via a Uniform Buffer Object (UBO). Using
+the standard Gribb-Hartmann method, the coefficients are extracted
+directly from the row/column combinations of the matrix:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std140</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> CameraData <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> viewMatrix<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> projectionMatrix<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> frustumPlanes<span class="op">[</span><span class="dv">6</span><span class="op">];</span> <span class="co">// xyz = normalized normal, w = distance (D)</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>Normalizing each plane's normal <span class="math inline">\((\vec{n}
+= \text{vec3}(A, B, C))\)</span> and dividing <span
+class="math inline">\(D\)</span> by the length of <span
+class="math inline">\(\vec{n}\)</span> before uploading to the GPU is
+critical. If the planes are not unit length, the signed distance
+calculation will produce distorted results unless an extra division is
+performed within the compute shader.</p>
+<h3 id="compute-shader-implementation">Compute Shader
+Implementation</h3>
+<p>The compute shader operates on a flat array of instance data stored
+inside a Shader Storage Buffer Object (SSBO). Each thread handles one
+bounding sphere using <code>gl_GlobalInvocationID.x</code>.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">64</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> InstanceData <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> modelMatrix<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> boundingSphere<span class="op">;</span> <span class="co">// xyz = center, w = radius</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> InstanceBuffer <span class="op">{</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    InstanceData instances<span class="op">[];</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="dt">writeonly</span> <span class="kw">buffer</span> VisibleIndicesBuffer <span class="op">{</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> visibleIndices<span class="op">[];</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">3</span><span class="op">)</span> <span class="kw">buffer</span> IndirectDrawCommand <span class="op">{</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> count<span class="op">;</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> instanceCount<span class="op">;</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> first<span class="op">;</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> baseInstance<span class="op">;</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> drawCommand<span class="op">;</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">uint</span> totalInstances<span class="op">;</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> <span class="fu">isSphereInsideFrustum</span><span class="op">(</span><span class="dt">vec3</span> center<span class="op">,</span> <span class="dt">float</span> radius<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">6</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Dot product with plane normal + plane distance D</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> <span class="bu">distance</span> <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>frustumPlanes<span class="op">[</span>i<span class="op">].</span><span class="fu">xyz</span><span class="op">,</span> center<span class="op">)</span> <span class="op">+</span> frustumPlanes<span class="op">[</span>i<span class="op">].</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span><span class="bu">distance</span> <span class="op">&lt;</span> <span class="op">-</span>radius<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>            <span class="kw">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> <span class="dt">index</span> <span class="op">=</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="dt">index</span> <span class="op">&gt;=</span> totalInstances<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> sphere <span class="op">=</span> instances<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">boundingSphere</span><span class="op">;</span></span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> center <span class="op">=</span> sphere<span class="op">.</span><span class="fu">xyz</span><span class="op">;</span></span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> radius <span class="op">=</span> sphere<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="fu">isSphereInsideFrustum</span><span class="op">(</span>center<span class="op">,</span> radius<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Atomically append the visible instance index</span></span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a>        <span class="dt">uint</span> outputIndex <span class="op">=</span> <span class="bu">atomicAdd</span><span class="op">(</span>drawCommand<span class="op">.</span><span class="fu">instanceCount</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>        visibleIndices<span class="op">[</span>outputIndex<span class="op">]</span> <span class="op">=</span> <span class="dt">index</span><span class="op">;</span></span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="transforming-local-bounds-to-world-space">Transforming Local
+Bounds to World Space</h3>
+<p>If bounding spheres are defined in local object space rather than
+world space, they must be transformed before the intersection test.</p>
+<p>Transform the sphere center by the instance model matrix:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> worldCenter <span class="op">=</span> <span class="op">(</span>instances<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">modelMatrix</span> <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>sphere<span class="op">.</span><span class="fu">xyz</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)).</span><span class="fu">xyz</span><span class="op">;</span></span></code></pre></div>
+<p>For the radius, non-uniform scaling requires selecting the maximum
+scale component among the matrix's basis vectors:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">mat4</span> model <span class="op">=</span> instances<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">modelMatrix</span><span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> scaleX <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>model<span class="op">[</span><span class="dv">0</span><span class="op">].</span><span class="fu">xyz</span><span class="op">);</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> scaleY <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>model<span class="op">[</span><span class="dv">1</span><span class="op">].</span><span class="fu">xyz</span><span class="op">);</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> scaleZ <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>model<span class="op">[</span><span class="dv">2</span><span class="op">].</span><span class="fu">xyz</span><span class="op">);</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> maxScale <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>scaleX<span class="op">,</span> <span class="bu">max</span><span class="op">(</span>scaleY<span class="op">,</span> scaleZ<span class="op">));</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> worldRadius <span class="op">=</span> sphere<span class="op">.</span><span class="fu">w</span> <span class="op">*</span> maxScale<span class="op">;</span></span></code></pre></div>
+<h3 id="integration-with-gpu-driven-rendering">Integration with
+GPU-Driven Rendering</h3>
+<p>Once visibility is determined, the result is combined with an
+indirect draw buffer (such as <code>DrawArraysIndirectCommand</code> or
+<code>DrawElementsIndirectCommand</code>). By issuing
+<code>atomicAdd</code> on <code>instanceCount</code>, the compute shader
+generates an exact count and a contiguous index array of visible
+geometry without any CPU readback. The host application subsequently
+issues a <code>glDrawElementsIndirect</code> or
+<code>glDrawArraysIndirect</code> call, executing the draw pass using
+only the primitives that passed the compute shader's intersection
+test.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

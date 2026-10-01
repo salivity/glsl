@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMAA Blending Weight Calculation in GLSL - glsl</title>
+    <meta name="description" content="Subpixel Morphological Anti-Aliasing (SMAA) evaluates blending weights in a dedicated second pass that determines how adjacent pixels blend together along detected edges. By analyzing continuous edge lines, finding their endpoints, and classifying the un">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/smaa-blending-weight-calculation-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="SMAA Blending Weight Calculation in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/smaa-blending-weight-calculation-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Subpixel Morphological Anti-Aliasing (SMAA) evaluates blending weights in a dedicated second pass that determines how adjacent pixels blend together along detected edges. By analyzing continuous edge lines, finding their endpoints, and classifying the un" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="smaa-blending-weight-calculation-in-glsl">SMAA Blending Weight
+Calculation in GLSL</h1>
+<p>Subpixel Morphological Anti-Aliasing (SMAA) evaluates blending
+weights in a dedicated second pass that determines how adjacent pixels
+blend together along detected edges. By analyzing continuous edge lines,
+finding their endpoints, and classifying the underlying geometric
+patterns, the GLSL implementation converts discrete pixel steps into
+smooth, subpixel-accurate coverage weights using precomputed lookup
+textures.</p>
+<h3 id="input-and-coordinate-setup">Input and Coordinate Setup</h3>
+<p>The blending weight pass operates on the output of the edge detection
+pass, which stores horizontal edges in the red channel and vertical
+edges in the green channel. In the GLSL fragment shader
+(<code>SMAABlendingWeightCalculationPS</code>), the pipeline evaluates
+horizontal edges first to produce top/bottom blending weights, followed
+by vertical edges to produce left/right blending weights.</p>
+<p>The shader calculates normalized texture coordinates and takes
+advantage of bilinear filtering offsets to reduce the total number of
+texture fetches required to sample the edge buffer.</p>
+<h3 id="edge-distance-searching">Edge Distance Searching</h3>
+<p>To determine the length of an edge, the shader searches linearly in
+both directions from the current pixel until it identifies a
+discontinuity or reaches a predefined maximum search step limit.</p>
+<p>In GLSL, this is handled by helper functions such as
+<code>SMAASearchXLeft</code>, <code>SMAASearchXRight</code>,
+<code>SMAASearchYUp</code>, and <code>SMAASearchYDown</code>. These
+functions do not sample every individual texel linearly; instead, they
+sample a precomputed 2D search texture (<code>searchTex</code>) using
+bilinear interpolation. The search texture encodes step distances,
+allowing the shader to skip multiple pixels per sample and quickly
+return the distance offsets (<span class="math inline">\(d_1\)</span>
+and <span class="math inline">\(d_2\)</span>) to the edge endpoints.</p>
+<h3 id="pattern-classification">Pattern Classification</h3>
+<p>Once the endpoints of the edge segment are located, the shader
+samples the edge texture orthogonally at these terminal positions. This
+step checks for "crossing edges"—perpendicular edge segments that define
+the structural shape of the boundary:</p>
+<ul>
+<li><strong>L-shapes:</strong> The edge turns in one direction at one
+endpoint.</li>
+<li><strong>Z-shapes:</strong> The edge turns in opposite directions at
+both endpoints.</li>
+<li><strong>U-shapes:</strong> The edge turns in the same direction at
+both endpoints.</li>
+</ul>
+<p>The values of these crossing edges, combined with the relative
+distances to the endpoints, uniquely define the geometric trapezoid or
+triangle representing the virtual continuous edge passing through the
+pixel.</p>
+<h3 id="area-texture-lookup">Area Texture Lookup</h3>
+<p>Directly calculating the analytical coverage of arbitrary trapezoids
+in real time is computationally expensive. SMAA offloads this math to a
+precomputed 2D lookup table packed into a texture
+(<code>areaTex</code>).</p>
+<p>The GLSL shader maps the extracted parameters directly into texture
+coordinates for <code>areaTex</code>:</p>
+<ol type="1">
+<li>The distances to the left/top (<span
+class="math inline">\(d_1\)</span>) and right/bottom (<span
+class="math inline">\(d_2\)</span>) endpoints are scaled and mapped to
+coordinate axes.</li>
+<li>The crossing edge configurations at the endpoints are converted into
+discrete coordinate offsets to select the appropriate sub-table within
+the area texture.</li>
+<li>A bilinear sample of <code>areaTex</code> retrieves the precise
+coverage area value, representing the fraction of the neighboring pixel
+that should be blended into the current pixel.</li>
+</ol>
+<h3 id="output-packing">Output Packing</h3>
+<p>The shader computes coverage factors for both orthogonal directions.
+For a horizontal edge, it outputs blending weights for the top and
+bottom neighbors; for a vertical edge, it outputs blending weights for
+the left and right neighbors. These four floating-point scalar weights
+are packed into a single RGBA target:</p>
+<ul>
+<li><strong>Red:</strong> Left blending weight</li>
+<li><strong>Green:</strong> Right blending weight</li>
+<li><strong>Blue:</strong> Top blending weight</li>
+<li><strong>Alpha:</strong> Bottom blending weight</li>
+</ul>
+<p>This RGBA texture is directly bound as the input for the third and
+final pass of SMAA, where neighborhood blending is executed using linear
+filtering based on these stored weights.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

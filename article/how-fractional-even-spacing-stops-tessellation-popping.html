@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How fractional_even_spacing Stops Tessellation Popping - glsl</title>
+    <meta name="description" content="In modern computer graphics, dynamic Level of Detail (LOD) algorithms frequently alter surface mesh density based on the camera's proximity, which can introduce a distracting visual artifact known as geometric "popping." In OpenGL Shading Language (GLSL)">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-fractional-even-spacing-stops-tessellation-popping">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How fractional_even_spacing Stops Tessellation Popping - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-fractional-even-spacing-stops-tessellation-popping" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In modern computer graphics, dynamic Level of Detail (LOD) algorithms frequently alter surface mesh density based on the camera's proximity, which can introduce a distracting visual artifact known as geometric "popping." In OpenGL Shading Language (GLSL)" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-fractional_even_spacing-stops-tessellation-popping">How
+fractional_even_spacing Stops Tessellation Popping</h1>
+<p>In modern computer graphics, dynamic Level of Detail (LOD) algorithms
+frequently alter surface mesh density based on the camera's proximity,
+which can introduce a distracting visual artifact known as geometric
+"popping." In OpenGL Shading Language (GLSL), the
+<code>fractional_even_spacing</code> layout qualifier resolves this
+issue within the tessellation primitive generator. By allowing
+continuous floating-point subdivision levels instead of snapping to
+discrete integers, it smoothly blends newly generated vertices into
+existence, providing seamless transitions as geometry subdivides or
+simplifies.</p>
+<h3 id="the-cause-of-geometric-popping">The Cause of Geometric
+Popping</h3>
+<p>When using standard <code>equal_spacing</code>, the tessellation
+factor is rounded up to the nearest integer. As an object approaches the
+camera, its calculated tessellation level increases continuously (e.g.,
+from 3.9 to 4.0). Under integer-based spacing, crossing this threshold
+forces the tessellator to instantaneously inject an entire set of new
+vertices and edges across the patch.</p>
+<p>When displacement mapping or non-linear vertex transformations are
+applied in the Tessellation Evaluation Shader (TES), these abruptly
+added vertices cause existing surfaces to suddenly snap to new
+positions. This visual discontinuity is what developers refer to as
+geometric popping.</p>
+<h3 id="how-fractional_even_spacing-works">How fractional_even_spacing
+Works</h3>
+<p>The <code>fractional_even_spacing</code> qualifier alters how the
+hardware tessellator interprets the outer and inner tessellation levels
+(<code>gl_TessLevelOuter</code> and <code>gl_TessLevelInner</code>).
+Instead of truncating or rounding to an integer directly:</p>
+<ol type="1">
+<li><strong>Even Integer Ceiling:</strong> The floating-point
+tessellation level <span class="math inline">\(n\)</span> is clamped to
+the operational range and then rounded <em>up</em> to the nearest even
+integer, <span class="math inline">\(2k\)</span>.</li>
+<li><strong>Two Vanishing Segments:</strong> The domain edge is divided
+into <span class="math inline">\(2k\)</span> segments. Of these
+segments, <span class="math inline">\(2k - 2\)</span> segments have
+equal, full lengths, while two segments share a scaled, fractional
+length determined by the remainder of <span
+class="math inline">\(n\)</span>.</li>
+<li><strong>Smooth Expansion:</strong> As <span
+class="math inline">\(n\)</span> increases continuously toward <span
+class="math inline">\(2k\)</span>, these two transitional segments
+smoothly expand from a length of zero to their full size.
+Simultaneously, the other segments slightly contract to preserve domain
+proportions.</li>
+<li><strong>Symmetrical Distribution:</strong> Because the system
+enforces an even number of divisions, the emerging segments are mirrored
+symmetrically across the center of the patch edge, preventing lopsided
+geometry or uneven vertex distribution.</li>
+</ol>
+<h3 id="eliminating-the-pop">Eliminating the Pop</h3>
+<p>Because the two emerging vertices begin at identical coordinates to
+existing patch points (zero length), their initial contribution to the
+shape of the surface is mathematically null. As the tessellation factor
+climbs, these vertices move away from their starting positions
+progressively rather than appearing out of nowhere.</p>
+<p>When displacement shaders sample heightmaps or normal vectors at
+these new vertices, the transition occurs continuously across multiple
+frames. The user perceives a smooth deformation of the surface rather
+than a sudden structural jump, yielding stable and artifact-free dynamic
+terrain, water, and character meshes.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

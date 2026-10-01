@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Update Particle Physics with GLSL Compute Shaders - glsl</title>
+    <meta name="description" content="This article explores how GPU-based particle physics simulations are updated using GLSL compute shaders. It covers the underlying architecture of Shader Storage Buffer Objects (SSBOs), the execution of massively parallel workgroups, numerical integration">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-to-update-particle-physics-with-glsl-compute-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How to Update Particle Physics with GLSL Compute Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-to-update-particle-physics-with-glsl-compute-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores how GPU-based particle physics simulations are updated using GLSL compute shaders. It covers the underlying architecture of Shader Storage Buffer Objects (SSBOs), the execution of massively parallel workgroups, numerical integration" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-to-update-particle-physics-with-glsl-compute-shaders">How to
+Update Particle Physics with GLSL Compute Shaders</h1>
+<p>This article explores how GPU-based particle physics simulations are
+updated using GLSL compute shaders. It covers the underlying
+architecture of Shader Storage Buffer Objects (SSBOs), the execution of
+massively parallel workgroups, numerical integration methods for
+movement, collision resolution techniques, and the zero-copy rendering
+pipeline that avoids CPU-GPU bottlenecks.</p>
+<h3 id="shader-storage-buffer-objects-ssbos">Shader Storage Buffer
+Objects (SSBOs)</h3>
+<p>Particle data lives entirely on GPU memory inside Shader Storage
+Buffer Objects (SSBOs). Instead of passing particle arrays from the CPU
+every frame, the CPU allocates the buffers once during
+initialization.</p>
+<p>A standard particle structure within GLSL is aligned to standard
+16-byte boundaries (std430 layout) for optimal performance:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Particle <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> position<span class="op">;</span> <span class="co">// xyz = position, w = remaining lifetime</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> velocity<span class="op">;</span> <span class="co">// xyz = velocity, w = mass or scale</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> ParticleBuffer <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    Particle particles<span class="op">[];</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>Depending on whether interactions between particles are calculated,
+simulations use either a single buffer with in-place updates or two
+buffers (ping-ponging) to prevent read-write race conditions.</p>
+<h3 id="thread-invocation-and-dispatch">Thread Invocation and
+Dispatch</h3>
+<p>Compute shaders operate in workgroups. In the shader header, the
+local workgroup size is defined along one dimension:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">256</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span></code></pre></div>
+<p>Each particle is mapped to an individual compute thread. The unique
+index for each particle is derived using the built-in variable
+<code>gl_GlobalInvocationID.x</code>. Before running calculations, a
+bounds check ensures the thread index does not exceed the maximum
+particle count:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="dt">index</span> <span class="op">=</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span><span class="dt">index</span> <span class="op">&gt;=</span> totalParticles<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>On the host side, the application calls
+<code>glDispatchCompute((totalParticles + 255) / 256, 1, 1)</code> to
+execute the required number of groups.</p>
+<h3 id="numerical-integration-and-state-update">Numerical Integration
+and State Update</h3>
+<p>The compute shader updates physics state via numerical integration
+(typically Semi-Implicit Euler or Verlet integration) using a uniform
+delta time (<code>dt</code>).</p>
+<ol type="1">
+<li><strong>Life Cycle Management</strong>: The shader decreases the
+particle's lifetime. If the lifetime falls below zero, the particle is
+either marked inactive or re-initialized at an emitter source using
+procedural pseudo-random functions.</li>
+<li><strong>Force Accumulation</strong>: External forces like gravity,
+wind, and drag are accumulated: <span
+class="math display">\[\mathbf{F}_{\text{total}} =
+\mathbf{F}_{\text{gravity}} - (k_{\text{drag}} \cdot
+\mathbf{v})\]</span></li>
+<li><strong>Velocity and Position Integration</strong>: Acceleration is
+derived from mass, updating velocity first, which then updates position:
+<span class="math display">\[\mathbf{v}_{t+1} = \mathbf{v}_t +
+\left(\frac{\mathbf{F}}{m}\right) \cdot \Delta t\]</span> <span
+class="math display">\[\mathbf{p}_{t+1} = \mathbf{p}_t +
+\mathbf{v}_{t+1} \cdot \Delta t\]</span></li>
+</ol>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Update velocity</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>particles<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">velocity</span><span class="op">.</span><span class="fu">xyz</span> <span class="op">+=</span> acceleration <span class="op">*</span> dt<span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Update position</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>particles<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">position</span><span class="op">.</span><span class="fu">xyz</span> <span class="op">+=</span> particles<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">velocity</span><span class="op">.</span><span class="fu">xyz</span> <span class="op">*</span> dt<span class="op">;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Update lifetime</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>particles<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">position</span><span class="op">.</span><span class="fu">w</span> <span class="op">-=</span> dt<span class="op">;</span></span></code></pre></div>
+<h3 id="boundary-constraints-and-collisions">Boundary Constraints and
+Collisions</h3>
+<p>Collisions are resolved directly within the thread. Simple
+constraints, such as planar boundaries, invert the velocity component
+along the collision normal and apply a restitution coefficient to
+simulate energy loss:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>particles<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">position</span><span class="op">.</span><span class="fu">y</span> <span class="op">&lt;</span> floorHeight<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    particles<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">position</span><span class="op">.</span><span class="fu">y</span> <span class="op">=</span> floorHeight<span class="op">;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    particles<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">velocity</span><span class="op">.</span><span class="fu">y</span> <span class="op">=</span> <span class="op">-</span>particles<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">velocity</span><span class="op">.</span><span class="fu">y</span> <span class="op">*</span> restitution<span class="op">;</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    particles<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">velocity</span><span class="op">.</span><span class="fu">xz</span> <span class="op">*=</span> friction<span class="op">;</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>For complex environments, signed distance fields (SDFs) sampled from
+a 3D texture provide collision normals and penetration depths for
+arbitrary geometry.</p>
+<h3 id="memory-barriers-and-direct-rendering">Memory Barriers and Direct
+Rendering</h3>
+<p>Once the compute shader finishes writing to the SSBO, data does not
+need to return to the CPU. The application issues an OpenGL memory
+barrier before drawing:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>glMemoryBarrier<span class="op">(</span>GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT <span class="op">|</span> GL_SHADER_STORAGE_BARRIER_BIT<span class="op">);</span></span></code></pre></div>
+<p>Because OpenGL allows an SSBO to simultaneously bind as a Vertex
+Buffer Object (VBO), the updated positions can be passed directly to the
+vertex shader using instanced rendering via
+<code>glDrawArraysInstanced()</code>, maintaining maximum throughput on
+the GPU.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

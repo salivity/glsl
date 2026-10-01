@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCSS Blocker Search Algorithm in GLSL - glsl</title>
+    <meta name="description" content="The blocker search algorithm is the foundational first step in Percentage-Closer Soft Shadows (PCSS), responsible for identifying occluding geometry between a surface point and an area light source to compute an average blocker depth. This average depth">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/pcss-blocker-search-algorithm-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="PCSS Blocker Search Algorithm in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/pcss-blocker-search-algorithm-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The blocker search algorithm is the foundational first step in Percentage-Closer Soft Shadows (PCSS), responsible for identifying occluding geometry between a surface point and an area light source to compute an average blocker depth. This average depth" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="pcss-blocker-search-algorithm-in-glsl">PCSS Blocker Search
+Algorithm in GLSL</h1>
+<p>The blocker search algorithm is the foundational first step in
+Percentage-Closer Soft Shadows (PCSS), responsible for identifying
+occluding geometry between a surface point and an area light source to
+compute an average blocker depth. This average depth determines the size
+of the penumbra, enabling shadows to appear sharp near the contact point
+and progressively softer farther away. This article breaks down the
+mathematical mechanics of the blocker search step and details its direct
+implementation using OpenGL Shading Language (GLSL).</p>
+<h3 id="purpose-and-geometry-of-the-search">Purpose and Geometry of the
+Search</h3>
+<p>Before filtering the shadow map, PCSS must determine how wide the
+filter kernel should be. According to the principles of similar
+triangles, the penumbra width (<span
+class="math inline">\(w_{penumbra}\)</span>) is proportional to the
+distance between the receiver and the blocker:</p>
+<p><span class="math display">\[w_{penumbra} = \frac{d_{receiver} -
+d_{blocker}}{d_{blocker}} \cdot w_{light}\]</span></p>
+<p>To find <span class="math inline">\(d_{blocker}\)</span>, the
+algorithm searches a neighborhood around the projected shadow map
+coordinate of the fragment. The radius of this search region (<span
+class="math inline">\(w_{search}\)</span>) is dynamic and scales based
+on the receiver's distance from the light:</p>
+<p><span class="math display">\[w_{search} = w_{light} \cdot \left(
+\frac{d_{receiver} - z_{near}}{d_{receiver}} \right)\]</span></p>
+<p>Here, <span class="math inline">\(w_{light}\)</span> represents the
+physical or normalized size of the light source, and <span
+class="math inline">\(z_{near}\)</span> is the near clipping plane of
+the light's projection frustum.</p>
+<h3 id="algorithmic-steps">Algorithmic Steps</h3>
+<ol type="1">
+<li><strong>Calculate Search Window Size</strong>: Compute the UV search
+radius on the shadow map using the receiver's depth and light
+parameters.</li>
+<li><strong>Sample the Shadow Map</strong>: Distribute sample points
+across the search window, typically using a distribution such as a
+Poisson disk or a Vogel disk to reduce structured aliasing.</li>
+<li><strong>Depth Evaluation</strong>: Compare each sampled depth
+against the receiver's depth. If a sample is closer to the light than
+the receiver (accounting for depth bias), it is flagged as a
+blocker.</li>
+<li><strong>Average Blocker Depth</strong>: Accumulate the depths of all
+detected blockers and divide by the total count of blockers found. If no
+blockers are found, the fragment is completely unshadowed, and
+subsequent PCF steps can be skipped.</li>
+</ol>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>Below is a standard GLSL implementation of the blocker search
+routine:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#define BLOCKER_SEARCH_SAMPLES 16</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Precomputed Poisson disk sample offsets normalized between [-1, 1]</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">vec2</span> POISSON_DISK<span class="op">[</span><span class="dv">16</span><span class="op">]</span> <span class="op">=</span> <span class="dt">vec2</span><span class="op">[](</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.94201624</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.39906216</span><span class="op">),</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(</span> <span class="fl">0.94558609</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.76890725</span><span class="op">),</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.09418410</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.92938870</span><span class="op">),</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(</span> <span class="fl">0.34495938</span><span class="op">,</span>  <span class="fl">0.29387760</span><span class="op">),</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.91588581</span><span class="op">,</span>  <span class="fl">0.45771432</span><span class="op">),</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.81544232</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.87912464</span><span class="op">),</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.38277543</span><span class="op">,</span>  <span class="fl">0.27676845</span><span class="op">),</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(</span> <span class="fl">0.97484398</span><span class="op">,</span>  <span class="fl">0.75648377</span><span class="op">),</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(</span> <span class="fl">0.44323325</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.97511554</span><span class="op">),</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(</span> <span class="fl">0.53742981</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.47373420</span><span class="op">),</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.26496911</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.41893023</span><span class="op">),</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(</span> <span class="fl">0.79197514</span><span class="op">,</span>  <span class="fl">0.19090188</span><span class="op">),</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.24188840</span><span class="op">,</span>  <span class="fl">0.99706507</span><span class="op">),</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.81409955</span><span class="op">,</span>  <span class="fl">0.91437590</span><span class="op">),</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(</span> <span class="fl">0.19984126</span><span class="op">,</span>  <span class="fl">0.78641367</span><span class="op">),</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(</span> <span class="fl">0.14383161</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.14100790</span><span class="op">)</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="co">// Searches for occluders and returns the average blocker depth.</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a><span class="co">// Returns -1.0 if no blockers are present.</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">FindBlocker</span><span class="op">(</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">sampler2D</span> shadowMap<span class="op">,</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> shadowCoordsUV<span class="op">,</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> receiverDepth<span class="op">,</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lightSizeUV<span class="op">,</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lightZNear<span class="op">,</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> bias</span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 1. Calculate search radius in texture space</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> searchRadius <span class="op">=</span> lightSizeUV <span class="op">*</span> <span class="op">(</span>receiverDepth <span class="op">-</span> lightZNear<span class="op">)</span> <span class="op">/</span> receiverDepth<span class="op">;</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> blockerSum <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> numBlockers <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 2. Sample shadow map across the disk pattern</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> BLOCKER_SEARCH_SAMPLES<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span> <span class="dt">offset</span> <span class="op">=</span> POISSON_DISK<span class="op">[</span>i<span class="op">]</span> <span class="op">*</span> searchRadius<span class="op">;</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> shadowMapDepth <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>shadowMap<span class="op">,</span> shadowCoordsUV <span class="op">+</span> <span class="dt">offset</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 3. Check if the sample occludes the receiver</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>shadowMapDepth <span class="op">&lt;</span> receiverDepth <span class="op">-</span> bias<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>            blockerSum <span class="op">+=</span> shadowMapDepth<span class="op">;</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>            numBlockers<span class="op">++;</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Early exit if the fragment is fully illuminated</span></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>numBlockers <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 4. Return the average depth of all detected blockers</span></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> blockerSum <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>numBlockers<span class="op">);</span></span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="key-considerations-for-optimization-and-artifacts">Key
+Considerations for Optimization and Artifacts</h3>
+<ul>
+<li><strong>Sampling Artifacts</strong>: Using fixed offsets can lead to
+repetitive banding. Applying a random rotation per-pixel using an
+interleaved gradient noise or blue noise texture decorrelates the
+pattern into high-frequency noise that is easier to denoise.</li>
+<li><strong>Early Out</strong>: When <code>FindBlocker</code> returns
+<code>-1.0</code>, the fragment is completely outside the penumbra and
+umbra. The shader can immediately output a shadow factor of
+<code>1.0</code> (fully lit), skipping the more expensive
+Percentage-Closer Filtering (PCF) step entirely.</li>
+<li><strong>Under-sampling Under Large Lights</strong>: If the light
+source is exceptionally wide, a small sample count (e.g., 16 samples)
+over an expanded search radius may miss small occluders, causing sudden
+flickering or noise along shadow borders.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

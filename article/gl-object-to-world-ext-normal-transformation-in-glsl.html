@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gl_ObjectToWorldEXT Normal Transformation in GLSL - glsl</title>
+    <meta name="description" content="Transforming surface normals from object space to world space in GLSL ray tracing shaders requires understanding how the built-in glObjectToWorldEXT matrix operates. While positions and standard direction vectors use forward affine transforms, normal vec">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gl-object-to-world-ext-normal-transformation-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="gl_ObjectToWorldEXT Normal Transformation in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gl-object-to-world-ext-normal-transformation-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Transforming surface normals from object space to world space in GLSL ray tracing shaders requires understanding how the built-in glObjectToWorldEXT matrix operates. While positions and standard direction vectors use forward affine transforms, normal vec" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="gl_objecttoworldext-normal-transformation-in-glsl">gl_ObjectToWorldEXT
+Normal Transformation in GLSL</h1>
+<p>Transforming surface normals from object space to world space in GLSL
+ray tracing shaders requires understanding how the built-in
+<code>gl_ObjectToWorldEXT</code> matrix operates. While positions and
+standard direction vectors use forward affine transforms, normal vectors
+require the inverse-transpose of the transformation matrix to preserve
+orthogonality under non-uniform scaling. This article explains the exact
+mathematical operation performed by <code>gl_ObjectToWorldEXT</code>,
+why direct multiplication can fail, and how to correctly transform
+normals in hardware ray tracing pipelines.</p>
+<h2 id="the-role-of-gl_objecttoworldext">The Role of
+gl_ObjectToWorldEXT</h2>
+<p>In GLSL ray tracing extensions (such as
+<code>GL_EXT_ray_tracing</code>), <code>gl_ObjectToWorldEXT</code> is a
+built-in uniform matrix of type <code>mat4x3</code>. It represents the
+4x3 affine transformation matrix responsible for converting coordinates
+from the current instance's object space to world space.</p>
+<p>When multiplied directly with a direction vector using its upper-left
+<span class="math inline">\(3\times3\)</span> components, it applies
+standard linear transformations: rotation, reflection, and scaling:</p>
+<p><span class="math display">\[\mathbf{v}_{\text{world}} =
+\mathbf{M}_{3\times3} \cdot \mathbf{v}_{\text{object}}\]</span></p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> worldDirection <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span>gl_ObjectToWorldEXT<span class="op">)</span> <span class="op">*</span> objectDirection<span class="op">;</span></span></code></pre></div>
+<h2 id="why-direct-transformation-fails-for-normals">Why Direct
+Transformation Fails for Normals</h2>
+<p>Surface normals represent planes tangent to the geometry rather than
+displacement vectors. If a 3D model undergoes non-uniform scaling (e.g.,
+stretched along the X-axis by <span class="math inline">\(2.0\)</span>),
+applying the forward transformation matrix directly to the normal vector
+distorts its angle, causing it to no longer be perpendicular to the
+surface.</p>
+<p>To preserve perpendicularity, normal vectors must be transformed by
+the <strong>inverse transpose</strong> of the upper-left <span
+class="math inline">\(3\times3\)</span> portion of the object-to-world
+matrix:</p>
+<p><span class="math display">\[\mathbf{n}_{\text{world}} =
+(\mathbf{M}_{3\times3}^{-1})^{T} \cdot
+\mathbf{n}_{\text{object}}\]</span></p>
+<p>If you rely solely on <code>gl_ObjectToWorldEXT</code> to compute
+this transformation, you must compute the inverse transpose
+explicitly:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">mat3</span> normalMatrix <span class="op">=</span> <span class="bu">transpose</span><span class="op">(</span><span class="bu">inverse</span><span class="op">(</span><span class="dt">mat3</span><span class="op">(</span>gl_ObjectToWorldEXT<span class="op">)));</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> worldNormal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>normalMatrix <span class="op">*</span> objectNormal<span class="op">);</span></span></code></pre></div>
+<p>While mathematically correct, calling <code>inverse()</code> in a
+real-time shader introduces unnecessary computational overhead.</p>
+<h2 id="the-optimal-transformation-using-gl_worldtoobjectext">The
+Optimal Transformation Using gl_WorldToObjectEXT</h2>
+<p>Vulkan and GLSL ray tracing APIs provide the precomputed inverse
+matrix through <code>gl_WorldToObjectEXT</code>. Because
+<code>gl_WorldToObjectEXT</code> represents <span
+class="math inline">\(\mathbf{M}^{-1}\)</span>, you only need to
+transpose its upper-left <span class="math inline">\(3\times3\)</span>
+submatrix to obtain the correct normal transformation matrix:</p>
+<p><span class="math display">\[(\mathbf{M}^{-1})^{T} =
+(\text{mat3}(\text{gl\_WorldToObjectEXT}))^{T}\]</span></p>
+<p>In GLSL, multiplying a vector on the left side of a matrix evaluates
+to the same result as multiplying the transposed matrix on the right
+side of the vector. Therefore, the transformation can be performed
+efficiently without calling <code>transpose()</code> or
+<code>inverse()</code>:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Multiplies the normal by the transpose of the world-to-object matrix</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> worldNormal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>objectNormal <span class="op">*</span> <span class="dt">mat3</span><span class="op">(</span>gl_WorldToObjectEXT<span class="op">));</span></span></code></pre></div>
+<p>Alternatively, writing the transpose explicitly produces the
+identical assembly result:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> worldNormal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="bu">transpose</span><span class="op">(</span><span class="dt">mat3</span><span class="op">(</span>gl_WorldToObjectEXT<span class="op">))</span> <span class="op">*</span> objectNormal<span class="op">);</span></span></code></pre></div>
+<h2 id="summary-of-behavior">Summary of Behavior</h2>
+<ul>
+<li><strong>Direct use of <code>gl_ObjectToWorldEXT</code>:</strong>
+Applies standard forward rotation and scale. This is only valid for
+normals if the instance transform is purely rigid (rotation and
+translation only) or uses uniform scaling.</li>
+<li><strong>Non-uniform scaling:</strong> Requires the inverse-transpose
+transformation. Rather than computing
+<code>transpose(inverse(mat3(gl_ObjectToWorldEXT)))</code>, use
+<code>gl_WorldToObjectEXT</code> transposed to achieve the correct
+mathematical result efficiently.</li>
+<li><strong>Normalization:</strong> Any normal transformed into world
+space must be passed through <code>normalize()</code>, as scaling
+operations alter the vector's unit length.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

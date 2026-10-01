@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hamburger Bounds for Moment Shadow Maps in GLSL - glsl</title>
+    <meta name="description" content="This article explains how to evaluate four statistical depth moments using Hamburger bounds to compute shadow factors in Moment Shadow Maps (MSM). Moment Shadow Mapping utilizes a four-component vector of trigonometric or power depth moments to reconstru">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/hamburger-bounds-for-moment-shadow-maps-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Hamburger Bounds for Moment Shadow Maps in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/hamburger-bounds-for-moment-shadow-maps-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to evaluate four statistical depth moments using Hamburger bounds to compute shadow factors in Moment Shadow Maps (MSM). Moment Shadow Mapping utilizes a four-component vector of trigonometric or power depth moments to reconstru" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="hamburger-bounds-for-moment-shadow-maps-in-glsl">Hamburger
+Bounds for Moment Shadow Maps in GLSL</h1>
+<p>This article explains how to evaluate four statistical depth moments
+using Hamburger bounds to compute shadow factors in Moment Shadow Maps
+(MSM). Moment Shadow Mapping utilizes a four-component vector of
+trigonometric or power depth moments to reconstruct a sharp upper bound
+on occlusion while eliminating common artifacts like light leaking. By
+leveraging Hamburger's theorem and solving a Hankel linear system via
+Cholesky decomposition, developers can evaluate shadow coverage in GLSL
+with closed-form, per-fragment matrix operations.</p>
+<h2 id="theoretical-foundation">Theoretical Foundation</h2>
+<p>In Moment Shadow Mapping, the shadow map records the first four power
+moments of depth <span class="math inline">\(z \in [0, 1]\)</span>:</p>
+<p><span class="math display">\[b = (b_1, b_2, b_3, b_4)^T = \left(
+\mathbb{E}[z], \mathbb{E}[z^2], \mathbb{E}[z^3], \mathbb{E}[z^4]
+\right)^T\]</span></p>
+<p>Given a surface fragment at depth <span
+class="math inline">\(z_f\)</span>, the goal is to evaluate the maximum
+probability that an occluder exists in front of the fragment (<span
+class="math inline">\(z &lt; z_f\)</span>). Hamburger's theorem provides
+a sharp upper bound for this cumulative distribution function using a
+<span class="math inline">\(3 \times 3\)</span> positive-semidefinite
+Hankel matrix of moments:</p>
+<p><span class="math display">\[M = \begin{bmatrix} 1 &amp; b_1 &amp;
+b_2 \\ b_1 &amp; b_2 &amp; b_3 \\ b_2 &amp; b_3 &amp; b_4
+\end{bmatrix}\]</span></p>
+<p>Applying Hamburger’s bound requires calculating the extremal
+distributions supported by the moment vector. In practice, this is
+solved by decomposing <span class="math inline">\(M\)</span> and finding
+the roots of a quadratic polynomial that yields the bound on
+occlusion.</p>
+<h2 id="mathematical-formulation">Mathematical Formulation</h2>
+<h3 id="1-moment-regularization">1. Moment Regularization</h3>
+<p>Because filtering and precision limits can cause <span
+class="math inline">\(M\)</span> to become negative or singular, the
+moment vector <span class="math inline">\(b\)</span> must first be
+regularized using a small bias parameter <span
+class="math inline">\(\alpha\)</span> (typically <span
+class="math inline">\(10^{-4}\)</span> to <span
+class="math inline">\(10^{-3}\)</span>):</p>
+<p><span class="math display">\[b&#39; = (1 - \alpha) b + \alpha
+\begin{bmatrix} 0.5 \\ 0.5 \\ 0.5 \\ 0.5 \end{bmatrix}\]</span></p>
+<h3 id="2-cholesky-factorization">2. Cholesky Factorization</h3>
+<p>To invert the system efficiently, compute the lower-triangular
+Cholesky factorization <span class="math inline">\(M = L
+L^T\)</span>:</p>
+<ul>
+<li><span class="math inline">\(L_{11} = 1\)</span></li>
+<li><span class="math inline">\(L_{21} = b&#39;_1\)</span></li>
+<li><span class="math inline">\(L_{31} = b&#39;_2\)</span></li>
+<li><span class="math inline">\(L_{22} = \sqrt{b&#39;_2 -
+L_{21}^2}\)</span></li>
+<li><span class="math inline">\(L_{32} = \frac{b&#39;_3 - L_{21}
+L_{31}}{L_{22}}\)</span></li>
+<li><span class="math inline">\(L_{33} = \sqrt{b&#39;_4 - L_{31}^2 -
+L_{32}^2}\)</span></li>
+</ul>
+<h3 id="3-forward-substitution">3. Forward Substitution</h3>
+<p>Solve the linear equation <span class="math inline">\(L y =
+v\)</span>, where <span class="math inline">\(v = (1, z_f,
+z_f^2)^T\)</span>:</p>
+<ul>
+<li><span class="math inline">\(y_1 = 1\)</span></li>
+<li><span class="math inline">\(y_2 = \frac{z_f -
+L_{21}}{L_{22}}\)</span></li>
+<li><span class="math inline">\(y_3 = \frac{z_f^2 - L_{31} - L_{32}
+y_2}{L_{33}}\)</span></li>
+</ul>
+<h3 id="4-root-finding-and-bound-evaluation">4. Root Finding and Bound
+Evaluation</h3>
+<p>The vector <span class="math inline">\(y\)</span> defines the
+coefficients of a polynomial whose roots <span
+class="math inline">\(z_1\)</span> and <span
+class="math inline">\(z_2\)</span> define the points of support for the
+extremal distribution. By computing the squared norm and determining
+where <span class="math inline">\(z_f\)</span> falls relative to the
+roots, the bound reduces to an evaluation of occlusion weight:</p>
+<p><span class="math display">\[G(z_f) = \frac{y_1^2 + y_2^2}{y_1^2 +
+y_2^2 + y_3^2}\]</span></p>
+<p>When evaluating the condition with the roots:</p>
+<ul>
+<li>If <span class="math inline">\(z_f \le z_1\)</span>, the surface is
+fully lit (<span class="math inline">\(G = 0\)</span>).</li>
+<li>If <span class="math inline">\(z_1 &lt; z_f \le z_2\)</span>, the
+surface is partially shadowed according to the lower extremal
+point.</li>
+<li>If <span class="math inline">\(z_f &gt; z_2\)</span>, the surface is
+evaluated against the upper bound.</li>
+</ul>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>The following complete GLSL function implements the regularization,
+Cholesky factorization, forward substitution, and Hamburger bound
+evaluation for four moments:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Evaluates shadow intensity in [0, 1], where 0 is fully lit and 1 is fully shadowed</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">evaluateHamburgerBound</span><span class="op">(</span><span class="dt">vec4</span> moments<span class="op">,</span> <span class="dt">float</span> fragmentDepth<span class="op">,</span> <span class="dt">float</span> bias<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Step 1: Regularization to avoid non-positive definite Hankel matrices</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> b <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>moments<span class="op">,</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.5</span><span class="op">,</span> <span class="fl">0.5</span><span class="op">,</span> <span class="fl">0.5</span><span class="op">,</span> <span class="fl">0.5</span><span class="op">),</span> bias<span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Fragment depth vector: v = (1.0, z, z^2)</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> z <span class="op">=</span> fragmentDepth<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Step 2: Compute Cholesky factorization L of Hankel matrix</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// L11 is 1.0, L21 = b.x, L31 = b.y</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> L21 <span class="op">=</span> b<span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> L31 <span class="op">=</span> b<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> L22 <span class="op">=</span> <span class="bu">sqrt</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> b<span class="op">.</span><span class="fu">y</span> <span class="op">-</span> L21 <span class="op">*</span> L21<span class="op">));</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> invL22 <span class="op">=</span> <span class="fl">1.0</span> <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>L22<span class="op">,</span> <span class="fl">1e-6</span><span class="op">);</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> L32 <span class="op">=</span> <span class="op">(</span>b<span class="op">.</span><span class="fu">z</span> <span class="op">-</span> L21 <span class="op">*</span> L31<span class="op">)</span> <span class="op">*</span> invL22<span class="op">;</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> L33 <span class="op">=</span> <span class="bu">sqrt</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> b<span class="op">.</span><span class="fu">w</span> <span class="op">-</span> L31 <span class="op">*</span> L31 <span class="op">-</span> L32 <span class="op">*</span> L32<span class="op">));</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> invL33 <span class="op">=</span> <span class="fl">1.0</span> <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>L33<span class="op">,</span> <span class="fl">1e-6</span><span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Step 3: Forward substitution: Solve L * y = (1.0, z, z^2)</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> y1 <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> y2 <span class="op">=</span> <span class="op">(</span>z <span class="op">-</span> L21<span class="op">)</span> <span class="op">*</span> invL22<span class="op">;</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> y3 <span class="op">=</span> <span class="op">(</span>z <span class="op">*</span> z <span class="op">-</span> L31 <span class="op">-</span> L32 <span class="op">*</span> y2<span class="op">)</span> <span class="op">*</span> invL33<span class="op">;</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Step 4: Evaluate the polynomial roots and Hamburger bound</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Vector c = (1, -z1 - z2, z1 * z2) derived from the null-space computation</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> ySquareSum <span class="op">=</span> y1 <span class="op">*</span> y1 <span class="op">+</span> y2 <span class="op">*</span> y2<span class="op">;</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> totalNorm <span class="op">=</span> ySquareSum <span class="op">+</span> y3 <span class="op">*</span> y3<span class="op">;</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Determine quadratic polynomial coefficients: c0 + c1*z + c2*z^2</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> c1 <span class="op">=</span> <span class="op">-</span>y2 <span class="op">*</span> invL22 <span class="op">+</span> <span class="op">(</span>L32 <span class="op">*</span> invL22<span class="op">)</span> <span class="op">*</span> <span class="op">(</span>y3 <span class="op">*</span> invL33<span class="op">);</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> c2 <span class="op">=</span> <span class="op">-</span>y3 <span class="op">*</span> invL33<span class="op">;</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> c0 <span class="op">=</span> <span class="fl">1.0</span> <span class="op">-</span> L21 <span class="op">*</span> c1 <span class="op">-</span> L31 <span class="op">*</span> c2<span class="op">;</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Solve quadratic equation: c2 * z^2 + c1 * z + c0 = 0</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> desc <span class="op">=</span> c1 <span class="op">*</span> c1 <span class="op">-</span> <span class="fl">4.0</span> <span class="op">*</span> c2 <span class="op">*</span> c0<span class="op">;</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sqrtDesc <span class="op">=</span> <span class="bu">sqrt</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> desc<span class="op">));</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> z1 <span class="op">=</span> <span class="op">(-</span>c1 <span class="op">-</span> sqrtDesc<span class="op">)</span> <span class="op">/</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">*</span> c2<span class="op">);</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> z2 <span class="op">=</span> <span class="op">(-</span>c1 <span class="op">+</span> sqrtDesc<span class="op">)</span> <span class="op">/</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">*</span> c2<span class="op">);</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Order the roots</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>z1 <span class="op">&gt;</span> z2<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> temp <span class="op">=</span> z1<span class="op">;</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>        z1 <span class="op">=</span> z2<span class="op">;</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>        z2 <span class="op">=</span> temp<span class="op">;</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Step 5: Classify occlusion based on root intervals</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>z <span class="op">&lt;=</span> z1<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="fl">0.0</span><span class="op">;</span> <span class="co">// Fully in light</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span>z <span class="op">&lt;=</span> z2<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Intermediate bound</span></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="op">(</span>ySquareSum<span class="op">)</span> <span class="op">/</span> totalNorm<span class="op">;</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Fully behind both occluder approximations</span></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="practical-considerations">Practical Considerations</h2>
+<ol type="1">
+<li><strong>Numerical Stability</strong>: When <span
+class="math inline">\(L_{22}\)</span> or <span
+class="math inline">\(L_{33}\)</span> approach zero, the moment
+distribution represents a single plane (Dirac delta distribution).
+Enforcing minimum thresholds via <code>max(L, 1e-6)</code> prevents
+division-by-zero artifacts.</li>
+<li><strong>Texture Formats</strong>: Four moments require a 4-channel
+texture. Using <code>RGBA16F</code> can work, but <code>RGBA32F</code>
+is recommended to avoid catastrophic cancellation during the <span
+class="math inline">\(L_{33}\)</span> root calculations.</li>
+<li><strong>Filtering</strong>: Because moments are linear combinations
+of depth expectations, textures can be blurred using standard hardware
+linear filtering, Gaussian blurs, or compute-based convolutions prior to
+evaluating the Hamburger bound.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

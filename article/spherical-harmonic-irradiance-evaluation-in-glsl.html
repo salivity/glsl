@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spherical Harmonic Irradiance Evaluation in GLSL - glsl</title>
+    <meta name="description" content="Spherical harmonic irradiance evaluation is an efficient technique used in real-time graphics to compute diffuse indirect lighting from distant environment radiance. By projecting environment lighting into low-order spherical harmonic (SH) basis function">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/spherical-harmonic-irradiance-evaluation-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Spherical Harmonic Irradiance Evaluation in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/spherical-harmonic-irradiance-evaluation-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Spherical harmonic irradiance evaluation is an efficient technique used in real-time graphics to compute diffuse indirect lighting from distant environment radiance. By projecting environment lighting into low-order spherical harmonic (SH) basis function" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="spherical-harmonic-irradiance-evaluation-in-glsl">Spherical
+Harmonic Irradiance Evaluation in GLSL</h1>
+<p>Spherical harmonic irradiance evaluation is an efficient technique
+used in real-time graphics to compute diffuse indirect lighting from
+distant environment radiance. By projecting environment lighting into
+low-order spherical harmonic (SH) basis functions—typically order 3,
+totaling 9 coefficients per color channel—the expensive integral of
+cosine-weighted incident radiance over a hemisphere is reduced to a
+simple polynomial evaluation. In GLSL, this evaluation takes a
+normalized surface normal vector and the 9 precomputed SH coefficients
+to reconstruct diffuse irradiance in a handful of multiply-add
+operations per pixel.</p>
+<h2 id="theoretical-foundations">Theoretical Foundations</h2>
+<p>Diffuse Lambertian reflection acts as a low-pass filter on incident
+radiance. According to the Funk-Hecke theorem, convolving incident
+radiance with a clamped cosine lobe (<span
+class="math inline">\(\max(\mathbf{n} \cdot \mathbf{\omega},
+0)\)</span>) dampens higher-frequency signals. Ravi Ramamoorthi and Pat
+Hanrahan demonstrated that using just three bands of spherical harmonics
+(degrees <span class="math inline">\(l = 0, 1, 2\)</span>, yielding 9
+scalar basis functions) captures more than 99% of diffuse irradiance
+energy.</p>
+<p>The reconstructed irradiance <span
+class="math inline">\(E(\mathbf{n})\)</span> along a surface normal
+<span class="math inline">\(\mathbf{n} = (x, y, z)\)</span> is expressed
+as:</p>
+<p><span class="math display">\[E(\mathbf{n}) = \sum_{l=0}^{2}
+\sum_{m=-l}^{l} \hat{A}_l L_{lm} Y_{lm}(\mathbf{n})\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(L_{lm}\)</span> are the spherical
+harmonic coefficients of the incident lighting environment (stored as
+RGB triplets).</li>
+<li><span class="math inline">\(Y_{lm}(\mathbf{n})\)</span> are the real
+spherical harmonic basis functions evaluated at <span
+class="math inline">\(\mathbf{n}\)</span>.</li>
+<li><span class="math inline">\(\hat{A}_l\)</span> are the cosine lobe
+convolution factors:
+<ul>
+<li><span class="math inline">\(\hat{A}_0 = \pi\)</span></li>
+<li><span class="math inline">\(\hat{A}_1 = \frac{2\pi}{3}\)</span></li>
+<li><span class="math inline">\(\hat{A}_2 = \frac{\pi}{4}\)</span></li>
+</ul></li>
+</ul>
+<h2 id="from-spherical-harmonics-to-polynomials">From Spherical
+Harmonics to Polynomials</h2>
+<p>Evaluating raw trigonometric basis functions on the GPU is
+computationally inefficient. Because the normal <span
+class="math inline">\(\mathbf{n} = (x, y, z)\)</span> is a unit
+Cartesian vector, the products <span class="math inline">\(\hat{A}_l
+Y_{lm}(\mathbf{n})\)</span> can be expanded into Cartesian
+polynomials:</p>
+<ul>
+<li><strong>Band 0 (<span class="math inline">\(l=0\)</span>):</strong>
+Constant term.</li>
+<li><strong>Band 1 (<span class="math inline">\(l=1\)</span>):</strong>
+Linear terms proportional to <span class="math inline">\(y\)</span>,
+<span class="math inline">\(z\)</span>, and <span
+class="math inline">\(x\)</span>.</li>
+<li><strong>Band 2 (<span class="math inline">\(l=2\)</span>):</strong>
+Quadratic terms proportional to <span class="math inline">\(xy\)</span>,
+<span class="math inline">\(yz\)</span>, <span
+class="math inline">\((3z^2 - 1)\)</span>, <span
+class="math inline">\(xz\)</span>, and <span class="math inline">\((x^2
+- y^2)\)</span>.</li>
+</ul>
+<p>By folding the convolution factors <span
+class="math inline">\(\hat{A}_l\)</span> and the normalization constants
+of <span class="math inline">\(Y_{lm}\)</span> directly into the
+coefficients, the evaluation collapses into a quadratic polynomial:</p>
+<p><span class="math display">\[E(\mathbf{n}) = c_1 L_{00} - c_3 L_{20}
++ 2 c_2 (L_{1-1}y + L_{10}z + L_{11}x) + 2 c_4 (L_{2-1}yz + L_{21}xz +
+L_{2-2}xy) + c_3 L_{20} (3z^2) + c_5 L_{22} (x^2 - y^2)\]</span></p>
+<p>The scalar constants derived from the basis definitions are:</p>
+<ul>
+<li><span class="math inline">\(c_1 = 0.282095 \times \pi \approx
+0.886227\)</span></li>
+<li><span class="math inline">\(c_2 = 0.488603 \times \frac{2\pi}{3}
+\approx 1.023326\)</span></li>
+<li><span class="math inline">\(c_3 = 0.315392 \times \frac{\pi}{4}
+\approx 0.247708\)</span></li>
+<li><span class="math inline">\(c_4 = 1.092548 \times \frac{\pi}{4}
+\approx 0.858086\)</span></li>
+<li><span class="math inline">\(c_5 = 0.546274 \times \frac{\pi}{4}
+\approx 0.429043\)</span></li>
+</ul>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>Coefficients are typically passed to shaders via a uniform buffer as
+an array of nine <code>vec3</code> values representing the RGB channels
+for each SH index (<span class="math inline">\(L_0\)</span> to <span
+class="math inline">\(L_8\)</span>).</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Incident lighting SH coefficients: L00, L1-1, L10, L11, L2-2, L2-1, L20, L21, L22</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> u_SH<span class="op">[</span><span class="dv">9</span><span class="op">];</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">evaluateSHIrradiance</span><span class="op">(</span><span class="dt">vec3</span> normal<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Ensure normal is normalized</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> n <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>normal<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Pre-derived constant factors (A_l * Y_lm constants)</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> c1 <span class="op">=</span> <span class="fl">0.429043</span><span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> c2 <span class="op">=</span> <span class="fl">0.511664</span><span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> c3 <span class="op">=</span> <span class="fl">0.743125</span><span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> c4 <span class="op">=</span> <span class="fl">0.886227</span><span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> c5 <span class="op">=</span> <span class="fl">0.247708</span><span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Linear components</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> linear <span class="op">=</span> <span class="fl">2.0</span> <span class="op">*</span> c2 <span class="op">*</span> <span class="op">(</span>u_SH<span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">*</span> n<span class="op">.</span><span class="fu">y</span> <span class="op">+</span> u_SH<span class="op">[</span><span class="dv">2</span><span class="op">]</span> <span class="op">*</span> n<span class="op">.</span><span class="fu">z</span> <span class="op">+</span> u_SH<span class="op">[</span><span class="dv">3</span><span class="op">]</span> <span class="op">*</span> n<span class="op">.</span><span class="fu">x</span><span class="op">);</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Quadratic polynomial components</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> quadratic <span class="op">=</span> c1 <span class="op">*</span> u_SH<span class="op">[</span><span class="dv">4</span><span class="op">]</span> <span class="op">*</span> <span class="op">(</span>n<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> n<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">+</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>                    c1 <span class="op">*</span> u_SH<span class="op">[</span><span class="dv">5</span><span class="op">]</span> <span class="op">*</span> <span class="op">(</span>n<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> n<span class="op">.</span><span class="fu">z</span><span class="op">)</span> <span class="op">+</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>                    c3 <span class="op">*</span> u_SH<span class="op">[</span><span class="dv">6</span><span class="op">]</span> <span class="op">*</span> <span class="op">(</span>n<span class="op">.</span><span class="fu">z</span> <span class="op">*</span> n<span class="op">.</span><span class="fu">z</span><span class="op">)</span> <span class="op">-</span> c5 <span class="op">*</span> u_SH<span class="op">[</span><span class="dv">6</span><span class="op">]</span> <span class="op">+</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>                    c1 <span class="op">*</span> u_SH<span class="op">[</span><span class="dv">7</span><span class="op">]</span> <span class="op">*</span> <span class="op">(</span>n<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> n<span class="op">.</span><span class="fu">z</span><span class="op">)</span> <span class="op">+</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>                    c1 <span class="op">*</span> u_SH<span class="op">[</span><span class="dv">8</span><span class="op">]</span> <span class="op">*</span> <span class="op">(</span>n<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> n<span class="op">.</span><span class="fu">x</span> <span class="op">-</span> n<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> n<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Constant scalar component (Band 0 combined with Band 2 offset)</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> constant <span class="op">=</span> c4 <span class="op">*</span> u_SH<span class="op">[</span><span class="dv">0</span><span class="op">];</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Total diffuse irradiance</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">max</span><span class="op">(</span>constant <span class="op">+</span> linear <span class="op">+</span> quadratic<span class="op">,</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">));</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="matrix-formulation-alternative">Matrix Formulation
+Alternative</h2>
+<p>An alternative implementation rewrites the evaluation as a quadratic
+surface form:</p>
+<p><span class="math display">\[E(\mathbf{n}) = \mathbf{v}^T M
+\mathbf{v}\]</span></p>
+<p>Where <span class="math inline">\(\mathbf{v} = (x, y, z,
+1)^T\)</span> and <span class="math inline">\(M\)</span> is a symmetric
+<span class="math inline">\(4 \times 4\)</span> matrix constructed for
+each color channel. In GLSL, this is expressed using dot products:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> u_SH_R<span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> u_SH_G<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> u_SH_B<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">evaluateSHMatrix</span><span class="op">(</span><span class="dt">vec3</span> normal<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> v <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="bu">normalize</span><span class="op">(</span>normal<span class="op">),</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">max</span><span class="op">(</span><span class="dt">vec3</span><span class="op">(</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">dot</span><span class="op">(</span>v<span class="op">,</span> u_SH_R <span class="op">*</span> v<span class="op">),</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">dot</span><span class="op">(</span>v<span class="op">,</span> u_SH_G <span class="op">*</span> v<span class="op">),</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">dot</span><span class="op">(</span>v<span class="op">,</span> u_SH_B <span class="op">*</span> v<span class="op">)</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>While the matrix form simplifies the shader code to three
+matrix-vector multiplications, pre-baking the constants into the 9
+polynomial terms directly requires fewer overall arithmetic operations,
+making the polynomial approach the preferred choice for execution speed.
+In both variations, clamping with <code>max(..., 0.0)</code> prevents
+negative irradiance artifacts resulting from SH ringing.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

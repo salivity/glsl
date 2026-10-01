@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gray-Scott Reaction-Diffusion in GLSL on 2D Grids - glsl</title>
+    <meta name="description" content="This article details the mathematical formulation of the Gray-Scott reaction-diffusion system and demonstrates how to implement its numerical evaluation on a two-dimensional discrete grid using OpenGL Shading Language (GLSL). It covers the governing diff">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gray-scott-reaction-diffusion-in-glsl-on-2-d-grids">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Gray-Scott Reaction-Diffusion in GLSL on 2D Grids - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gray-scott-reaction-diffusion-in-glsl-on-2-d-grids" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article details the mathematical formulation of the Gray-Scott reaction-diffusion system and demonstrates how to implement its numerical evaluation on a two-dimensional discrete grid using OpenGL Shading Language (GLSL). It covers the governing diff" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="gray-scott-reaction-diffusion-in-glsl-on-2d-grids">Gray-Scott
+Reaction-Diffusion in GLSL on 2D Grids</h1>
+<p>This article details the mathematical formulation of the Gray-Scott
+reaction-diffusion system and demonstrates how to implement its
+numerical evaluation on a two-dimensional discrete grid using OpenGL
+Shading Language (GLSL). It covers the governing differential equations,
+spatial discretization via a discrete Laplacian operator, and the final
+fragment shader code used for ping-pong texture computation.</p>
+<h3 id="mathematical-formulation">Mathematical Formulation</h3>
+<p>The Gray-Scott model simulates the interaction of two virtual
+chemical substances, typically denoted as <span
+class="math inline">\(U\)</span> and <span
+class="math inline">\(V\)</span>. Chemical <span
+class="math inline">\(U\)</span> is continuously added at a feed rate
+<span class="math inline">\(F\)</span>, while <span
+class="math inline">\(V\)</span> is converted and removed at a combined
+kill rate <span class="math inline">\(F + k\)</span>. Two units of <span
+class="math inline">\(V\)</span> react with one unit of <span
+class="math inline">\(U\)</span> to produce more <span
+class="math inline">\(V\)</span> (<span class="math inline">\(U + 2V
+\rightarrow 3V\)</span>).</p>
+<p>The continuous partial differential equations governing their
+concentrations over time <span class="math inline">\(t\)</span> are:</p>
+<p><span class="math display">\[\frac{\partial U}{\partial t} = D_u
+\nabla^2 U - UV^2 + F(1 - U)\]</span></p>
+<p><span class="math display">\[\frac{\partial V}{\partial t} = D_v
+\nabla^2 V + UV^2 - (F + k)V\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(U\)</span> and <span
+class="math inline">\(V\)</span> are the concentrations of the chemicals
+(<span class="math inline">\(0 \le U, V \le 1\)</span>).</li>
+<li><span class="math inline">\(D_u\)</span> and <span
+class="math inline">\(D_v\)</span> are the diffusion rates of <span
+class="math inline">\(U\)</span> and <span
+class="math inline">\(V\)</span>, respectively (usually <span
+class="math inline">\(D_u = 1.0\)</span> and <span
+class="math inline">\(D_v = 0.5\)</span>).</li>
+<li><span class="math inline">\(\nabla^2\)</span> is the Laplacian
+operator, representing spatial diffusion across the 2D surface.</li>
+<li><span class="math inline">\(F\)</span> is the feed rate
+parameter.</li>
+<li><span class="math inline">\(k\)</span> is the kill rate
+parameter.</li>
+</ul>
+<h3 id="grid-discretization">Grid Discretization</h3>
+<p>To evaluate this system on a 2D digital grid (such as a texture in a
+GPU pipeline), space and time must be discretized.</p>
+<p>Using Euler's forward method, time stepping is computed as:</p>
+<p><span class="math display">\[U_{t+\Delta t} = U_t + \left( D_u
+\nabla^2 U - UV^2 + F(1 - U) \right) \Delta t\]</span></p>
+<p><span class="math display">\[V_{t+\Delta t} = V_t + \left( D_v
+\nabla^2 V + UV^2 - (F + k)V \right) \Delta t\]</span></p>
+<p>The spatial Laplacian <span class="math inline">\(\nabla^2\)</span>
+calculates the second spatial derivative by comparing the value of a
+target cell to its neighbors. A standard 9-point convolution stencil
+provides smooth, isotropic diffusion across a 2D texture grid:</p>
+<ul>
+<li><strong>Center cell:</strong> weight <span
+class="math inline">\(-1.0\)</span></li>
+<li><strong>Orthogonal neighbors (up, down, left, right):</strong>
+weight <span class="math inline">\(0.20\)</span> each</li>
+<li><strong>Diagonal neighbors:</strong> weight <span
+class="math inline">\(0.05\)</span> each</li>
+</ul>
+<h3 id="glsl-fragment-shader-implementation">GLSL Fragment Shader
+Implementation</h3>
+<p>In GLSL, the simulation is executed as a fragment shader rendering to
+an off-screen framebuffer. A ping-pong buffer technique is required: one
+texture stores the current state <span class="math inline">\((U,
+V)\)</span> in its red and green channels, while the shader writes the
+updated state to an alternate texture.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> u_texture<span class="op">;</span> <span class="co">// Previous state (R = U, G = V)</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec2</span> u_resolution<span class="op">;</span>   <span class="co">// Texture dimensions in pixels</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_dt<span class="op">;</span>          <span class="co">// Time step (e.g., 1.0)</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_feed<span class="op">;</span>        <span class="co">// Feed rate (F)</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_kill<span class="op">;</span>        <span class="co">// Kill rate (k)</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_diffU<span class="op">;</span>       <span class="co">// Diffusion rate Du (e.g., 1.0)</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_diffV<span class="op">;</span>       <span class="co">// Diffusion rate Dv (e.g., 0.5)</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> texel <span class="op">=</span> <span class="fl">1.0</span> <span class="op">/</span> u_resolution<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> uv <span class="op">=</span> <span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">xy</span> <span class="op">*</span> texel<span class="op">;</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Sample current cell</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> state <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_texture<span class="op">,</span> uv<span class="op">).</span><span class="fu">rg</span><span class="op">;</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> u <span class="op">=</span> state<span class="op">.</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> v <span class="op">=</span> state<span class="op">.</span><span class="fu">g</span><span class="op">;</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 9-point Laplacian stencil</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> laplacian <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Orthogonal neighbors (weight: 0.20)</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    laplacian <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>u_texture<span class="op">,</span> uv <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span> texel<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">)).</span><span class="fu">rg</span> <span class="op">*</span> <span class="fl">0.20</span><span class="op">;</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    laplacian <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>u_texture<span class="op">,</span> uv <span class="op">+</span> <span class="dt">vec2</span><span class="op">(-</span>texel<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">)).</span><span class="fu">rg</span> <span class="op">*</span> <span class="fl">0.20</span><span class="op">;</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    laplacian <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>u_texture<span class="op">,</span> uv <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span>  texel<span class="op">.</span><span class="fu">y</span><span class="op">)).</span><span class="fu">rg</span> <span class="op">*</span> <span class="fl">0.20</span><span class="op">;</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    laplacian <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>u_texture<span class="op">,</span> uv <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="op">-</span>texel<span class="op">.</span><span class="fu">y</span><span class="op">)).</span><span class="fu">rg</span> <span class="op">*</span> <span class="fl">0.20</span><span class="op">;</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Diagonal neighbors (weight: 0.05)</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    laplacian <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>u_texture<span class="op">,</span> uv <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span> texel<span class="op">.</span><span class="fu">x</span><span class="op">,</span>  texel<span class="op">.</span><span class="fu">y</span><span class="op">)).</span><span class="fu">rg</span> <span class="op">*</span> <span class="fl">0.05</span><span class="op">;</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    laplacian <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>u_texture<span class="op">,</span> uv <span class="op">+</span> <span class="dt">vec2</span><span class="op">(-</span>texel<span class="op">.</span><span class="fu">x</span><span class="op">,</span>  texel<span class="op">.</span><span class="fu">y</span><span class="op">)).</span><span class="fu">rg</span> <span class="op">*</span> <span class="fl">0.05</span><span class="op">;</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    laplacian <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>u_texture<span class="op">,</span> uv <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span> texel<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="op">-</span>texel<span class="op">.</span><span class="fu">y</span><span class="op">)).</span><span class="fu">rg</span> <span class="op">*</span> <span class="fl">0.05</span><span class="op">;</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    laplacian <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>u_texture<span class="op">,</span> uv <span class="op">+</span> <span class="dt">vec2</span><span class="op">(-</span>texel<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="op">-</span>texel<span class="op">.</span><span class="fu">y</span><span class="op">)).</span><span class="fu">rg</span> <span class="op">*</span> <span class="fl">0.05</span><span class="op">;</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Center cell (weight: -1.0)</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    laplacian <span class="op">-=</span> state <span class="op">*</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Reaction term UV^2</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> uvv <span class="op">=</span> u <span class="op">*</span> v <span class="op">*</span> v<span class="op">;</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Differential equations</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> du <span class="op">=</span> <span class="op">(</span>u_diffU <span class="op">*</span> laplacian<span class="op">.</span><span class="fu">r</span><span class="op">)</span> <span class="op">-</span> uvv <span class="op">+</span> <span class="op">(</span>u_feed <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> u<span class="op">));</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> dv <span class="op">=</span> <span class="op">(</span>u_diffV <span class="op">*</span> laplacian<span class="op">.</span><span class="fu">g</span><span class="op">)</span> <span class="op">+</span> uvv <span class="op">-</span> <span class="op">((</span>u_feed <span class="op">+</span> u_kill<span class="op">)</span> <span class="op">*</span> v<span class="op">);</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Euler integration step</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> newU <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>u <span class="op">+</span> du <span class="op">*</span> u_dt<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> newV <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>v <span class="op">+</span> dv <span class="op">*</span> u_dt<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>newU<span class="op">,</span> newV<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="execution-considerations">Execution Considerations</h3>
+<p>To achieve numerical stability and avoid artifacts:</p>
+<ol type="1">
+<li>Use 32-bit floating-point textures (<code>GL_RG32F</code> or
+<code>GL_RGBA32F</code>) to prevent rounding errors that cause the
+reaction to collapse prematurely.</li>
+<li>Set texture wrapping to <code>GL_REPEAT</code> for seamless periodic
+boundary conditions, or <code>GL_CLAMP_TO_EDGE</code> for closed
+walls.</li>
+<li>Keep the integration time step <span class="math inline">\(u\_dt \le
+1.0\)</span> when using the standard diffusion rates (<span
+class="math inline">\(D_u = 1.0, D_v = 0.5\)</span>) to ensure the
+explicit numerical integration does not diverge.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

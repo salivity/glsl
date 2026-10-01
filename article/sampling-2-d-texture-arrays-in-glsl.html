@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sampling 2D Texture Arrays in GLSL - glsl</title>
+    <meta name="description" content="Sampling layered 2D texture arrays from multi-layer render targets in GLSL involves using dedicated array samplers and a three-component texture coordinate system. This article explains how to declare the proper sampler types, configure three-dimensional">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/sampling-2-d-texture-arrays-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Sampling 2D Texture Arrays in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/sampling-2-d-texture-arrays-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Sampling layered 2D texture arrays from multi-layer render targets in GLSL involves using dedicated array samplers and a three-component texture coordinate system. This article explains how to declare the proper sampler types, configure three-dimensional" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="sampling-2d-texture-arrays-in-glsl">Sampling 2D Texture Arrays
+in GLSL</h1>
+<p>Sampling layered 2D texture arrays from multi-layer render targets in
+GLSL involves using dedicated array samplers and a three-component
+texture coordinate system. This article explains how to declare the
+proper sampler types, configure three-dimensional coordinates where the
+third component represents the layer slice, choose between normalized
+and unnormalized fetching functions, and avoid common pitfalls when
+reading from layered framebuffers.</p>
+<h3 id="declaring-the-sampler">Declaring the Sampler</h3>
+<p>To read from a 2D texture array (<code>GL_TEXTURE_2D_ARRAY</code>)
+attached to a multi-layer framebuffer, declare a uniform using the
+<code>sampler2DArray</code> type in your fragment shader:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2DArray</span> u_LayeredTexture<span class="op">;</span></span></code></pre></div>
+<p>For integer-based render targets, use <code>isampler2DArray</code> or
+<code>usampler2DArray</code>. For depth comparison textures, use
+<code>sampler2DArrayShadow</code>.</p>
+<h3 id="coordinate-structure">Coordinate Structure</h3>
+<p>Unlike standard 2D textures that require a <code>vec2</code>
+coordinate, a 2D texture array requires a <code>vec3</code>:</p>
+<ul>
+<li><strong>Component 1 (<code>s</code> or <code>u</code>):</strong>
+Horizontal normalized coordinate along the target layer, typically in
+the range <code>[0.0, 1.0]</code>.</li>
+<li><strong>Component 2 (<code>t</code> or <code>v</code>):</strong>
+Vertical normalized coordinate along the target layer, typically in the
+range <code>[0.0, 1.0]</code>.</li>
+<li><strong>Component 3 (<code>p</code> or <code>layer</code>):</strong>
+A floating-point layer index referencing the zero-based layer slice
+(e.g., <code>0.0</code> for layer 0, <code>1.0</code> for layer 1).</li>
+</ul>
+<h3 id="normalized-sampling-with-texture">Normalized Sampling with
+<code>texture()</code></h3>
+<p>When using linear or nearest-neighbor filtering with normalized
+coordinates, call the <code>texture()</code> function passing the
+<code>sampler2DArray</code> and the <code>vec3</code> coordinate:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec2</span> v_TexCoord<span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">int</span> u_TargetLayer<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> coords <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span>v_TexCoord<span class="op">,</span> <span class="dt">float</span><span class="op">(</span>u_TargetLayer<span class="op">));</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_LayeredTexture<span class="op">,</span> coords<span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The layer index is rounded to the nearest integer layer during
+sampling, and OpenGL clamps it to the range
+<code>[0, maxLayers - 1]</code>. Filtering modes such as
+<code>GL_LINEAR</code> interpolate only within the selected 2D slice;
+they do not filter across adjacent layers.</p>
+<h3 id="unnormalized-direct-fetching-with-texelfetch">Unnormalized
+Direct Fetching with <code>texelFetch()</code></h3>
+<p>For post-processing passes, deferred rendering G-buffers, or exact
+pixel operations where filtering is undesirable, use
+<code>texelFetch()</code>. This function bypasses filtering and operates
+on integer coordinates:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">ivec2</span> pixelCoord <span class="op">=</span> <span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">xy</span><span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> layerIndex <span class="op">=</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> lod <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> data <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>u_LayeredTexture<span class="op">,</span> <span class="dt">ivec3</span><span class="op">(</span>pixelCoord<span class="op">,</span> layerIndex<span class="op">),</span> lod<span class="op">);</span></span></code></pre></div>
+<p>The third vector component of the <code>ivec3</code> directly
+specifies the integer layer index.</p>
+<h3 id="framebuffer-setup-considerations">Framebuffer Setup
+Considerations</h3>
+<p>Before reading, the texture array must be unlinked from the active
+write framebuffer or bound to a separate texture unit after rendering to
+avoid read-after-write hazards. When rendering to layers initially, the
+target is bound to an FBO via <code>glFramebufferTexture()</code> for
+layered rendering via geometry shaders or multiview extensions, or via
+<code>glFramebufferTextureLayer()</code> for per-layer rendering passes.
+Once drawing commands complete, bind the texture to an active texture
+unit using <code>glBindTextureUnit()</code> or
+<code>glBindTexture(GL_TEXTURE_2D_ARRAY, ...)</code>, update the sampler
+uniform, and execute your sampling shader.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

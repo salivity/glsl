@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ALU Recalculation vs Texture Fetching in GLSL - glsl</title>
+    <meta name="description" content="Modern GPU shader optimization often requires developers to choose between recalculating mathematical values dynamically using Arithmetic Logic Units (ALUs) or storing precomputed results to sample via texture fetches. This article breaks down the techni">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/alu-recalculation-vs-texture-fetching-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="ALU Recalculation vs Texture Fetching in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/alu-recalculation-vs-texture-fetching-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Modern GPU shader optimization often requires developers to choose between recalculating mathematical values dynamically using Arithmetic Logic Units (ALUs) or storing precomputed results to sample via texture fetches. This article breaks down the techni" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="alu-recalculation-vs-texture-fetching-in-glsl">ALU Recalculation
+vs Texture Fetching in GLSL</h1>
+<p>Modern GPU shader optimization often requires developers to choose
+between recalculating mathematical values dynamically using Arithmetic
+Logic Units (ALUs) or storing precomputed results to sample via texture
+fetches. This article breaks down the technical trade-offs between
+dynamic ALU computation and texture memory operations in GLSL shaders.
+By evaluating factors such as memory bandwidth saturation, latency
+hiding, register pressure, and hardware filtering, this guide provides
+actionable principles for selecting the most performant approach for
+specific rendering pipelines.</p>
+<h3 id="the-shift-in-compute-to-bandwidth-ratios">The Shift in
+Compute-to-Bandwidth Ratios</h3>
+<p>Historically, texture lookups were preferred over complex
+mathematical evaluations because early graphics hardware had limited
+instruction counts and relatively fast access to small textures. Modern
+GPU architectures have reversed this paradigm. The growth of raw compute
+power (FLOPS) has vastly outpaced the growth of memory bandwidth.</p>
+<p>Today, arithmetic instructions are practically free compared to
+memory access. A modern GPU can execute dozens or even hundreds of ALU
+instructions in the time it takes to resolve a single un-cached texture
+fetch from VRAM. Consequently, the default optimization strategy has
+shifted toward procedural generation and mathematical recalculation over
+prebaked lookups.</p>
+<h3 id="advantages-of-alu-recalculation">Advantages of ALU
+Recalculation</h3>
+<ol type="1">
+<li><strong>Zero Bandwidth Consumption:</strong> Pure mathematical
+calculations do not consume memory bandwidth, reserving the memory bus
+for geometry buffers, render targets, and high-frequency textures.</li>
+<li><strong>Infinite Analytical Precision:</strong> Recalculated values
+operate at full 32-bit (or 16-bit mediump) floating-point precision,
+eliminating the banding, compression artifacts, and resolution limits
+inherent to texture storage.</li>
+<li><strong>No Cache Thrashing:</strong> Mathematical operations do not
+evict data from L1 or L2 texture caches, preserving cache capacity for
+operations that strictly require sampled data.</li>
+<li><strong>Predictable Latency:</strong> Arithmetic instructions
+possess fixed, short pipeline latencies that the GPU scheduler can
+easily hide without stalling warps or wavefronts.</li>
+</ol>
+<h3 id="drawbacks-of-alu-recalculation">Drawbacks of ALU
+Recalculation</h3>
+<p>The primary penalty of intensive ALU usage is register pressure.
+Evaluating complex analytic functions (such as high-order polynomials,
+multi-octave noise, or complex ray-surface intersections) increases the
+number of general-purpose registers (GPRs) required per thread. When
+register usage per thread exceeds hardware thresholds, the GPU must
+reduce occupancy—the number of active warps running concurrently on a
+compute unit. Lower occupancy reduces the GPU's ability to interleave
+execution and hide whatever memory latency does exist.</p>
+<h3 id="advantages-of-texture-memory-fetching">Advantages of Texture
+Memory Fetching</h3>
+<ol type="1">
+<li><strong>Hardware-Accelerated Filtering:</strong> Texture sampling
+units (TMUs) handle bilinear, trilinear, and anisotropic filtering at
+the silicon level. Replicating bilinear interpolation purely in ALU
+instructions requires several additions, multiplications, and fract
+operations.</li>
+<li><strong>O(1) Evaluation of Arbitrary Functions:</strong> A texture
+lookup evaluates non-analytical or computationally prohibitive
+functions—such as precomputed BRDF lookup tables (LUTs), complex
+atmospheric scattering profiles, or volumetric absorption—in a single
+sampling instruction (<code>texture()</code>).</li>
+<li><strong>Instruction Count Reduction:</strong> Lookups replace long
+assembly instruction chains with a single fetch instruction, which can
+reduce shader compilation complexity and code size.</li>
+</ol>
+<h3 id="drawbacks-of-texture-fetching">Drawbacks of Texture
+Fetching</h3>
+<ol type="1">
+<li><strong>High Memory Latency:</strong> A cache miss that requires
+fetching data directly from VRAM can stall a thread for hundreds of
+clock cycles. If the GPU cannot switch to another warp due to low
+occupancy, execution stalls entirely.</li>
+<li><strong>Texture Cache Contention and Divergence:</strong>
+Non-coherent UV coordinates (e.g., highly randomized lookups or steep
+angles relative to the camera) cause frequent L1/L2 cache misses.</li>
+<li><strong>Memory Footprint and Bus Saturation:</strong>
+High-resolution LUTs consume VRAM and contribute to bus saturation,
+creating bottlenecks for memory-bound passes like post-processing or
+deferred lighting.</li>
+</ol>
+<h3 id="decision-framework-calculate-or-sample">Decision Framework:
+Calculate or Sample?</h3>
+<p>Choose <strong>ALU Recalculation</strong> when:</p>
+<ul>
+<li>The mathematical function can be expressed with a small set of
+elementary operations (e.g., basic trigonometric approximations,
+smoothstep curves, color space conversions).</li>
+<li>The texture lookup would experience poor spatial locality, resulting
+in high cache miss rates.</li>
+<li>The shader pass is already memory-bandwidth bound.</li>
+<li>Higher precision is required than what typical texture formats (such
+as RGBA8 or RGBA16F) provide.</li>
+</ul>
+<p>Choose <strong>Texture Fetching</strong> when:</p>
+<ul>
+<li>The calculation requires hardware filtering (e.g., seamless
+interpolation across a 2D or 3D grid).</li>
+<li>The algorithm is discontinuous, empirical, or mathematically
+intractable to solve in real time.</li>
+<li>The texture access pattern is spatially coherent across adjacent
+fragments, maximizing L1 cache hit rates.</li>
+<li>Heavy ALU register usage begins to degrade thread occupancy and
+overall frame rate.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Binary Additive Operations Evaluation Order - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), the evaluation order of operand expressions in binary additive operations (+ and -) is completely unspecified. Although the GLSL specification strictly dictates left-to-right associativity to define how operations a">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-binary-additive-operations-evaluation-order">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Binary Additive Operations Evaluation Order - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-binary-additive-operations-evaluation-order" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), the evaluation order of operand expressions in binary additive operations (+ and -) is completely unspecified. Although the GLSL specification strictly dictates left-to-right associativity to define how operations a" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-binary-additive-operations-evaluation-order">GLSL Binary
+Additive Operations Evaluation Order</h1>
+<p>In the OpenGL Shading Language (GLSL), the evaluation order of
+operand expressions in binary additive operations (<code>+</code> and
+<code>-</code>) is completely unspecified. Although the GLSL
+specification strictly dictates left-to-right associativity to define
+how operations are grouped mathematically, it does not guarantee whether
+the left-hand or right-hand operand expression executes first.
+Consequently, relying on a specific execution sequence across additive
+operands—particularly when expressions involve side effects—results in
+non-portable and unpredictable behavior across different GPU drivers and
+hardware architectures.</p>
+<h3 id="associativity-vs-evaluation-order">Associativity vs. Evaluation
+Order</h3>
+<p>A common point of confusion in shader programming is the distinction
+between operator associativity and operand evaluation order:</p>
+<ul>
+<li><strong>Associativity</strong> defines the syntactic grouping of
+operations. Binary addition and subtraction in GLSL are
+left-associative. This means an expression such as
+<code>a + b + c</code> is parsed and grouped as
+<code>(a + b) + c</code>.</li>
+<li><strong>Evaluation Order</strong> defines the temporal sequence in
+which the subexpressions themselves are computed. In an expression like
+<code>exprA() + exprB()</code>, associativity dictates that the result
+of <code>exprA()</code> is added to <code>exprB()</code>, but it does
+not mandate whether <code>exprA()</code> or <code>exprB()</code>
+executes first.</li>
+</ul>
+<h3 id="the-glsl-specification-stance">The GLSL Specification
+Stance</h3>
+<p>According to the official GLSL specification (specifically within the
+section detailing expressions and operators):</p>
+<ol type="1">
+<li><strong>Unspecified Sequence:</strong> The order of evaluation of
+expressions is not fully defined. Compilers are free to evaluate the
+left operand before the right operand, the right operand before the left
+operand, or both concurrently if hardware resources allow.</li>
+<li><strong>Compiler Reordering and Optimization:</strong> Shading
+language compilers possess significant leeway to reorder, fold, or
+vectorize arithmetic expressions, provided the mathematical outcome
+adheres to IEEE floating-point and GLSL precision qualifiers. Compilers
+can rearrange expressions algebraically unless strict floating-point
+rules or qualifiers (such as <code>invariant</code> or
+<code>precise</code>) restrict them.</li>
+<li><strong>No Short-Circuiting:</strong> Unlike logical operators such
+as <code>&amp;&amp;</code> and <code>||</code>, binary additive
+operators do not introduce sequence points or short-circuit behavior.
+Both operands are evaluated without any sequencing guarantees between
+them.</li>
+</ol>
+<h3 id="side-effects-and-undefined-behavior">Side Effects and Undefined
+Behavior</h3>
+<p>Because operand evaluation order is unspecified, expressions that
+produce side effects can lead to critical bugs. A side effect occurs
+when an expression modifies a variable, such as through post-increment
+operations (<code>x++</code>), assignment within subexpressions, or
+calls to functions with <code>out</code> or <code>inout</code>
+parameters that modify shared or global state.</p>
+<p>Consider the following example:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> x <span class="op">=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> result <span class="op">=</span> <span class="op">(</span>x <span class="op">+=</span> <span class="dv">2</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span>x <span class="op">*</span> <span class="dv">3</span><span class="op">);</span></span></code></pre></div>
+<p>Depending on the GPU vendor's compiler:</p>
+<ul>
+<li>If the left operand <code>(x += 2)</code> is evaluated first,
+<code>x</code> becomes <code>3</code>, and the right operand evaluates
+to <code>3 * 3 = 9</code>, resulting in <code>3 + 9 = 12</code>.</li>
+<li>If the right operand <code>(x * 3)</code> is evaluated first, it
+computes <code>1 * 3 = 3</code>, then <code>x</code> becomes
+<code>3</code>, resulting in <code>3 + 3 = 6</code>.</li>
+</ul>
+<p>Both outputs are valid according to the GLSL specification, making
+the code non-deterministic.</p>
+<h3 id="writing-robust-glsl-expressions">Writing Robust GLSL
+Expressions</h3>
+<p>To prevent driver-specific compilation differences and hard-to-debug
+graphical artifacts:</p>
+<ul>
+<li><strong>Isolate Side Effects:</strong> Never modify variables within
+the same additive expression where they are also read.</li>
+<li><strong>Separate Expressions into Explicit Statements:</strong> When
+using functions with <code>out</code> or <code>inout</code> parameters,
+invoke them as standalone statements on separate lines before combining
+their results with additive operators.</li>
+<li><strong>Do Not Rely on Subexpression Ordering:</strong> Treat all
+operand expressions in arithmetic operations as if they occur
+simultaneously or in arbitrary order.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

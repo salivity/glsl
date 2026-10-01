@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cascaded Shadow Mapping Split Selection in GLSL - glsl</title>
+    <meta name="description" content="Cascaded Shadow Mapping (CSM) resolves perspective aliasing across large outdoor environments by dividing the view frustum into multiple depth ranges, each rendered into a separate shadow map. In a GLSL fragment shader, the core mechanism for selecting t">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/cascaded-shadow-mapping-split-selection-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Cascaded Shadow Mapping Split Selection in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/cascaded-shadow-mapping-split-selection-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Cascaded Shadow Mapping (CSM) resolves perspective aliasing across large outdoor environments by dividing the view frustum into multiple depth ranges, each rendered into a separate shadow map. In a GLSL fragment shader, the core mechanism for selecting t" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="cascaded-shadow-mapping-split-selection-in-glsl">Cascaded Shadow
+Mapping Split Selection in GLSL</h1>
+<p>Cascaded Shadow Mapping (CSM) resolves perspective aliasing across
+large outdoor environments by dividing the view frustum into multiple
+depth ranges, each rendered into a separate shadow map. In a GLSL
+fragment shader, the core mechanism for selecting the appropriate shadow
+map split relies on measuring the fragment's distance from the camera in
+view space, evaluating this value against an array of predefined split
+distances, and using the resulting cascade index to sample the correct
+shadow map and transformation matrix.</p>
+<h3 id="calculating-view-space-depth">Calculating View-Space Depth</h3>
+<p>Before selecting a cascade, the fragment shader needs a reliable
+measurement of distance along the camera’s view axis. While
+<code>gl_FragCoord.z</code> provides normalized device coordinate (NDC)
+depth, it is non-linear and less intuitive to compare against linear
+frustum splits. The standard approach uses the fragment's view-space
+position, calculated either in the vertex shader and passed as an
+interpolated <code>varying</code>, or reconstructed from the depth
+buffer:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> vViewPosition<span class="op">;</span> <span class="co">// Interpolated view-space position from vertex shader</span></span></code></pre></div>
+<p>In standard OpenGL view space, the camera faces down the negative
+Z-axis. Consequently, the linear distance along the view vector is
+<code>-vViewPosition.z</code> (or
+<code>abs(vViewPosition.z)</code>).</p>
+<h3 id="split-distance-comparison">Split Distance Comparison</h3>
+<p>The CPU computes the split distances (often using logarithmic,
+uniform, or practical split schemes) and passes them to the fragment
+shader via a uniform array.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define NUM_CASCADES 4</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> uCascadeSplits<span class="op">[</span>NUM_CASCADES<span class="op">];</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> uLightSpaceMatrices<span class="op">[</span>NUM_CASCADES<span class="op">];</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2DArray</span> uShadowMapArray<span class="op">;</span></span></code></pre></div>
+<p>To determine which cascade contains the fragment, the shader compares
+the fragment's linear depth against the cascade thresholds:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> <span class="fu">selectCascade</span><span class="op">(</span><span class="dt">float</span> depth<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> cascadeIndex <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> NUM_CASCADES <span class="op">-</span> <span class="dv">1</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>depth <span class="op">&gt;</span> uCascadeSplits<span class="op">[</span>i<span class="op">])</span> <span class="op">{</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>            cascadeIndex <span class="op">=</span> i <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> cascadeIndex<span class="op">;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Because <code>NUM_CASCADES</code> is typically small (3 to 5),
+compilers easily unroll this loop.</p>
+<h3 id="branchless-cascade-selection">Branchless Cascade Selection</h3>
+<p>On architectures where dynamic branching might introduce warp
+divergence, selection can be implemented branchlessly using the GLSL
+<code>step</code> function:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> <span class="fu">selectCascadeBranchless</span><span class="op">(</span><span class="dt">float</span> depth<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> comparisons <span class="op">=</span> <span class="bu">step</span><span class="op">(</span><span class="dt">vec4</span><span class="op">(</span>uCascadeSplits<span class="op">[</span><span class="dv">0</span><span class="op">],</span> uCascadeSplits<span class="op">[</span><span class="dv">1</span><span class="op">],</span> uCascadeSplits<span class="op">[</span><span class="dv">2</span><span class="op">],</span> uCascadeSplits<span class="op">[</span><span class="dv">3</span><span class="op">]),</span> <span class="dt">vec4</span><span class="op">(</span>depth<span class="op">));</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">int</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>comparisons<span class="op">,</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">)));</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><code>step(edge, x)</code> returns <code>1.0</code> if
+<code>x &gt;= edge</code> and <code>0.0</code> otherwise. Taking the dot
+product with a vector of ones sums the successful comparisons, directly
+producing the target index.</p>
+<h3 id="sampling-the-selected-cascade">Sampling the Selected
+Cascade</h3>
+<p>Once the cascade index is identified, the fragment is transformed
+into the corresponding light space. Using a <code>sampler2DArray</code>
+simplifies texture sampling because the cascade index directly
+corresponds to the array slice:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> depth <span class="op">=</span> <span class="op">-</span>vViewPosition<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> layer <span class="op">=</span> <span class="fu">selectCascade</span><span class="op">(</span>depth<span class="op">);</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Transform world position into light-space for the selected cascade</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> lightSpacePos <span class="op">=</span> uLightSpaceMatrices<span class="op">[</span>layer<span class="op">]</span> <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>vWorldPosition<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> projCoords <span class="op">=</span> <span class="op">(</span>lightSpacePos<span class="op">.</span><span class="fu">xyz</span> <span class="op">/</span> lightSpacePos<span class="op">.</span><span class="fu">w</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="co">// Sample the 2D texture array using projCoords.xy and the layer index</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> currentDepth <span class="op">=</span> projCoords<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> shadow <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>uShadowMapArray<span class="op">,</span> <span class="dt">vec3</span><span class="op">(</span>projCoords<span class="op">.</span><span class="fu">xy</span><span class="op">,</span> <span class="dt">float</span><span class="op">(</span>layer<span class="op">))).</span><span class="fu">r</span> <span class="op">&lt;</span> currentDepth <span class="op">?</span> <span class="fl">0.0</span> <span class="op">:</span> <span class="fl">1.0</span><span class="op">;</span></span></code></pre></div>
+<h3 id="cascade-boundary-blending">Cascade Boundary Blending</h3>
+<p>Hard boundaries between cascades can cause visible transitions where
+shadow resolution shifts abruptly. To eliminate this artifact, determine
+how close the fragment is to the active split threshold. If the fragment
+lies within a small blend margin, sample both the current cascade and
+the subsequent cascade, then linearly interpolate (<code>mix</code>) the
+shadow values based on the distance through the boundary region.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

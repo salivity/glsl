@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL subgroupBallotBitExtract and uvec4 Ballots - glsl</title>
+    <meta name="description" content="This article examines the function and practical usage of subgroupBallotBitExtract in GLSL, focusing on how it queries individual invocation states from a 128-bit uvec4 ballot mask. You will learn the underlying mechanics of subgroup ballots, the interna">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-subgroup-ballot-bit-extract-and-uvec-4-ballots">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL subgroupBallotBitExtract and uvec4 Ballots - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-subgroup-ballot-bit-extract-and-uvec-4-ballots" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article examines the function and practical usage of subgroupBallotBitExtract in GLSL, focusing on how it queries individual invocation states from a 128-bit uvec4 ballot mask. You will learn the underlying mechanics of subgroup ballots, the interna" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-subgroupballotbitextract-and-uvec4-ballots">GLSL
+subgroupBallotBitExtract and uvec4 Ballots</h1>
+<p>This article examines the function and practical usage of
+<code>subgroupBallotBitExtract</code> in GLSL, focusing on how it
+queries individual invocation states from a 128-bit <code>uvec4</code>
+ballot mask. You will learn the underlying mechanics of subgroup
+ballots, the internal mapping of bits across the vector components, and
+how this intrinsic function simplifies conditional execution and lane
+testing without manual bit-shifting logic.</p>
+<h2 id="understanding-the-subgroup-ballot-representation">Understanding
+the Subgroup Ballot Representation</h2>
+<p>In modern GPU programming with GLSL (specifically using
+<code>GL_KHR_shader_subgroup_ballot</code> or Vulkan SPIR-V subgroup
+operations), a subgroup ballot aggregates a boolean condition across all
+active invocations within a subgroup. The result of a function like
+<code>subgroupBallot(bool value)</code> is returned as a 128-bit bitmask
+stored inside a <code>uvec4</code> (four 32-bit unsigned integers).</p>
+<p>Each bit in the <code>uvec4</code> corresponds to a specific
+invocation's <code>gl_SubgroupInvocationID</code>:</p>
+<ul>
+<li><strong><code>value.x</code></strong>: Invocations 0 through 31</li>
+<li><strong><code>value.y</code></strong>: Invocations 32 through
+63</li>
+<li><strong><code>value.z</code></strong>: Invocations 64 through
+95</li>
+<li><strong><code>value.w</code></strong>: Invocations 96 through
+127</li>
+</ul>
+<p>Because subgroups on modern hardware can contain up to 128 lanes
+(such as dual-wavefront modes or wide compute architectures), spreading
+the bitmask across a 4-component vector ensures full hardware
+coverage.</p>
+<h2 id="the-role-of-subgroupballotbitextract">The Role of
+subgroupBallotBitExtract</h2>
+<p>The <code>subgroupBallotBitExtract</code> function directly inspects
+a specific bit within this multi-component bitmask. Its function
+signature is:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> <span class="fu">subgroupBallotBitExtract</span><span class="op">(</span><span class="dt">uvec4</span> value<span class="op">,</span> <span class="dt">uint</span> <span class="dt">index</span><span class="op">);</span></span></code></pre></div>
+<p>The function takes two parameters:</p>
+<ol type="1">
+<li><code>value</code>: The <code>uvec4</code> ballot structure
+containing the packed bits.</li>
+<li><code>index</code>: The zero-based integer index corresponding to
+the target invocation ID (ranging from 0 up to
+<code>gl_SubgroupSize - 1</code>).</li>
+</ol>
+<p>It returns <code>true</code> if the bit at the specified
+<code>index</code> is <code>1</code>, and <code>false</code> if it is
+<code>0</code>. If <code>index</code> is greater than or equal to the
+maximum supported subgroup size or 128, the result is undefined.</p>
+<h2 id="why-use-subgroupballotbitextract-over-manual-extraction">Why Use
+subgroupBallotBitExtract Over Manual Extraction?</h2>
+<p>Without <code>subgroupBallotBitExtract</code>, testing an arbitrary
+invocation's status requires calculating which vector component contains
+the bit and shifting that component manually:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Manual bit extraction</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> componentIndex <span class="op">=</span> targetLane <span class="op">/</span> <span class="dv">32</span>u<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> bitOffset <span class="op">=</span> targetLane <span class="op">%</span> <span class="dv">32</span>u<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> isSet <span class="op">=</span> <span class="op">(</span>ballotResult<span class="op">[</span>componentIndex<span class="op">]</span> <span class="op">&amp;</span> <span class="op">(</span><span class="dv">1</span>u <span class="op">&lt;&lt;</span> bitOffset<span class="op">))</span> <span class="op">!=</span> <span class="dv">0</span>u<span class="op">;</span></span></code></pre></div>
+<p>Using <code>subgroupBallotBitExtract</code> replaces this multi-step
+arithmetic:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Built-in bit extraction</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> isSet <span class="op">=</span> <span class="fu">subgroupBallotBitExtract</span><span class="op">(</span>ballotResult<span class="op">,</span> targetLane<span class="op">);</span></span></code></pre></div>
+<h3 id="key-advantages">Key Advantages:</h3>
+<ul>
+<li><strong>Hardware Acceleration</strong>: Most modern GPU instruction
+sets include native instructions (such as scalar bit tests or direct
+ballot-query operations) that evaluate the bit in fewer cycles than
+dynamic array indexing and shifting.</li>
+<li><strong>Readability and Safety</strong>: It eliminates boilerplate
+index calculations and prevents errors associated with shifting beyond
+31 bits in signed/unsigned integer registers.</li>
+<li><strong>Portability</strong>: It abstracts hardware differences,
+allowing shaders to run predictably regardless of whether the native
+subgroup size is 16, 32, 64, or 128 lanes.</li>
+</ul>
+<h2 id="common-use-cases">Common Use Cases</h2>
+<ul>
+<li><strong>Leader Election and Verification</strong>: An algorithm can
+elect a leader lane (e.g., using <code>subgroupBallotFindLSB</code>),
+perform work, and allow other lanes to check if specific predecessor
+lanes participated using <code>subgroupBallotBitExtract</code>.</li>
+<li><strong>Sparse Data Compaction</strong>: When filtering data across
+a warp or wavefront, threads can query whether neighboring lanes passed
+a conditional test before reading data from shared or subgroup
+memory.</li>
+<li><strong>Dynamic Control Flow</strong>: Lanes can dynamically track
+the execution convergence of their peers without synchronizing through
+shared memory or barriers.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

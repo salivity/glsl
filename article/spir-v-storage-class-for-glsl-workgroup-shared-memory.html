@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPIR-V Storage Class for GLSL Workgroup Shared Memory - glsl</title>
+    <meta name="description" content="In graphics and compute APIs utilizing SPIR-V, memory management relies on strictly defined storage classes that dictate scope, lifetime, and access permissions. This article explains the specific SPIR-V storage class assigned to GLSL workgroup shared va">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/spir-v-storage-class-for-glsl-workgroup-shared-memory">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="SPIR-V Storage Class for GLSL Workgroup Shared Memory - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/spir-v-storage-class-for-glsl-workgroup-shared-memory" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In graphics and compute APIs utilizing SPIR-V, memory management relies on strictly defined storage classes that dictate scope, lifetime, and access permissions. This article explains the specific SPIR-V storage class assigned to GLSL workgroup shared va" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="spir-v-storage-class-for-glsl-workgroup-shared-memory">SPIR-V
+Storage Class for GLSL Workgroup Shared Memory</h1>
+<p>In graphics and compute APIs utilizing SPIR-V, memory management
+relies on strictly defined storage classes that dictate scope, lifetime,
+and access permissions. This article explains the specific SPIR-V
+storage class assigned to GLSL workgroup shared variables, detailing how
+shader compilers translate the GLSL <code>shared</code> qualifier into
+SPIR-V intermediate representation and the operational semantics
+associated with this memory space.</p>
+<h2 id="the-workgroup-storage-class">The Workgroup Storage Class</h2>
+<p>When compiling OpenGL Shading Language (GLSL) to SPIR-V, variables
+declared with the <code>shared</code> storage qualifier are assigned the
+<code>Workgroup</code> storage class.</p>
+<p>In a GLSL compute shader, a declaration such as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">shared</span> <span class="dt">float</span> localBuffer<span class="op">[</span><span class="dv">64</span><span class="op">];</span></span></code></pre></div>
+<p>is translated by SPIR-V compilers (such as <code>glslang</code>) into
+an <code>OpVariable</code> instruction using a pointer type
+parameterized with the <code>Workgroup</code> storage class:</p>
+<pre class="spirv"><code>%float = OpTypeFloat 32
+%uint = OpTypeInt 32 0
+%uint_64 = OpConstant %uint 64
+%_arr_float_uint_64 = OpTypeArray %float %uint_64
+%_ptr_Workgroup_arr = OpTypePointer Workgroup %_arr_float_uint_64
+%localBuffer = OpVariable %_ptr_Workgroup_arr Workgroup</code></pre>
+<h2 id="architectural-characteristics-of-workgroup-memory">Architectural
+Characteristics of Workgroup Memory</h2>
+<p>The <code>Workgroup</code> storage class introduces specific
+architectural rules within the SPIR-V execution model:</p>
+<ul>
+<li><strong>Visibility and Scope:</strong> Memory allocated under the
+<code>Workgroup</code> storage class is shared across all invocations
+within a single workgroup. Invocations in different workgroups cannot
+access or observe modifications made to this memory.</li>
+<li><strong>Lifetime:</strong> The allocation persists only for the
+execution duration of the individual workgroup. Once all invocations in
+the workgroup complete, the memory is discarded.</li>
+<li><strong>Hardware Mapping:</strong> On modern GPUs,
+<code>Workgroup</code> variables typically map directly to on-chip Local
+Data Share (LDS) or shared memory, offering significantly lower latency
+and higher bandwidth compared to global device memory.</li>
+<li><strong>Synchronization:</strong> Because multiple invocations read
+and write to the same <code>Workgroup</code> addresses concurrently,
+access must be synchronized using barriers
+(<code>OpControlBarrier</code>) configured with the
+<code>WorkgroupMemory</code> semantics mask to prevent data races.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

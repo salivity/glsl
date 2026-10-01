@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>64-Bit Integer Arithmetic in GLSL Compute Shaders - glsl</title>
+    <meta name="description" content="Modern GPU compute pipelines frequently encounter data range bottlenecks when handling massive coordinate systems, scientific computing, hashing algorithms, and exact fixed-point physics simulations. In the OpenGL Shading Language (GLSL), enabling 64-bit">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/64-bit-integer-arithmetic-in-glsl-compute-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="64-Bit Integer Arithmetic in GLSL Compute Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/64-bit-integer-arithmetic-in-glsl-compute-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Modern GPU compute pipelines frequently encounter data range bottlenecks when handling massive coordinate systems, scientific computing, hashing algorithms, and exact fixed-point physics simulations. In the OpenGL Shading Language (GLSL), enabling 64-bit" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="64-bit-integer-arithmetic-in-glsl-compute-shaders">64-Bit
+Integer Arithmetic in GLSL Compute Shaders</h1>
+<p>Modern GPU compute pipelines frequently encounter data range
+bottlenecks when handling massive coordinate systems, scientific
+computing, hashing algorithms, and exact fixed-point physics
+simulations. In the OpenGL Shading Language (GLSL), enabling 64-bit
+signed integers via <code>int64_t</code> allows developers to overcome
+traditional 32-bit constraints, eliminating overflow risks and rounding
+degradation. This article explores how <code>int64_t</code> functions in
+modern compute shaders, how it differs from 64-bit floating-point types,
+and the architectural considerations required for optimal
+performance.</p>
+<h3 id="enabling-64-bit-integers-in-glsl">Enabling 64-Bit Integers in
+GLSL</h3>
+<p>To utilize 64-bit integers in GLSL compute shaders, the
+implementation requires the <code>GL_ARB_gpu_shader_int64</code>
+extension or modern Vulkan equivalents like
+<code>VK_KHR_shader_float16_int8</code> paired with standard 64-bit
+integer SPIR-V capabilities.</p>
+<p>The extension must be explicitly enabled at the top of the
+shader:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_ARB_gpu_shader_int64 : enable</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">64</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> DataBuffer <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    int64_t values<span class="op">[];</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>This declaration grants access to scalar types <code>int64_t</code>
+and <code>uint64_t</code>, as well as vector types ranging from
+<code>i64vec2</code> to <code>i64vec4</code>.</p>
+<h3 id="exact-precision-vs-floating-point-approximations">Exact
+Precision vs. Floating-Point Approximations</h3>
+<p>While 64-bit floating-point values (<code>double</code> or
+<code>float64_t</code>) offer an enormous dynamic range, they sacrifice
+exact precision for large magnitudes. Standard IEEE 754 double-precision
+floats allocate 53 bits to the significand (mantissa), meaning they lose
+integer accuracy beyond <span class="math inline">\(2^{53}\)</span>
+(<span class="math inline">\(9,007,199,254,740,992\)</span>).</p>
+<p>In contrast, <code>int64_t</code> utilizes all 64 bits to represent
+exact whole numbers in two's complement format, spanning from <span
+class="math inline">\(-2^{63}\)</span> to <span
+class="math inline">\(2^{63}-1\)</span>. This makes <code>int64_t</code>
+essential for:</p>
+<ul>
+<li><strong>Large-scale spatial indexing:</strong> Global geographic
+coordinates, voxel octrees, and planetary-scale simulations where 32-bit
+units fail to provide sub-millimeter precision.</li>
+<li><strong>Bitwise and cryptographic operations:</strong> Algorithms
+such as SHA-512, MurmurHash, or custom pseudorandom number generators
+that depend on deterministic 64-bit bit shifting and rotation.</li>
+<li><strong>Fixed-point arithmetic:</strong> Emulating fractional
+arithmetic with deterministic outcomes across diverse hardware targets
+without floating-point rounding discrepancies.</li>
+</ul>
+<h3 id="memory-layout-and-ssbo-alignment">Memory Layout and SSBO
+Alignment</h3>
+<p>When passing 64-bit integers between the host application and compute
+shaders via Shader Storage Buffer Objects (SSBOs), memory layout rules
+change. Under the <code>std430</code> layout:</p>
+<ul>
+<li>A scalar <code>int64_t</code> requires 8-byte base alignment.</li>
+<li>An <code>i64vec2</code> requires 16-byte alignment.</li>
+<li>An <code>i64vec4</code> requires 32-byte alignment.</li>
+</ul>
+<p>Matching struct offsets between C/C++ code and the GLSL buffer
+definition prevents silent memory corruption during parallel memory
+reads and writes.</p>
+<h3 id="hardware-execution-and-performance-considerations">Hardware
+Execution and Performance Considerations</h3>
+<p>While <code>int64_t</code> guarantees mathematical accuracy, it
+carries specific execution costs compared to native 32-bit paths:</p>
+<ol type="1">
+<li><strong>Register Pressure:</strong> A 64-bit variable occupies two
+32-bit hardware registers. Increased register usage per thread lowers
+occupancy (the number of active warps or wavefronts on a compute unit),
+which can limit the GPU’s ability to hide memory latency.</li>
+<li><strong>ALU Emulation on Consumer Hardware:</strong> Dedicated
+64-bit integer Arithmetic Logic Units (ALUs) are common in data-center
+hardware, but many consumer gaming GPUs lack full-rate 64-bit integer
+units. On these architectures, 64-bit additions, multiplications, and
+shifts are emulated using multiple 32-bit operations, increasing cycle
+counts.</li>
+<li><strong>Atomic Operations:</strong> Standard 64-bit operations do
+not implicitly enable 64-bit atomics. Performing operations such as
+<code>atomicAdd</code> on <code>int64_t</code> variables requires the
+additional <code>GL_EXT_shader_atomic_int64</code> extension and
+underlying hardware support for 64-bit memory transactions.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

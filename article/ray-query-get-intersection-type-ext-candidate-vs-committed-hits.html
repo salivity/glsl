@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rayQueryGetIntersectionTypeEXT Candidate vs Committed Hits - glsl</title>
+    <meta name="description" content="In Vulkan ray tracing using GLSL, rayQueryGetIntersectionTypeEXT determines whether a ray has intersected geometry and identifies the kind of geometry encountered. Rather than using separate functions to distinguish between temporary candidate hits and f">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/ray-query-get-intersection-type-ext-candidate-vs-committed-hits">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="rayQueryGetIntersectionTypeEXT Candidate vs Committed Hits - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/ray-query-get-intersection-type-ext-candidate-vs-committed-hits" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In Vulkan ray tracing using GLSL, rayQueryGetIntersectionTypeEXT determines whether a ray has intersected geometry and identifies the kind of geometry encountered. Rather than using separate functions to distinguish between temporary candidate hits and f" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="rayquerygetintersectiontypeext-candidate-vs-committed-hits">rayQueryGetIntersectionTypeEXT
+Candidate vs Committed Hits</h1>
+<p>In Vulkan ray tracing using GLSL,
+<code>rayQueryGetIntersectionTypeEXT</code> determines whether a ray has
+intersected geometry and identifies the kind of geometry encountered.
+Rather than using separate functions to distinguish between temporary
+candidate hits and final committed hits, the function relies on a
+explicit boolean parameter passed by the developer. This article
+explains how this boolean parameter operates within the ray query
+lifecycle, how candidate and committed states differ, and the return
+values associated with each state.</p>
+<h3 id="the-function-signature-and-parameter">The Function Signature and
+Parameter</h3>
+<p>The GLSL function signature defined by the
+<code>GL_EXT_ray_query</code> extension is:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="fu">rayQueryGetIntersectionTypeEXT</span><span class="op">(</span>rayQueryEXT rayQuery<span class="op">,</span> <span class="dt">bool</span> committed<span class="op">);</span></span></code></pre></div>
+<p>The function differentiates candidate hits from committed hits solely
+through the second parameter, <code>committed</code>:</p>
+<ul>
+<li><strong><code>committed = false</code></strong>: Evaluates the
+current <strong>candidate</strong> intersection.</li>
+<li><strong><code>committed = true</code></strong>: Evaluates the
+currently <strong>committed</strong> (confirmed) intersection.</li>
+</ul>
+<h3 id="understanding-candidate-hits-committed--false">Understanding
+Candidate Hits (<code>committed = false</code>)</h3>
+<p>A candidate hit represents an unconfirmed intersection encountered
+while traversing the acceleration structure. Traversal pauses at a
+candidate hit whenever the ray query encounters geometry that requires
+shader intervention, such as non-opaque geometry or procedural
+AABBs.</p>
+<p>When <code>rayQueryProceedEXT(rayQuery)</code> returns
+<code>true</code>, traversal has temporarily yielded control back to the
+shader. At this stage, querying with <code>committed = false</code>
+returns the geometry type of the hit under evaluation:</p>
+<ul>
+<li><strong><code>rayQueryIntersectionTriangleEXT</code></strong>: A
+candidate triangle has been hit. For non-opaque triangles, the shader
+can inspect properties (like alpha testing) and choose whether to call
+<code>rayQueryConfirmIntersectionEXT()</code> to commit the hit.</li>
+<li><strong><code>rayQueryIntersectionGeneratedEXT</code></strong>: An
+axis-aligned bounding box (AABB) for a procedural primitive has been
+reached. The shader must perform custom intersection logic and
+potentially commit a hit using
+<code>rayQueryGenerateIntersectionEXT()</code>.</li>
+</ul>
+<p>If <code>committed = false</code> is passed when no candidate is
+currently active, the function returns
+<code>rayQueryIntersectionNoneEXT</code>.</p>
+<h3 id="understanding-committed-hits-committed--true">Understanding
+Committed Hits (<code>committed = true</code>)</h3>
+<p>A committed hit represents an intersection that has been accepted as
+valid. For opaque geometry, the hardware traversal engine automatically
+commits the intersection. For non-opaque or procedural geometry, it
+represents a candidate that the shader explicitly confirmed.</p>
+<p>Querying with <code>committed = true</code> inspects the best valid
+hit found so far:</p>
+<ul>
+<li><strong>Inside the traversal loop</strong>: It returns the state of
+the closest confirmed hit up to the current point of execution.</li>
+<li><strong>After the traversal loop terminates</strong>: When
+<code>rayQueryProceedEXT()</code> returns <code>false</code>, traversal
+is complete. Calling
+<code>rayQueryGetIntersectionTypeEXT(rayQuery, true)</code> reveals the
+final result of the entire ray query.</li>
+</ul>
+<p>The return values for committed queries are:</p>
+<ul>
+<li><strong><code>rayQueryIntersectionNoneEXT</code></strong>: No valid
+intersection was committed (a miss).</li>
+<li><strong><code>rayQueryIntersectionTriangleEXT</code></strong>: The
+final committed hit is a triangle.</li>
+<li><strong><code>rayQueryIntersectionGeneratedEXT</code></strong>: The
+final committed hit is a procedural primitive.</li>
+</ul>
+<h3 id="typical-execution-pattern">Typical Execution Pattern</h3>
+<p>In practice, the distinction controls the flow within a ray
+query:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>rayQueryEXT rq<span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">rayQueryInitializeEXT</span><span class="op">(</span>rq<span class="op">,</span> topLevelAS<span class="op">,</span> rayFlags<span class="op">,</span> cullMask<span class="op">,</span> origin<span class="op">,</span> tMin<span class="op">,</span> direction<span class="op">,</span> tMax<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="kw">while</span> <span class="op">(</span><span class="fu">rayQueryProceedEXT</span><span class="op">(</span>rq<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Inspect candidate hit to make confirmation decisions</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="fu">rayQueryGetIntersectionTypeEXT</span><span class="op">(</span>rq<span class="op">,</span> <span class="kw">false</span><span class="op">)</span> <span class="op">==</span> rayQueryIntersectionTriangleEXT<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Perform alpha testing or custom opacity logic</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span><span class="fu">shouldAcceptHit</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rayQueryConfirmIntersectionEXT</span><span class="op">(</span>rq<span class="op">);</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="co">// Inspect the final committed hit after traversal finishes</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span><span class="fu">rayQueryGetIntersectionTypeEXT</span><span class="op">(</span>rq<span class="op">,</span> <span class="kw">true</span><span class="op">)</span> <span class="op">!=</span> rayQueryIntersectionNoneEXT<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Shade the confirmed hit</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By toggling the boolean flag,
+<code>rayQueryGetIntersectionTypeEXT</code> cleanly separates the
+transient evaluation state during traversal from the persistent,
+confirmed hit record.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Role of gl_IncomingRayFlagsEXT in GLSL Hit Shaders - glsl</title>
+    <meta name="description" content="The built-in variable glIncomingRayFlagsEXT provides hit shaders in the Vulkan ray tracing pipeline with read-only access to the flags set when a ray was launched. Defined by the GLEXTraytracing extension, this unsigned integer variable enables closest-h">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/role-of-gl-incoming-ray-flags-ext-in-glsl-hit-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Role of gl_IncomingRayFlagsEXT in GLSL Hit Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/role-of-gl-incoming-ray-flags-ext-in-glsl-hit-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The built-in variable glIncomingRayFlagsEXT provides hit shaders in the Vulkan ray tracing pipeline with read-only access to the flags set when a ray was launched. Defined by the GLEXTraytracing extension, this unsigned integer variable enables closest-h" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="role-of-gl_incomingrayflagsext-in-glsl-hit-shaders">Role of
+gl_IncomingRayFlagsEXT in GLSL Hit Shaders</h1>
+<p>The built-in variable <code>gl_IncomingRayFlagsEXT</code> provides
+hit shaders in the Vulkan ray tracing pipeline with read-only access to
+the flags set when a ray was launched. Defined by the
+<code>GL_EXT_ray_tracing</code> extension, this unsigned integer
+variable enables closest-hit and any-hit shaders to inspect the
+operational parameters of the active ray query. By communicating the
+ray's configuration from the caller directly to the hit stages, it
+allows shaders to modify their evaluation logic dynamically based on
+context.</p>
+<h3 id="source-and-availability">Source and Availability</h3>
+<p>When a ray is dispatched using the <code>traceRayEXT()</code> call in
+a ray generation, closest-hit, or callable shader, the caller provides a
+bitmask of ray flags as one of the arguments. The hardware and driver
+propagate this flag bitmask down the ray traversal pipeline.</p>
+<p>Inside the resulting hit shaders—specifically Any-Hit
+(<code>AHIT</code>) and Closest-Hit (<code>CHIT</code>)—this value is
+exposed as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">uint</span> gl_IncomingRayFlagsEXT<span class="op">;</span></span></code></pre></div>
+<p>It is also accessible in intersection and miss shaders, maintaining
+uniform access to the traversal context across the entire ray evaluation
+pipeline.</p>
+<h3 id="core-roles-in-hit-shaders">Core Roles in Hit Shaders</h3>
+<h4 id="1-context-aware-shading">1. Context-Aware Shading</h4>
+<p>Hit shaders are often shared across multiple ray types, such as
+primary camera rays, reflection rays, and shadow rays.
+<code>gl_IncomingRayFlagsEXT</code> allows a single compiled shader to
+determine the caller's intent without requiring extra payload space.</p>
+<p>For example, if a hit shader detects flags indicating a simple
+visibility test, it can bypass expensive lighting, texture fetches, or
+normal mapping calculations:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Check if the ray was instructed to terminate on the first hit (common for shadow rays)</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">((</span>gl_IncomingRayFlagsEXT <span class="op">&amp;</span> gl_RayFlagsTerminateOnFirstHitEXT<span class="op">)</span> <span class="op">!=</span> <span class="dv">0</span>u<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Perform simplified calculations for visibility queries</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    hitPayload<span class="op">.</span><span class="fu">shadowFactor</span> <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h4 id="2-managing-geometry-opacity-and-traversal">2. Managing Geometry
+Opacity and Traversal</h4>
+<p>In any-hit shaders, geometry opacity must often be verified manually
+(such as evaluating alpha-tested foliage or fences). The shader can read
+<code>gl_IncomingRayFlagsEXT</code> to determine if flags like
+<code>gl_RayFlagsOpaqueEXT</code> or <code>gl_RayFlagsNoOpaqueEXT</code>
+were set upstream, allowing it to honor or override acceleration
+structure assumptions accordingly.</p>
+<h4 id="3-handling-culling-behavior">3. Handling Culling Behavior</h4>
+<p>While culling is typically performed fixed-function during traversal
+via flags such as:</p>
+<ul>
+<li><code>gl_RayFlagsCullBackFacingTrianglesEXT</code></li>
+<li><code>gl_RayFlagsCullFrontFacingTrianglesEXT</code></li>
+<li><code>gl_RayFlagsCullOpaqueEXT</code></li>
+<li><code>gl_RayFlagsCullNoOpaqueEXT</code></li>
+</ul>
+<p>A hit shader can inspect these flags to resolve orientation-dependent
+shading effects, such as two-sided lighting or distinct inner/outer
+surface rendering logic when culling is explicitly disabled.</p>
+<h3 id="common-ray-flag-bitmasks">Common Ray Flag Bitmasks</h3>
+<p>The variable contains a bitwise combination of the ray control flags
+defined by the SPIR-V and Vulkan specifications, including:</p>
+<ul>
+<li><code>gl_RayFlagsNoneEXT</code> (<code>0x0</code>): Default
+traversal behavior.</li>
+<li><code>gl_RayFlagsOpaqueEXT</code> (<code>0x1</code>): Forces all
+geometry to be treated as opaque.</li>
+<li><code>gl_RayFlagsNoOpaqueEXT</code> (<code>0x2</code>): Forces
+any-hit shaders to run for all intersections.</li>
+<li><code>gl_RayFlagsTerminateOnFirstHitEXT</code> (<code>0x4</code>):
+Treats the first valid intersection as the final hit.</li>
+<li><code>gl_RayFlagsSkipClosestHitShaderEXT</code> (<code>0x8</code>):
+Prevents execution of the closest-hit shader upon termination.</li>
+<li><code>gl_RayFlagsCullBackFacingTrianglesEXT</code>
+(<code>0x10</code>): Discards back-facing hits.</li>
+<li><code>gl_RayFlagsCullFrontFacingTrianglesEXT</code>
+(<code>0x20</code>): Discards front-facing hits.</li>
+</ul>
+<p>By providing direct visibility into these parameters,
+<code>gl_IncomingRayFlagsEXT</code> reduces ray payload overhead,
+promotes shader code reuse, and gives hit shaders the context needed to
+optimize rendering paths.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

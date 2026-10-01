@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How gl_GeometryIndexEXT Distinguishes BLAS Geometries - glsl</title>
+    <meta name="description" content="In Vulkan ray tracing using GLSL, glGeometryIndexEXT is a built-in input variable that uniquely identifies distinct geometric subsets combined within a single Bottom-Level Acceleration Structure (BLAS). This article explains how the index is assigned dur">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-gl-geometry-index-ext-distinguishes-blas-geometries">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How gl_GeometryIndexEXT Distinguishes BLAS Geometries - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-gl-geometry-index-ext-distinguishes-blas-geometries" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In Vulkan ray tracing using GLSL, glGeometryIndexEXT is a built-in input variable that uniquely identifies distinct geometric subsets combined within a single Bottom-Level Acceleration Structure (BLAS). This article explains how the index is assigned dur" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-gl_geometryindexext-distinguishes-blas-geometries">How
+gl_GeometryIndexEXT Distinguishes BLAS Geometries</h1>
+<p>In Vulkan ray tracing using GLSL, <code>gl_GeometryIndexEXT</code> is
+a built-in input variable that uniquely identifies distinct geometric
+subsets combined within a single Bottom-Level Acceleration Structure
+(BLAS). This article explains how the index is assigned during
+acceleration structure creation, which shader stages can access it, and
+how developers utilize it to look up geometry-specific material and
+vertex data efficiently without creating separate acceleration
+structures.</p>
+<h3 id="the-role-of-multiple-geometries-in-a-blas">The Role of Multiple
+Geometries in a BLAS</h3>
+<p>When setting up ray tracing through the
+<code>VK_KHR_ray_tracing_pipeline</code> extension, a BLAS is built from
+an array of geometry descriptions
+(<code>VkAccelerationStructureGeometryKHR</code>). Rather than creating
+a separate BLAS for every mesh, developers often pack multiple
+geometries—such as different parts of a complex object or distinct
+meshes that share the same transform—into a single BLAS.</p>
+<p>Inside the shader pipeline, <code>gl_GeometryIndexEXT</code> serves
+as the zero-based index representing the specific geometry description
+that an active ray has intersected.</p>
+<h3 id="how-indexing-works">How Indexing Works</h3>
+<p>The value of <code>gl_GeometryIndexEXT</code> corresponds directly to
+the order of the geometries submitted to the acceleration structure
+build command:</p>
+<ol type="1">
+<li><strong>Array Submission Order:</strong> During the BLAS build,
+geometries are provided via the <code>pGeometries</code> or
+<code>ppGeometries</code> array in
+<code>VkAccelerationStructureBuildGeometryInfoKHR</code>.</li>
+<li><strong>Implicit Index Assignment:</strong> The driver assigns a
+sequential, zero-based integer to each entry. The geometry defined at
+array element <code>0</code> receives an index of <code>0</code>, array
+element <code>1</code> receives <code>1</code>, and so on up to <span
+class="math inline">\(N-1\)</span> geometries.</li>
+<li><strong>Hardware Traversal Tracking:</strong> When a ray traverses
+the acceleration structure and tests primitives, the intersection
+hardware tracks both the primitive index within the geometry and the
+index of the geometry itself. Upon hitting a primitive, that geometry's
+array index is passed to the execution environment as
+<code>gl_GeometryIndexEXT</code>.</li>
+</ol>
+<h3 id="shader-availability">Shader Availability</h3>
+<p>To use <code>gl_GeometryIndexEXT</code>, the shader must enable the
+ray tracing extension:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_ray_tracing : require</span></span></code></pre></div>
+<p>The variable is available as a read-only <code>int</code> in the
+following ray tracing stages:</p>
+<ul>
+<li><strong>Any-Hit Shader (<code>.rahit</code>):</strong> Evaluates
+intersections, often used for alpha-testing transparency.</li>
+<li><strong>Closest-Hit Shader (<code>.rchit</code>):</strong> Executes
+after the closest intersection is determined to calculate surface
+shading.</li>
+<li><strong>Intersection Shader (<code>.rint</code>):</strong> Executes
+during procedural geometry testing.</li>
+</ul>
+<h3 id="structural-distinction-in-the-hierarchy">Structural Distinction
+in the Hierarchy</h3>
+<p>To uniquely locate any primitive in a scene, the ray tracing pipeline
+provides three hierarchical levels of identifiers:</p>
+<ul>
+<li><strong><code>gl_InstanceCustomIndexEXT</code> (or
+<code>gl_InstanceID</code>):</strong> Identifies the instance within the
+Top-Level Acceleration Structure (TLAS).</li>
+<li><strong><code>gl_GeometryIndexEXT</code>:</strong> Identifies the
+specific mesh or geometry description within the referenced BLAS.</li>
+<li><strong><code>gl_PrimitiveID</code>:</strong> Identifies the
+specific triangle or procedural primitive within that geometry.</li>
+</ul>
+<h3 id="practical-application-material-and-buffer-fetching">Practical
+Application: Material and Buffer Fetching</h3>
+<p>The primary use case for <code>gl_GeometryIndexEXT</code> is fetching
+per-geometry resources, such as distinct materials, textures, or
+vertex/index buffer addresses.</p>
+<p>Instead of routing every geometry through separate shader binding
+table (SBT) hit groups, developers typically use a single hit group per
+material domain and index into descriptor arrays dynamically:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> GeometryData <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    uint64_t vertexBufferAddress<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    uint64_t indexBufferAddress<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> materialIndex<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> set <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> GeometryBuffer <span class="op">{</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    GeometryData geometries<span class="op">[];</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> sceneGeometries<span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Retrieve metadata for the specific geometry hit</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    GeometryData currentGeo <span class="op">=</span> sceneGeometries<span class="op">.</span><span class="fu">geometries</span><span class="op">[</span>gl_GeometryIndexEXT<span class="op">];</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Access the geometry-specific material</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> matID <span class="op">=</span> currentGeo<span class="op">.</span><span class="fu">materialIndex</span><span class="op">;</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Process lighting and shading...</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By leveraging <code>gl_GeometryIndexEXT</code>, rendering engines can
+merge multiple static meshes into unified BLAS instances, minimizing
+driver overhead and significantly reducing total acceleration structure
+memory consumption.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exponential Shadow Maps in GLSL: Light Attenuation - glsl</title>
+    <meta name="description" content="This article explains how a OpenGL Shading Language (GLSL) fragment shader calculates light attenuation across Exponential Shadow Map (ESM) boundaries. By replacing the discrete step function of standard shadow mapping with continuous exponential functio">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/exponential-shadow-maps-in-glsl-light-attenuation">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Exponential Shadow Maps in GLSL: Light Attenuation - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/exponential-shadow-maps-in-glsl-light-attenuation" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how a OpenGL Shading Language (GLSL) fragment shader calculates light attenuation across Exponential Shadow Map (ESM) boundaries. By replacing the discrete step function of standard shadow mapping with continuous exponential functio" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="exponential-shadow-maps-in-glsl-light-attenuation">Exponential
+Shadow Maps in GLSL: Light Attenuation</h1>
+<p>This article explains how a OpenGL Shading Language (GLSL) fragment
+shader calculates light attenuation across Exponential Shadow Map (ESM)
+boundaries. By replacing the discrete step function of standard shadow
+mapping with continuous exponential functions, ESM allows
+hardware-accelerated filtering (such as bilinear filtering or Gaussian
+blur) directly on the shadow texture. The following sections detail the
+mathematical foundation of ESM, how boundary transitions produce soft
+penumbrae, and the practical implementation of this attenuation
+calculation inside a GLSL shader.</p>
+<h3 id="the-mathematical-foundation-of-esm">The Mathematical Foundation
+of ESM</h3>
+<p>Standard shadow mapping compares the fragment's depth from the
+light's perspective (<span class="math inline">\(d\)</span>) to the
+stored depth in the shadow map (<span class="math inline">\(z\)</span>).
+This step function creates harsh, binary aliased edges that cannot be
+filtered using standard bilinear interpolation.</p>
+<p>Exponential Shadow Maps approximate this step function by expressing
+shadow visibility as an exponential decay:</p>
+<p><span class="math display">\[f(d, z) = \min(1.0, e^{-c(d - z)}) =
+\min(1.0, e^{c \cdot z} \cdot e^{-c \cdot d})\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(d\)</span> is the receiver depth
+(fragment distance from the light).</li>
+<li><span class="math inline">\(z\)</span> is the occluder depth stored
+in the shadow map.</li>
+<li><span class="math inline">\(c\)</span> is a user-defined positive
+constant controlling the sharpness of the transition and the rate of
+exponential decay.</li>
+</ul>
+<p>Because <span class="math inline">\(e^{c \cdot z}\)</span> depends
+solely on occluder depth, it can be computed during shadow map
+generation and pre-filtered across neighboring texels. The filtered
+value stored in the shadow texture, denoted as <span
+class="math inline">\(M\)</span>, represents a linear combination of
+exponential depth values:</p>
+<p><span class="math display">\[M = \sum_{i} w_i e^{c \cdot
+z_i}\]</span></p>
+<h3 id="calculating-attenuation-across-boundaries">Calculating
+Attenuation Across Boundaries</h3>
+<p>When a fragment lies near a shadow boundary, the texture sample
+coordinates straddle both occluded and unoccluded light texels. Because
+the texture contains <span class="math inline">\(e^{c \cdot z}\)</span>
+rather than linear depth <span class="math inline">\(z\)</span>,
+bilinear texture filtering smoothly blends the terms into an averaged
+occluder intensity <span class="math inline">\(M\)</span>.</p>
+<p>In the fragment shader, light attenuation across the boundary is
+resolved in three steps:</p>
+<ol type="1">
+<li><p><strong>Receiver Term Computation:</strong> The shader computes
+<span class="math inline">\(e^{-c \cdot d}\)</span> using the current
+fragment's light-space depth <span
+class="math inline">\(d\)</span>.</p></li>
+<li><p><strong>Convolution Evaluation:</strong> The shader multiplies
+the sampled filtered occluder depth <span
+class="math inline">\(M\)</span> by the receiver term:</p>
+<p><span class="math display">\[\text{visibility} = M \cdot e^{-c \cdot
+d}\]</span></p></li>
+<li><p><strong>Clamping:</strong></p>
+<ul>
+<li>When a fragment is fully in light (<span class="math inline">\(d \le
+z\)</span>), <span class="math inline">\(e^{-c(d - z)} \ge 1.0\)</span>.
+The value is clamped to <span class="math inline">\(1.0\)</span>.</li>
+<li>When a fragment is partially occluded across a boundary, the
+filtered <span class="math inline">\(M\)</span> yields a smooth
+transition between <span class="math inline">\(0.0\)</span> and <span
+class="math inline">\(1.0\)</span>, simulating a penumbra.</li>
+<li>Deep in shadow (<span class="math inline">\(d \gg z\)</span>), the
+value rapidly decays to <span class="math inline">\(0.0\)</span>.</li>
+</ul></li>
+</ol>
+<h3 id="glsl-shader-implementation">GLSL Shader Implementation</h3>
+<p>Below is the GLSL fragment code demonstrating how the shadow factor
+is calculated and applied to lighting:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec4</span> vLightSpacePos<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> vNormal<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> vWorldPos<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> shadowMap<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> c<span class="op">;</span> <span class="co">// ESM constant, typically between 40.0 and 80.0</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">calculateESMAttenuation</span><span class="op">(</span><span class="dt">vec4</span> lightSpacePos<span class="op">,</span> <span class="dt">float</span> c<span class="op">)</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Perform perspective divide to obtain Normalized Device Coordinates (NDC)</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> projCoords <span class="op">=</span> lightSpacePos<span class="op">.</span><span class="fu">xyz</span> <span class="op">/</span> lightSpacePos<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Transform from [-1, 1] NDC to [0, 1] texture coordinates</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    projCoords <span class="op">=</span> projCoords <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Return full illumination if outside the light projection frustum</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>projCoords<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;</span> <span class="fl">1.0</span> <span class="op">||</span> projCoords<span class="op">.</span><span class="fu">x</span> <span class="op">&lt;</span> <span class="fl">0.0</span> <span class="op">||</span> projCoords<span class="op">.</span><span class="fu">x</span> <span class="op">&gt;</span> <span class="fl">1.0</span> <span class="op">||</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>        projCoords<span class="op">.</span><span class="fu">y</span> <span class="op">&lt;</span> <span class="fl">0.0</span> <span class="op">||</span> projCoords<span class="op">.</span><span class="fu">y</span> <span class="op">&gt;</span> <span class="fl">1.0</span><span class="op">)</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">{</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Sample the pre-filtered exponential occluder term (M)</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> occluderExp <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>shadowMap<span class="op">,</span> projCoords<span class="op">.</span><span class="fu">xy</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate the receiver exponential term</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> receiverExp <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>c <span class="op">*</span> projCoords<span class="op">.</span><span class="fu">z</span><span class="op">);</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute the attenuated shadow factor and clamp to [0.0, 1.0]</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> shadowFactor <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>occluderExp <span class="op">*</span> receiverExp<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> shadowFactor<span class="op">;</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> shadowAttenuation <span class="op">=</span> <span class="fu">calculateESMAttenuation</span><span class="op">(</span>vLightSpacePos<span class="op">,</span> c<span class="op">);</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> lightColor <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> ambient <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.1</span><span class="op">);</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Apply shadow attenuation strictly to direct illumination components</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> directLighting <span class="op">=</span> lightColor <span class="op">*</span> shadowAttenuation<span class="op">;</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> finalColor <span class="op">=</span> ambient <span class="op">+</span> directLighting<span class="op">;</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>finalColor<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="addressing-precision-and-light-bleeding">Addressing Precision
+and Light Bleeding</h3>
+<p>Two critical factors govern attenuation quality at ESM
+boundaries:</p>
+<ul>
+<li><strong>Exponent Constant (<span
+class="math inline">\(c\)</span>):</strong> A value of <span
+class="math inline">\(c\)</span> that is too low causes light bleeding,
+where occluders appear semi-transparent near edges because the
+exponential tail is too broad. A value that is too high sharpens edges
+to hard transitions and risks floating-point overflow when computing
+<span class="math inline">\(e^{c \cdot z}\)</span>.</li>
+<li><strong>Texture Precision:</strong> Because <span
+class="math inline">\(e^{c \cdot z}\)</span> grows rapidly, the shadow
+map texture must use a floating-point format, typically
+<code>GL_R32F</code>, to preserve precision along continuous boundaries
+and prevent banding artifacts.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does gl_FragCoord Work in GLSL? - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), glFragCoord is a built-in input variable available exclusively within fragment shaders that provides the screen-space window coordinates of the current fragment being processed. Stored as a four-component vector (vec4),">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-gl-frag-coord-work-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does gl_FragCoord Work in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-gl-frag-coord-work-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), glFragCoord is a built-in input variable available exclusively within fragment shaders that provides the screen-space window coordinates of the current fragment being processed. Stored as a four-component vector (vec4)," />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-gl_fragcoord-work-in-glsl">How Does gl_FragCoord Work
+in GLSL?</h1>
+<p>In OpenGL Shading Language (GLSL), <code>gl_FragCoord</code> is a
+built-in input variable available exclusively within fragment shaders
+that provides the screen-space window coordinates of the current
+fragment being processed. Stored as a four-component vector
+(<code>vec4</code>), <code>gl_FragCoord</code> contains the fragment's
+pixel position, its interpolated depth value, and a perspective divisor
+factor. This article breaks down the individual components of
+<code>gl_FragCoord</code>, explains how OpenGL sets its coordinate
+origin and pixel centers, and illustrates how developers use it to
+implement screen-space effects, procedural patterns, and custom
+rendering techniques.</p>
+<h2 id="component-breakdown-of-gl_fragcoord">Component Breakdown of
+gl_FragCoord</h2>
+<p>The <code>gl_FragCoord</code> vector contains four floating-point
+components, denoted as <code>(x, y, z, w)</code>:</p>
+<ul>
+<li><strong>gl_FragCoord.x</strong>: The horizontal window coordinate of
+the fragment in pixels, ranging from <code>0.0</code> to the viewport
+width.</li>
+<li><strong>gl_FragCoord.y</strong>: The vertical window coordinate of
+the fragment in pixels, ranging from <code>0.0</code> to the viewport
+height.</li>
+<li><strong>gl_FragCoord.z</strong>: The fragment's depth value mapped
+to the range <code>[0.0, 1.0]</code>, representing the value written to
+the depth buffer during standard depth-testing operations.</li>
+<li><strong>gl_FragCoord.w</strong>: The reciprocal of the clip-space
+<span class="math inline">\(W\)</span> coordinate (<span
+class="math inline">\(1/w_c\)</span>), which is derived from the
+interpolation of the primitive's vertices during perspective
+division.</li>
+</ul>
+<h2 id="coordinate-space-and-pixel-centers">Coordinate Space and Pixel
+Centers</h2>
+<p>By default in standard OpenGL, the screen-space origin
+<code>(0.0, 0.0)</code> is located at the bottom-left corner of the
+viewport window. The X coordinate increases toward the right, and the Y
+coordinate increases toward the top.</p>
+<p>OpenGL evaluates fragments at pixel centers rather than integer grid
+intersections. This means that a fragment representing the
+bottom-leftmost pixel has an <code>xy</code> coordinate of
+<code>(0.5, 0.5)</code>. The neighboring pixel to the right has
+coordinates <code>(1.5, 0.5)</code>.</p>
+<p>GLSL layout qualifiers can modify this behavior when needed. For
+instance, declaring
+<code>layout(origin_upper_left) in vec4 gl_FragCoord;</code> shifts the
+origin to the top-left corner, aligning it with conventions used in
+systems like Direct3D or Vulkan. Similarly,
+<code>layout(pixel_center_integer) in vec4 gl_FragCoord;</code> shifts
+the sample locations to whole integer values like
+<code>(0.0, 0.0)</code>.</p>
+<h2 id="typical-use-cases-in-fragment-shaders">Typical Use Cases in
+Fragment Shaders</h2>
+<h3 id="1-generating-screen-space-uv-coordinates">1. Generating
+Screen-Space UV Coordinates</h3>
+<p>When creating post-processing effects, screen wipes, or full-screen
+overlays, shaders frequently need normalized texture coordinates across
+the display. Dividing <code>gl_FragCoord.xy</code> by a uniform
+representing the total viewport resolution produces a normalized range
+from <code>0.0</code> to <code>1.0</code>:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec2</span> u_resolution<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> screenUV <span class="op">=</span> <span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">xy</span> <span class="op">/</span> u_resolution<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>screenUV<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="2-screen-space-patterns-and-dithering">2. Screen-Space Patterns
+and Dithering</h3>
+<p>Because <code>gl_FragCoord.xy</code> reflects absolute screen pixels
+regardless of the 3D model's geometry or perspective, it is ideal for
+generating static dithering matrices, crosshatch shading, or pixelation
+masks:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Alternate black and white stripes every 4 pixels horizontally</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> stripe <span class="op">=</span> <span class="bu">mod</span><span class="op">(</span><span class="bu">floor</span><span class="op">(</span><span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">x</span> <span class="op">/</span> <span class="fl">4.0</span><span class="op">),</span> <span class="fl">2.0</span><span class="op">);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="dt">vec3</span><span class="op">(</span>stripe<span class="op">),</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="3-screen-space-clipping-and-cutouts">3. Screen-Space Clipping
+and Cutouts</h3>
+<p><code>gl_FragCoord</code> can be used alongside the
+<code>discard</code> keyword to eliminate fragments based on
+window-space boundaries or stipple patterns, creating screen-door
+transparency or rectangular view splits without altering geometry:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Discard any fragment on the left half of a 1920-wide display</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">x</span> <span class="op">&lt;</span> <span class="fl">960.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="kw">discard</span><span class="op">;</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.5</span><span class="op">,</span> <span class="fl">0.2</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="4-reading-and-linearizing-depth">4. Reading and Linearizing
+Depth</h3>
+<p>The <code>gl_FragCoord.z</code> value contains non-linear depth
+resulting from perspective projection. In techniques such as soft
+particles, fog, or deferred rendering, shaders transform
+<code>gl_FragCoord.z</code> back into linear view-space distance to
+perform accurate depth-based comparisons against neighboring geometry or
+depth textures.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

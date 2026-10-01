@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Using imageAtomicAdd for GLSL Lockless Accumulation - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), imageAtomicAdd is a built-in atomic intrinsic used to perform race-condition-free addition directly on texels stored in image variables. This article examines the function and purpose of imageAtomicAdd during lockless a">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/using-image-atomic-add-for-glsl-lockless-accumulation">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Using imageAtomicAdd for GLSL Lockless Accumulation - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/using-image-atomic-add-for-glsl-lockless-accumulation" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), imageAtomicAdd is a built-in atomic intrinsic used to perform race-condition-free addition directly on texels stored in image variables. This article examines the function and purpose of imageAtomicAdd during lockless a" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="using-imageatomicadd-for-glsl-lockless-accumulation">Using
+imageAtomicAdd for GLSL Lockless Accumulation</h1>
+<p>In OpenGL Shading Language (GLSL), <code>imageAtomicAdd</code> is a
+built-in atomic intrinsic used to perform race-condition-free addition
+directly on texels stored in image variables. This article examines the
+function and purpose of <code>imageAtomicAdd</code> during lockless
+accumulation, explaining how it serializes simultaneous write access at
+the hardware level, prevents lost updates across massively parallel GPU
+threads, and provides an efficient foundation for algorithms like
+histogram binning, order-independent transparency, and photon
+mapping.</p>
+<h2 id="the-problem-of-data-races-in-massively-parallel-rendering">The
+Problem of Data Races in Massively Parallel Rendering</h2>
+<p>GPUs execute thousands of shader invocations concurrently. When
+multiple fragments or compute invocations attempt to write to the exact
+same texel or memory address simultaneously, a standard
+read-modify-write hazard occurs:</p>
+<ol type="1">
+<li>Thread A and Thread B read the current texel value (e.g.,
+<code>0</code>) at the exact same moment.</li>
+<li>Thread A calculates <code>0 + 1 = 1</code>.</li>
+<li>Thread B calculates <code>0 + 1 = 1</code>.</li>
+<li>Both threads write <code>1</code> back to the memory location.</li>
+</ol>
+<p>Because neither thread was aware of the other's modification, one
+addition is lost (an issue known as a lost update). In CPU computing,
+mutexes or critical sections often protect shared memory, but locking
+mechanisms on the GPU cause execution divergence, pipeline stalls, and
+catastrophic performance drops.</p>
+<h2 id="the-role-of-imageatomicadd">The Role of
+<code>imageAtomicAdd</code></h2>
+<p><code>imageAtomicAdd</code> solves this problem by performing an
+indivisible read-modify-write operation directly in GPU memory hardware.
+The basic function signature is:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="bu">imageAtomicAdd</span><span class="op">(</span><span class="kw">layout</span><span class="op">(...)</span> <span class="dt">coherent</span> <span class="dt">uimage2D</span> image<span class="op">,</span> <span class="dt">ivec2</span> P<span class="op">,</span> <span class="dt">uint</span> data<span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> <span class="bu">imageAtomicAdd</span><span class="op">(</span><span class="kw">layout</span><span class="op">(...)</span> <span class="dt">coherent</span> <span class="dt">iimage2D</span> image<span class="op">,</span> <span class="dt">ivec2</span> P<span class="op">,</span> <span class="dt">int</span> data<span class="op">);</span></span></code></pre></div>
+<p>When invoked, the GPU's memory controller or L2 cache coordinates the
+operation:</p>
+<ul>
+<li>It fetches the current value at coordinate <code>P</code>.</li>
+<li>It adds <code>data</code> to that value.</li>
+<li>It writes the new sum back to coordinate <code>P</code>.</li>
+<li>It returns the original value present immediately before the
+addition took place.</li>
+</ul>
+<p>No other thread can read or modify that specific texel until all
+three steps are complete. This guarantees that all additions are
+accounted for accurately without requiring software-level locks.</p>
+<h2 id="why-it-enables-lockless-accumulation">Why It Enables Lockless
+Accumulation</h2>
+<p>Lockless accumulation refers to aggregating data from multiple
+asynchronous workers without using blocking synchronization primitives
+like mutexes, spinlocks, or manual pipeline barriers.
+<code>imageAtomicAdd</code> achieves this through several
+mechanisms:</p>
+<h3 id="hardware-level-serialization">Hardware-Level Serialization</h3>
+<p>Instead of rejecting or stalling threads via software locks, the
+GPU's memory controller queues atomic requests arriving at the same
+memory bank. The additions are executed sequentially at wire speed,
+ensuring progress without deadlocks or thread management overhead.</p>
+<h3 id="coherent-memory-visibility">Coherent Memory Visibility</h3>
+<p><code>imageAtomicAdd</code> requires the target image to be qualified
+with <code>coherent</code>. This tells the shader compiler and hardware
+to bypass local caches that might hide writes from other compute units,
+guaranteeing that updates are immediately visible across the entire
+GPU.</p>
+<h3 id="return-of-the-original-value">Return of the Original Value</h3>
+<p>Because <code>imageAtomicAdd</code> returns the value prior to the
+addition, it double-functions as a lockless ticket allocator. For
+example, in per-pixel linked lists for Order-Independent Transparency
+(OIT), the returned value serves as an offset or node index into a
+global storage buffer, allowing each thread to reserve a unique slot
+locklessly.</p>
+<h2 id="common-applications">Common Applications</h2>
+<ul>
+<li><strong>Histogram Generation:</strong> Classifying image luminance
+into discrete bins by treating each bin as a texel and incrementing the
+count for matching pixels.</li>
+<li><strong>Splatting and Radiance Accumulation:</strong> In algorithms
+like photon mapping or volume rendering, light particles add their
+contributions to a shared accumulation texture regardless of rendering
+order.</li>
+<li><strong>Fragment Counters:</strong> Measuring exact pixel overdraw
+or dynamically sizing work queues across draw calls.</li>
+</ul>
+<h2 id="practical-considerations">Practical Considerations</h2>
+<p>While <code>imageAtomicAdd</code> eliminates data corruption, heavy
+memory contention will reduce performance. If thousands of threads
+simultaneously target the identical texel, the memory controller must
+serialize every request, turning parallel execution into serial
+execution for that memory bank.</p>
+<p>Additionally, standard GLSL core specifications only guarantee
+<code>imageAtomicAdd</code> support for 32-bit signed and unsigned
+integers (<code>r32i</code> and <code>r32ui</code>). Accumulating
+floating-point values requires either fixed-point scaling, pack/unpack
+bit manipulation with <code>imageAtomicCompSwap</code>, or
+vendor-specific extensions such as
+<code>GL_NV_shader_atomic_float</code>.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

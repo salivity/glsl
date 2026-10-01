@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Do GLSL Compute Shaders Work Outside Graphics? - glsl</title>
+    <meta name="description" content="GLSL compute shaders allow developers to leverage the massive parallel processing power of the GPU for general-purpose computing tasks independently of the traditional rasterization pipeline. This article details the structural components of a compute sh">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-do-glsl-compute-shaders-work-outside-graphics">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Do GLSL Compute Shaders Work Outside Graphics? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-do-glsl-compute-shaders-work-outside-graphics" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="GLSL compute shaders allow developers to leverage the massive parallel processing power of the GPU for general-purpose computing tasks independently of the traditional rasterization pipeline. This article details the structural components of a compute sh" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-do-glsl-compute-shaders-work-outside-graphics">How Do GLSL
+Compute Shaders Work Outside Graphics?</h1>
+<p>GLSL compute shaders allow developers to leverage the massive
+parallel processing power of the GPU for general-purpose computing tasks
+independently of the traditional rasterization pipeline. This article
+details the structural components of a compute shader in GLSL, how work
+is organized into local and global workgroups, how data is passed and
+synchronized using storage buffers, and how execution is invoked from
+host OpenGL code.</p>
+<h2 id="the-compute-shader-paradigm">The Compute Shader Paradigm</h2>
+<p>Unlike vertex, fragment, or geometry shaders, compute shaders exist
+outside the fixed-function rendering pipeline. They do not take
+traditional vertex attributes as inputs, nor do they output directly to
+a framebuffer. Instead, they operate as standalone programs capable of
+reading from and writing to arbitrary memory locations via Shader
+Storage Buffer Objects (SSBOs) and image load/store units.</p>
+<h2 id="internal-shader-structure-and-workgroups">Internal Shader
+Structure and Workgroups</h2>
+<p>Compute shaders organize execution around threads, known as
+invocations. These invocations are grouped into local workgroups, which
+are defined directly inside the GLSL source code using a layout
+qualifier.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 430 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Define the 3D dimensions of a local workgroup</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">16</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">16</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Bind a Shader Storage Buffer Object for input and output</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> DataBuffer <span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> data<span class="op">[];</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Determine the unique global thread index</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> globalIndex <span class="op">=</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span> <span class="op">+</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">y</span> <span class="op">*</span> <span class="op">(</span><span class="bu">gl_NumWorkGroups</span><span class="op">.</span><span class="fu">x</span> <span class="op">*</span> <span class="bu">gl_WorkGroupSize</span><span class="op">.</span><span class="fu">x</span><span class="op">);</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Perform computation</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    data<span class="op">[</span>globalIndex<span class="op">]</span> <span class="op">*=</span> <span class="fl">2.0</span><span class="op">;</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>GLSL provides several built-in variables to determine the execution
+context of each thread:</p>
+<ul>
+<li><strong><code>gl_NumWorkGroups</code></strong>: The total number of
+workgroups dispatched by the host application along the X, Y, and Z
+axes.</li>
+<li><strong><code>gl_WorkGroupID</code></strong>: The 3D index of the
+current workgroup within the global dispatch grid.</li>
+<li><strong><code>gl_LocalInvocationID</code></strong>: The 3D index of
+the current thread relative to its local workgroup.</li>
+<li><strong><code>gl_GlobalInvocationID</code></strong>: The unique 3D
+index of the thread across the entire execution space, calculated as
+<code>gl_WorkGroupID * gl_WorkGroupSize + gl_LocalInvocationID</code>.</li>
+<li><strong><code>gl_LocalInvocationIndex</code></strong>: A 1D
+flattened representation of <code>gl_LocalInvocationID</code>.</li>
+</ul>
+<h2 id="host-side-invocation">Host-Side Invocation</h2>
+<p>Running a compute shader requires setting up the shader program and
+dispatching workgroups via the OpenGL API on the CPU side:</p>
+<ol type="1">
+<li><strong>Compilation and Linking</strong>: The shader source is
+compiled with <code>GL_COMPUTE_SHADER</code> and linked into a standard
+shader program using <code>glLinkProgram</code>.</li>
+<li><strong>Buffer Binding</strong>: Storage buffers (such as SSBOs) are
+allocated and bound to the matching binding points specified in the GLSL
+code using <code>glBindBufferBase</code>.</li>
+<li><strong>Dispatching</strong>: The host invokes the shader grid using
+<code>glDispatchCompute(num_groups_x, num_groups_y, num_groups_z)</code>.</li>
+</ol>
+<p>For example, dispatching a grid to cover a 1024x1024 domain using
+local workgroups of 16x16:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>glUseProgram<span class="op">(</span>computeProgram<span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>glBindBufferBase<span class="op">(</span>GL_SHADER_STORAGE_BUFFER<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> ssbo<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Dispatch 64x64 workgroups (64 * 16 = 1024 threads per dimension)</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>glDispatchCompute<span class="op">(</span><span class="dv">64</span><span class="op">,</span> <span class="dv">64</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span></code></pre></div>
+<h2 id="synchronization-and-memory-barriers">Synchronization and Memory
+Barriers</h2>
+<p>Because compute shader invocations execute asynchronously and
+concurrently, data hazards can occur when subsequent rendering commands
+or compute dispatches access the same memory.</p>
+<p>Within the GLSL shader, execution across threads in the same
+workgroup can be synchronized using <code>barrier()</code>, and memory
+writes can be flushed using <code>memoryBarrierShared()</code> or
+<code>memoryBarrierBuffer()</code>.</p>
+<p>On the host side, synchronization is enforced using
+<code>glMemoryBarrier()</code>. Calling
+<code>glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)</code> or
+<code>glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT)</code> guarantees
+that all write operations performed by the compute shader complete
+before subsequent commands read the updated buffer data.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

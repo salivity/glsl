@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dual Kawase Blur in GLSL: Fast Wide Blur Radii - glsl</title>
+    <meta name="description" content="Dual Kawase blur achieves exceptionally wide blur radii at high frame rates by combining a multi-pass resolution pyramid with strategically offset downsampling and upsampling kernels. Instead of using a single high-sample pass at native resolution, the a">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/dual-kawase-blur-in-glsl-fast-wide-blur-radii">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Dual Kawase Blur in GLSL: Fast Wide Blur Radii - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/dual-kawase-blur-in-glsl-fast-wide-blur-radii" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Dual Kawase blur achieves exceptionally wide blur radii at high frame rates by combining a multi-pass resolution pyramid with strategically offset downsampling and upsampling kernels. Instead of using a single high-sample pass at native resolution, the a" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="dual-kawase-blur-in-glsl-fast-wide-blur-radii">Dual Kawase Blur
+in GLSL: Fast Wide Blur Radii</h1>
+<p>Dual Kawase blur achieves exceptionally wide blur radii at high frame
+rates by combining a multi-pass resolution pyramid with strategically
+offset downsampling and upsampling kernels. Instead of using a single
+high-sample pass at native resolution, the algorithm progressively
+downscales an image through specialized sampling patterns and then
+reconstructs it using a smooth upsampling kernel. This guide explains
+how these paired kernels operate mathematically and structurally in GLSL
+to deliver large-radius blurs with minimal texture fetches.</p>
+<h2 id="the-core-concept-resolution-scaling-meets-kernel-offsets">The
+Core Concept: Resolution Scaling Meets Kernel Offsets</h2>
+<p>Traditional Gaussian blurs scale linearly or quadratically in cost as
+the blur radius increases. To blur across 50 or 100 pixels, a standard
+filter requires dozens of texture taps per pixel, even when separated
+into horizontal and vertical passes.</p>
+<p>Dual Kawase solves this by decoupling the apparent blur radius from
+the sampling count. It relies on two principles:</p>
+<ol type="1">
+<li><strong>Resolution Halving (Exponential Footprint
+Expansion):</strong> Every time the render target is halved in
+resolution, a single-pixel offset in the downsampled space covers twice
+the distance of the previous pass in full-resolution screen space.
+Running 4 downsample iterations yields a <span
+class="math inline">\(16\times\)</span> footprint expansion without
+increasing sample counts.</li>
+<li><strong>Hardware Bilinear Exploitation:</strong> By sampling at
+half-texel offsets between texel centers, a single texture fetch samples
+a <span class="math inline">\(2\times2\)</span> texel footprint using
+GPU hardware interpolation, quadrupling the effective sample coverage
+per fetch.</li>
+</ol>
+<h2 id="the-downsampling-kernel">The Downsampling Kernel</h2>
+<p>The downsampling pass halves the render target dimensions (e.g.,
+<span class="math inline">\(1920\times1080\)</span> to <span
+class="math inline">\(960\times540\)</span>) while applying a
+box-and-diagonal sampling pattern.</p>
+<p>Rather than taking a simple box average, the Dual Kawase downsample
+kernel samples the center and four diagonal points offset into
+neighboring texels. Because these coordinates lie on texel boundaries,
+the GPU's bilinear filtering blends adjacent pixels automatically.</p>
+<h3 id="glsl-downsample-implementation">GLSL Downsample
+Implementation</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec2</span> vTexCoord<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> uTexture<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec2</span> uTexelSize<span class="op">;</span> <span class="co">// Texel size of the source (higher-res) texture</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> uOffset<span class="op">;</span>    <span class="co">// Blur spread multiplier, typically 1.0</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> halfPixel <span class="op">=</span> uTexelSize <span class="op">*</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> d <span class="op">=</span> uTexelSize <span class="op">*</span> uOffset<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Center sample (weighted higher)</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> sum <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>uTexture<span class="op">,</span> vTexCoord<span class="op">)</span> <span class="op">*</span> <span class="fl">4.0</span><span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Four diagonal bilinear samples</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    sum <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>uTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(-</span>d<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="op">-</span>d<span class="op">.</span><span class="fu">y</span><span class="op">));</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    sum <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>uTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span> d<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="op">-</span>d<span class="op">.</span><span class="fu">y</span><span class="op">));</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    sum <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>uTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(-</span>d<span class="op">.</span><span class="fu">x</span><span class="op">,</span>  d<span class="op">.</span><span class="fu">y</span><span class="op">));</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    sum <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>uTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span> d<span class="op">.</span><span class="fu">x</span><span class="op">,</span>  d<span class="op">.</span><span class="fu">y</span><span class="op">));</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> sum <span class="op">*</span> <span class="fl">0.125</span><span class="op">;</span> <span class="co">// Normalize: 4.0 + 1.0 * 4 = 8.0 -&gt; 1/8 = 0.125</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This 5-tap kernel effectively gathers data from a large pixel
+footprint on the higher-resolution input buffer while storing the
+averaged result into a halved buffer.</p>
+<h2 id="the-upsampling-kernel">The Upsampling Kernel</h2>
+<p>If an image is simply downscaled and bilinearly magnified back to
+screen resolution, severe blocky, diamond-shaped artifacts appear. The
+upsampling pass eliminates these artifacts by filtering the image during
+each magnification step.</p>
+<p>The upsampling pass uses an 8-tap kernel arranged in a tent-like
+configuration: four axial samples (top, bottom, left, right) and four
+diagonal samples (corners). The axial samples receive double the weight
+of the diagonal samples to create a circularly symmetric, Gaussian-like
+reconstruction.</p>
+<h3 id="glsl-upsample-implementation">GLSL Upsample Implementation</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec2</span> vTexCoord<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> uTexture<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec2</span> uTexelSize<span class="op">;</span> <span class="co">// Texel size of the source (lower-res) texture</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> uOffset<span class="op">;</span>    <span class="co">// Blur spread multiplier, typically 1.0</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> d <span class="op">=</span> uTexelSize <span class="op">*</span> uOffset<span class="op">;</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> sum <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Four axial samples with weight 2.0</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    sum <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>uTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(-</span>d<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> <span class="fl">2.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">))</span> <span class="op">*</span> <span class="fl">2.0</span><span class="op">;</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    sum <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>uTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span> d<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> <span class="fl">2.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">))</span> <span class="op">*</span> <span class="fl">2.0</span><span class="op">;</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    sum <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>uTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="op">-</span>d<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> <span class="fl">2.0</span><span class="op">))</span> <span class="op">*</span> <span class="fl">2.0</span><span class="op">;</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    sum <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>uTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span>  d<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> <span class="fl">2.0</span><span class="op">))</span> <span class="op">*</span> <span class="fl">2.0</span><span class="op">;</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Four corner samples with weight 1.0</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    sum <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>uTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(-</span>d<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="op">-</span>d<span class="op">.</span><span class="fu">y</span><span class="op">));</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    sum <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>uTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span> d<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="op">-</span>d<span class="op">.</span><span class="fu">y</span><span class="op">));</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    sum <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>uTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(-</span>d<span class="op">.</span><span class="fu">x</span><span class="op">,</span>  d<span class="op">.</span><span class="fu">y</span><span class="op">));</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    sum <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>uTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span> d<span class="op">.</span><span class="fu">x</span><span class="op">,</span>  d<span class="op">.</span><span class="fu">y</span><span class="op">));</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> sum <span class="op">/</span> <span class="fl">12.0</span><span class="op">;</span> <span class="co">// Normalize: 4*2.0 + 4*1.0 = 12.0</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="how-the-radius-scales-across-iterations">How the Radius Scales
+Across Iterations</h2>
+<p>Achieving wide blur radii depends on chaining multiple downsample and
+upsample passes into a pyramid structure:</p>
+<ol type="1">
+<li><strong>Downsample Phase:</strong> The base image is rendered
+sequentially into smaller Framebuffer Objects (FBOs): Full <span
+class="math inline">\(\to\)</span> Half <span
+class="math inline">\(\to\)</span> Quarter <span
+class="math inline">\(\to\)</span> Eighth. At each stage, the
+downsampling shader executes.</li>
+<li><strong>Upsample Phase:</strong> The smallest FBO is rendered back
+up through the chain: Eighth <span class="math inline">\(\to\)</span>
+Quarter <span class="math inline">\(\to\)</span> Half <span
+class="math inline">\(\to\)</span> Full. At each stage, the upsampling
+shader executes.</li>
+</ol>
+<p>Because an offset of 1 texel at the 1/8th resolution stage covers an
+area equivalent to 8 pixels on the original surface, small kernel
+offsets compound exponentially. An iteration depth of 4 to 5 passes
+yields an effective blur radius spanning hundreds of pixels, while
+requiring only 5 texture fetches on downsampling steps and 8 on
+upsampling steps.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

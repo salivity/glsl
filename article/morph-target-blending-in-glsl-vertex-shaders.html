@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Morph Target Blending in GLSL Vertex Shaders - glsl</title>
+    <meta name="description" content="Morph target blending—often referred to as blend shapes or shape keys—is a vertex deformation technique used extensively in real-time computer graphics to produce expressive character animations. In a GLSL vertex shader, this process is executed by c">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/morph-target-blending-in-glsl-vertex-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Morph Target Blending in GLSL Vertex Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/morph-target-blending-in-glsl-vertex-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Morph target blending—often referred to as blend shapes or shape keys—is a vertex deformation technique used extensively in real-time computer graphics to produce expressive character animations. In a GLSL vertex shader, this process is executed by c" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="morph-target-blending-in-glsl-vertex-shaders">Morph Target
+Blending in GLSL Vertex Shaders</h1>
+<p>Morph target blending—often referred to as blend shapes or shape
+keys—is a vertex deformation technique used extensively in real-time
+computer graphics to produce expressive character animations. In a GLSL
+vertex shader, this process is executed by calculating and accumulating
+geometric delta displacement vectors, which represent the per-vertex
+spatial difference between a neutral base mesh and one or more target
+shapes. By multiplying each delta vector by a scalar weight and adding
+the result to the original vertex attributes, the GPU interpolates
+between complex geometric states in parallel with minimal computational
+overhead.</p>
+<h2 id="the-concept-of-geometric-delta-displacement">The Concept of
+Geometric Delta Displacement</h2>
+<p>In traditional keyframing, storing complete geometric coordinates for
+every target shape consumes significant bandwidth and prevents multiple
+targets from cleanly influencing the same mesh simultaneously. Instead,
+morph target animation relies on geometric deltas.</p>
+<p>A displacement delta vector (<span
+class="math inline">\(\mathbf{d}_k\)</span>) represents the directional
+difference between a morph target vertex (<span
+class="math inline">\(\mathbf{p}_k\)</span>) and the neutral base vertex
+(<span class="math inline">\(\mathbf{p}_0\)</span>):</p>
+<p><span class="math display">\[\mathbf{d}_k = \mathbf{p}_k -
+\mathbf{p}_0\]</span></p>
+<p>Because deltas represent isolated modifications, they can be blended
+additively. A character can concurrently smile, blink, and raise an
+eyebrow without each pose overwriting the positions of the others.</p>
+<p>The final vertex position (<span
+class="math inline">\(\mathbf{p}_{\text{final}}\)</span>) is computed as
+the base position plus the linear combination of all active displacement
+vectors weighted by their respective influence values (<span
+class="math inline">\(w_k\)</span>):</p>
+<p><span class="math display">\[\mathbf{p}_{\text{final}} = \mathbf{p}_0
++ \sum_{k=1}^{n} (w_k \cdot \mathbf{d}_k)\]</span></p>
+<h2 id="calculating-deltas-in-glsl-vertex-shaders">Calculating Deltas in
+GLSL Vertex Shaders</h2>
+<p>Depending on hardware constraints and the number of morph targets,
+GLSL vertex shaders calculate and apply these deltas using either
+per-vertex attributes or texture memory lookups.</p>
+<h3 id="1-attribute-based-morphing">1. Attribute-Based Morphing</h3>
+<p>For models with a small number of morph targets (typically limited by
+the hardware's maximum vertex attribute limit, often 16), target deltas
+are precomputed on the CPU and passed directly into the vertex shader as
+standard attributes.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 300 es</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> a_BasePosition<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> a_BaseNormal<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Morph target delta attributes (TargetPosition - BasePosition)</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> a_TargetDeltaPosition0<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">3</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> a_TargetDeltaPosition1<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Normal deltas</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">4</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> a_TargetDeltaNormal0<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">5</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> a_TargetDeltaNormal1<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_Weight0<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_Weight1<span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> u_ModelViewProjectionMatrix<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec3</span> v_Normal<span class="op">;</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Accumulate position deltas</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> displacedPosition <span class="op">=</span> a_BasePosition<span class="op">;</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    displacedPosition <span class="op">+=</span> a_TargetDeltaPosition0 <span class="op">*</span> u_Weight0<span class="op">;</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    displacedPosition <span class="op">+=</span> a_TargetDeltaPosition1 <span class="op">*</span> u_Weight1<span class="op">;</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Accumulate normal deltas</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> displacedNormal <span class="op">=</span> a_BaseNormal<span class="op">;</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    displacedNormal <span class="op">+=</span> a_TargetDeltaNormal0 <span class="op">*</span> u_Weight0<span class="op">;</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    displacedNormal <span class="op">+=</span> a_TargetDeltaNormal1 <span class="op">*</span> u_Weight1<span class="op">;</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    v_Normal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>displacedNormal<span class="op">);</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> u_ModelViewProjectionMatrix <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>displacedPosition<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="2-texture-based-morphing-vertex-texture-fetch">2. Texture-Based
+Morphing (Vertex Texture Fetch)</h3>
+<p>Complex facial rigs often require dozens or hundreds of morph
+targets, exceeding the vertex attribute limits of the GPU. Modern
+engines bypass this limitation by baking geometric deltas into
+floating-point data textures (<code>sampler2D</code> or
+<code>sampler2DArray</code>).</p>
+<p>In this approach:</p>
+<ol type="1">
+<li>The CPU packs precomputed delta vectors (<span
+class="math inline">\(\Delta x, \Delta y, \Delta z\)</span>) into RGB
+texels.</li>
+<li>The vertex shader determines its vertex ID using the built-in
+<code>gl_VertexID</code> variable.</li>
+<li>The shader samples the delta texture via <code>texelFetch()</code>
+for each active morph target.</li>
+</ol>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 300 es</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> a_BasePosition<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> a_BaseNormal<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2DArray</span> u_MorphDeltaTexture<span class="op">;</span> <span class="co">// Holds delta vectors</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_MorphWeights<span class="op">[</span><span class="dv">64</span><span class="op">];</span>           <span class="co">// Dynamic weights</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">int</span> u_ActiveMorphCount<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> u_ModelViewProjectionMatrix<span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> displacedPosition <span class="op">=</span> a_BasePosition<span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span> texCoord <span class="op">=</span> <span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_VertexID</span> <span class="op">%</span> <span class="dv">2048</span><span class="op">,</span> <span class="bu">gl_VertexID</span> <span class="op">/</span> <span class="dv">2048</span><span class="op">);</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> u_ActiveMorphCount<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> weight <span class="op">=</span> u_MorphWeights<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span><span class="bu">abs</span><span class="op">(</span>weight<span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0.0001</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Fetch delta from layer &#39;i&#39;</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec3</span> deltaPosition <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>u_MorphDeltaTexture<span class="op">,</span> <span class="dt">ivec3</span><span class="op">(</span>texCoord<span class="op">,</span> i<span class="op">),</span> <span class="dv">0</span><span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>            displacedPosition <span class="op">+=</span> deltaPosition <span class="op">*</span> weight<span class="op">;</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> u_ModelViewProjectionMatrix <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>displacedPosition<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="normal-and-tangent-vector-considerations">Normal and Tangent
+Vector Considerations</h2>
+<p>Geometric displacement also alters surface curvature, meaning surface
+normals and tangents must be modified to preserve correct lighting
+calculations.</p>
+<p>Unlike positions, normal deltas are differences between unit
+direction vectors (<span class="math inline">\(\mathbf{n}_k -
+\mathbf{n}_0\)</span>). When multiple weighted normal deltas are added
+to the base normal, the resulting vector loses unit length:</p>
+<p><span class="math display">\[\mathbf{n}_{\text{unnormalized}} =
+\mathbf{n}_0 + \sum_{k=1}^{n} (w_k \cdot \Delta
+\mathbf{n}_k)\]</span></p>
+<p>To prevent shading artifacts and dark spots caused by non-uniform
+scaling, the shader must re-normalize the accumulated normal using the
+<code>normalize()</code> function before passing it to the fragment
+stage or using it in lighting equations. Tangent vectors follow an
+identical delta calculation and normalization pipeline.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

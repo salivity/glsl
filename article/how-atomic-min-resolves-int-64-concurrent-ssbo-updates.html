@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How atomicMin Resolves int64 Concurrent SSBO Updates - glsl</title>
+    <meta name="description" content="In GPU programming, concurrently updating shared memory locations across thousands of parallel threads introduces severe data races. When using OpenGL Shading Language (GLSL) Shader Storage Buffer Objects (SSBOs), the atomicMin function provides a hardwa">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-atomic-min-resolves-int-64-concurrent-ssbo-updates">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How atomicMin Resolves int64 Concurrent SSBO Updates - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-atomic-min-resolves-int-64-concurrent-ssbo-updates" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GPU programming, concurrently updating shared memory locations across thousands of parallel threads introduces severe data races. When using OpenGL Shading Language (GLSL) Shader Storage Buffer Objects (SSBOs), the atomicMin function provides a hardwa" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-atomicmin-resolves-int64-concurrent-ssbo-updates">How
+atomicMin Resolves int64 Concurrent SSBO Updates</h1>
+<p>In GPU programming, concurrently updating shared memory locations
+across thousands of parallel threads introduces severe data races. When
+using OpenGL Shading Language (GLSL) Shader Storage Buffer Objects
+(SSBOs), the <code>atomicMin</code> function provides a
+hardware-enforced mechanism to determine and store the minimum scalar
+value safely. By executing a non-interruptible read-modify-write
+operation directly within memory controllers or cache subsystem logic,
+<code>atomicMin</code> processes 64-bit signed integers
+(<code>int64_t</code>) without allowing intermediate, corrupt, or
+interleaved states, ensuring accurate synchronization across parallel
+shader invocations.</p>
+<h3 id="the-concurrency-problem-in-ssbos">The Concurrency Problem in
+SSBOs</h3>
+<p>A Shader Storage Buffer Object allows arbitrary read and write access
+from multiple shader invocations across different workgroups. A standard
+minimum comparison requires three distinct steps:</p>
+<ol type="1">
+<li>Read the current value stored in the buffer.</li>
+<li>Compare the read value with the local thread's candidate value.</li>
+<li>Write back the smaller value if the candidate is lower.</li>
+</ol>
+<p>When hundreds of threads execute this sequence simultaneously on the
+same memory address, a race condition occurs. Threads may read an
+outdated value before another thread finishes writing its update,
+leading to lost updates. With 64-bit integers (<code>int64_t</code>),
+the issue is amplified on architectures where native register or bus
+widths are 32 bits, as non-atomic operations could lead to "torn
+writes," where one 32-bit half of the value is updated while the other
+is not.</p>
+<h3 id="enabling-64-bit-atomics-in-glsl">Enabling 64-Bit Atomics in
+GLSL</h3>
+<p>By default, core GLSL only supports 32-bit integer atomics. Handling
+<code>int64_t</code> requires specific hardware extensions, such as
+<code>GL_ARB_gpu_shader_int64</code> alongside
+<code>GL_EXT_shader_atomic_int64</code> (or
+<code>GL_NV_shader_atomic_int64</code>). Once enabled, the buffer must
+declare the field as an explicit 64-bit integer:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_ARB_gpu_shader_int64 : require</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_shader_atomic_int64 : require</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> DataBuffer <span class="op">{</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">coherent</span> int64_t globalMinVal<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    int64_t localCandidate <span class="op">=</span> <span class="op">...;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">atomicMin</span><span class="op">(</span>globalMinVal<span class="op">,</span> localCandidate<span class="op">);</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The <code>coherent</code> qualifier guarantees that changes made by
+one invocation are visible to other invocations accessing the same
+buffer across different compute workgroups.</p>
+<h3 id="the-mechanics-of-atomicmin">The Mechanics of atomicMin</h3>
+<p>The <code>atomicMin</code> operation treats the target memory
+location as a critical section. When an invocation calls
+<code>atomicMin(memLocation, value)</code>:</p>
+<ol type="1">
+<li>The operation locks access to the specified 64-bit memory address
+relative to other atomic operations targeting the same address.</li>
+<li>The current 64-bit signed value is read from memory.</li>
+<li>A signed arithmetic comparison occurs:
+<code>min(currentValue, value)</code>.</li>
+<li>The resulting minimum is written back to the address.</li>
+<li>The original value prior to the operation is returned to the calling
+thread.</li>
+</ol>
+<p>Because this cycle is indivisible, no other thread can read or modify
+<code>globalMinVal</code> while the operation is in flight.</p>
+<h3 id="hardware-level-serialization-and-cache-coherence">Hardware-Level
+Serialization and Cache Coherence</h3>
+<p>Modern GPUs do not resolve atomics by pausing the entire execution
+pipeline. Instead, they offload atomic operations to specialized
+hardware units located at the L2 cache or the memory controller
+level:</p>
+<ul>
+<li><strong>Atomic Arithmetic Logic Units (ALUs):</strong> Rather than
+fetching data all the way back to the compute unit's registers to
+perform the comparison, the thread transmits an atomic message
+containing the target address and the 64-bit payload directly to the
+memory subsystem. The memory controller or L2 cache contains dedicated
+logic that performs the comparison locally.</li>
+<li><strong>Request Queuing and Serialization:</strong> When multiple
+work-items target the exact same 64-bit address simultaneously, the
+memory controller serializes the incoming requests into a FIFO
+(First-In, First-Out) pipeline. Each <code>atomicMin</code> evaluates
+against the result of the immediately preceding atomic operation.</li>
+<li><strong>Atomic 64-Bit Data Paths:</strong> For 64-bit operations,
+the memory interface guarantees that the full 8-byte payload is read and
+written in a single uninterrupted transaction, eliminating torn reads or
+torn writes.</li>
+</ul>
+<h3 id="performance-implications">Performance Implications</h3>
+<p>While <code>atomicMin</code> guarantees correctness, heavy contention
+on a single 64-bit buffer address creates a performance bottleneck.
+Because conflicting updates are serialized at the memory controller,
+memory throughput scales inversely with the number of threads competing
+for that specific memory location.</p>
+<p>To mitigate performance penalties, developers often perform a local
+hierarchical reduction—resolving the minimum locally within workgroup
+shared memory (<code>shared int64_t</code>) first—before issuing a
+single <code>atomicMin</code> to the global SSBO per workgroup.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

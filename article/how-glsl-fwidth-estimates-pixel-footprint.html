@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GLSL fwidth Estimates Pixel Footprint - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), the fwidth function provides a fast, hardware-accelerated way to measure how quickly a variable changes across neighboring screen pixels. By combining the screen-space partial derivatives dFdx and dFdy, fwidth estimates">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-glsl-fwidth-estimates-pixel-footprint">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GLSL fwidth Estimates Pixel Footprint - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-glsl-fwidth-estimates-pixel-footprint" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), the fwidth function provides a fast, hardware-accelerated way to measure how quickly a variable changes across neighboring screen pixels. By combining the screen-space partial derivatives dFdx and dFdy, fwidth estimates" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-glsl-fwidth-estimates-pixel-footprint">How GLSL fwidth
+Estimates Pixel Footprint</h1>
+<p>In OpenGL Shading Language (GLSL), the <code>fwidth</code> function
+provides a fast, hardware-accelerated way to measure how quickly a
+variable changes across neighboring screen pixels. By combining the
+screen-space partial derivatives <code>dFdx</code> and
+<code>dFdy</code>, <code>fwidth</code> estimates the rate of change—or
+"footprint"—of a value across a single pixel. This article explains the
+underlying quad-based GPU architecture, the mathematical formula
+powering <code>fwidth</code>, and how it translates screen coordinates
+into parameter-space bounds for tasks like anti-aliasing and procedural
+texturing.</p>
+<h3 id="gpu-fragment-quads-and-partial-derivatives">GPU Fragment Quads
+and Partial Derivatives</h3>
+<p>GPUs execute fragment shaders concurrently in locked groups of four
+pixels arranged in a 2x2 grid, known as a quad. Because neighboring
+fragments within a quad execute in lockstep, the GPU hardware can
+compute differences in values between adjacent horizontal and vertical
+pixels:</p>
+<ul>
+<li><code>dFdx(p)</code> calculates the difference of variable
+<code>p</code> between the current fragment and its horizontal neighbor:
+<span class="math inline">\(\frac{\partial p}{\partial x} \approx p(x+1,
+y) - p(x, y)\)</span>.</li>
+<li><code>dFdy(p)</code> calculates the difference of variable
+<code>p</code> between the current fragment and its vertical neighbor:
+<span class="math inline">\(\frac{\partial p}{\partial y} \approx p(x,
+y+1) - p(x, y)\)</span>.</li>
+</ul>
+<p>These functions return the instantaneous rate of change of any given
+variable <code>p</code> relative to screen coordinates.</p>
+<h3 id="the-mathematical-definition-of-fwidth">The Mathematical
+Definition of fwidth</h3>
+<p>The <code>fwidth</code> function evaluates the magnitude of change
+across the pixel by combining both horizontal and vertical derivatives.
+In the GLSL specification, <code>fwidth</code> is defined as:</p>
+<p><span class="math display">\[\text{fwidth}(p) = |\text{dFdx}(p)| +
+|\text{dFdy}(p)|\]</span></p>
+<p>Instead of calculating the true Euclidean length (L2 norm) via <span
+class="math inline">\(\sqrt{(\text{dFdx}(p))^2 +
+(\text{dFdy}(p))^2}\)</span>, <code>fwidth</code> uses the Manhattan
+distance (L1 norm). The L1 norm avoids costly square root and
+multiplication operations, providing a computationally cheap,
+hardware-friendly approximation of total variation across the pixel
+area.</p>
+<h3 id="estimating-the-pixel-footprint">Estimating the Pixel
+Footprint</h3>
+<p>When mapping values like UV coordinates, distance fields, or world
+positions to screen pixels, a single screen pixel covers a specific area
+in that variable's coordinate space. This covered area is referred to as
+the pixel footprint.</p>
+<ol type="1">
+<li><strong>Span in X and Y:</strong> If <code>p</code> represents a
+coordinate (such as a texture coordinate <span
+class="math inline">\(u\)</span>), <span
+class="math inline">\(|\text{dFdx}(p)|\)</span> represents how much
+<span class="math inline">\(u\)</span> changes across one pixel
+horizontally. Similarly, <span
+class="math inline">\(|\text{dFdy}(p)|\)</span> indicates how much <span
+class="math inline">\(u\)</span> changes vertically.</li>
+<li><strong>Bounding the Change:</strong> By summing these absolute
+differences, <code>fwidth(p)</code> produces a scalar value that
+approximates the maximum span or extent of <code>p</code> enclosed by
+the pixel. If the camera is far away or viewing a surface at a grazing
+angle, the derivatives become large, indicating that the pixel spans a
+large region of the parameter space. If the camera is close, the
+derivatives become small, meaning the pixel covers a narrow range.</li>
+</ol>
+<h3 id="practical-use-in-anti-aliasing">Practical Use in
+Anti-Aliasing</h3>
+<p>The primary use of this footprint estimation is determining filter
+widths for analytical anti-aliasing. When rendering sharp procedural
+patterns—such as step functions, stripes, or signed distance fields
+(SDFs)—rendering without a footprint results in aliasing artifacts.</p>
+<p>By passing <code>fwidth</code> into interpolation functions like
+<code>smoothstep</code>, shaders automatically scale edge transitions to
+span exactly one or two pixels:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> edge <span class="op">=</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> width <span class="op">=</span> <span class="bu">fwidth</span><span class="op">(</span>dist<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Smoothly interpolate across the span of the pixel footprint</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> alpha <span class="op">=</span> <span class="bu">smoothstep</span><span class="op">(</span>edge <span class="op">-</span> width<span class="op">,</span> edge <span class="op">+</span> width<span class="op">,</span> dist<span class="op">);</span></span></code></pre></div>
+<p>This guarantees that procedural boundaries remain smooth and visually
+consistent regardless of camera distance, surface tilt, or screen
+resolution.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

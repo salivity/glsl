@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding memoryBarrierBuffer for SSBOs in GLSL - glsl</title>
+    <meta name="description" content="This article explains the mechanics of memoryBarrierBuffer() in OpenGL Shading Language (GLSL), detailing how it enforces memory transaction ordering for Shader Storage Buffer Objects (SSBOs). You will learn how this intrinsic controls memory visibility,">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-memory-barrier-buffer-for-ssb-os-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding memoryBarrierBuffer for SSBOs in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-memory-barrier-buffer-for-ssb-os-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains the mechanics of memoryBarrierBuffer() in OpenGL Shading Language (GLSL), detailing how it enforces memory transaction ordering for Shader Storage Buffer Objects (SSBOs). You will learn how this intrinsic controls memory visibility," />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="understanding-memorybarrierbuffer-for-ssbos-in-glsl">Understanding
+memoryBarrierBuffer for SSBOs in GLSL</h1>
+<p>This article explains the mechanics of
+<code>memoryBarrierBuffer()</code> in OpenGL Shading Language (GLSL),
+detailing how it enforces memory transaction ordering for Shader Storage
+Buffer Objects (SSBOs). You will learn how this intrinsic controls
+memory visibility, prevents read-after-write hazards across parallel
+shader invocations, and how it interacts with memory qualifiers like
+<code>coherent</code> alongside execution barriers like
+<code>barrier()</code>.</p>
+<h2 id="the-gpu-memory-hierarchy-and-out-of-order-execution">The GPU
+Memory Hierarchy and Out-of-Order Execution</h2>
+<p>Modern GPUs rely on a weakly ordered, highly parallel memory
+architecture. When multiple invocations inside compute, fragment, or
+vertex shaders write to an SSBO, the underlying hardware does not
+guarantee that those writes are immediately visible to other invocations
+or even to subsequent instructions within the same invocation.</p>
+<p>Memory writes to an SSBO typically hit local L1 caches, register
+allocations, or write buffers before being committed to shared L2 caches
+or global VRAM. Without explicit synchronization, the GPU compiler and
+memory controller may reorder read and write operations to optimize
+memory bandwidth and latency hiding. Consequently, a subsequent read
+operation might fetch stale data from a cache before a preceding write
+operation has fully committed to a coherent memory tier.</p>
+<h2 id="how-memorybarrierbuffer-enforces-ordering">How
+<code>memoryBarrierBuffer()</code> Enforces Ordering</h2>
+<p><code>memoryBarrierBuffer()</code> serves as a memory fence
+specifically targeted at buffer variables, including SSBOs. It controls
+the order of memory transactions rather than execution timing:</p>
+<ol type="1">
+<li><strong>Ordering Write Operations:</strong> When an invocation
+executes <code>memoryBarrierBuffer()</code>, the GPU ensures that all
+memory write transactions to SSBOs issued <em>prior</em> to the barrier
+are committed and made visible to the rest of the memory subsystem
+before any memory access (reads or writes) issued <em>after</em> the
+barrier can proceed.</li>
+<li><strong>Cache Flushing and Invalidation:</strong> At the hardware
+driver level, calling <code>memoryBarrierBuffer()</code> flushes the
+dirty lines in the local L1/texture caches down to a cache level
+accessible by all relevant invocations (commonly the L2 cache). It also
+invalidates stale read caches, ensuring that any subsequent reads by an
+invocation pull the most recently committed data.</li>
+</ol>
+<p>It is important to note that <code>memoryBarrierBuffer()</code> does
+not stop the execution of other threads; it only guarantees the
+sequential consistency of memory transactions relative to that specific
+invocation's pipeline.</p>
+<h2 id="the-role-of-the-coherent-qualifier">The Role of the
+<code>coherent</code> Qualifier</h2>
+<p>A memory barrier alone is insufficient if the compiler assumes
+variables are independent and can be stored indefinitely in local
+registers. To make <code>memoryBarrierBuffer()</code> function properly
+across different invocations:</p>
+<ul>
+<li>The target SSBO must be declared with the <code>coherent</code>
+memory qualifier.</li>
+<li>The <code>coherent</code> qualifier tells the GLSL compiler that the
+buffer variable is shared across concurrently executing invocations,
+preventing the compiler from caching reads and writes inside
+thread-private registers.</li>
+<li>Combining <code>coherent</code> with
+<code>memoryBarrierBuffer()</code> ensures that writes leave registers
+and bypass local cache barriers, making them globally visible.</li>
+</ul>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">coherent</span> <span class="kw">buffer</span> DataBlock <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> values<span class="op">[];</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<h2 id="distinguishing-memorybarrierbuffer-from-barrier">Distinguishing
+<code>memoryBarrierBuffer()</code> from <code>barrier()</code></h2>
+<p>A common source of bugs in compute shaders is conflating memory
+synchronization with execution synchronization:</p>
+<ul>
+<li><strong><code>memoryBarrierBuffer()</code></strong> orders memory
+operations. It ensures writes are flushed, but it does not pause
+execution. Invocations in the same workgroup can continue executing
+instructions at different paces.</li>
+<li><strong><code>barrier()</code></strong> (an execution barrier)
+forces all invocations in the current workgroup to wait until every
+invocation reaches that barrier before any are allowed to proceed.</li>
+</ul>
+<p>To safely pass data between invocations within the same compute
+workgroup, both barriers are typically required:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Phase 1: Write data to SSBO</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>values<span class="op">[</span><span class="bu">gl_LocalInvocationIndex</span><span class="op">]</span> <span class="op">=</span> computedValue<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Phase 2: Ensure writes are committed to cache</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="bu">memoryBarrierBuffer</span><span class="op">();</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Phase 3: Wait for all workgroup invocations to finish writing and flushing</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="bu">barrier</span><span class="op">();</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co">// Phase 4: Safely read data written by neighboring invocations</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> neighborValue <span class="op">=</span> values<span class="op">[</span>neighborIndex<span class="op">];</span></span></code></pre></div>
+<p>In this sequence, <code>memoryBarrierBuffer()</code> guarantees that
+the data writes are committed to memory, while <code>barrier()</code>
+ensures no thread attempts to read neighbor data before the neighbor has
+actually finished its write and barrier sequence.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

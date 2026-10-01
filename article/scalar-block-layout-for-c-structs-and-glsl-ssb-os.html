@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scalar Block Layout for C++ Structs and GLSL SSBOs - glsl</title>
+    <meta name="description" content="Matching CPU data structures written in C++ with GPU storage buffers in GLSL has traditionally required tedious manual padding due to rigid alignment standards like std140 and std430. The scalar block layout extension solves this problem by aligning memb">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/scalar-block-layout-for-c-structs-and-glsl-ssb-os">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Scalar Block Layout for C++ Structs and GLSL SSBOs - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/scalar-block-layout-for-c-structs-and-glsl-ssb-os" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Matching CPU data structures written in C++ with GPU storage buffers in GLSL has traditionally required tedious manual padding due to rigid alignment standards like std140 and std430. The scalar block layout extension solves this problem by aligning memb" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="scalar-block-layout-for-c-structs-and-glsl-ssbos">Scalar Block
+Layout for C++ Structs and GLSL SSBOs</h1>
+<p>Matching CPU data structures written in C++ with GPU storage buffers
+in GLSL has traditionally required tedious manual padding due to rigid
+alignment standards like <code>std140</code> and <code>std430</code>.
+The scalar block layout extension solves this problem by aligning member
+variables based solely on their component scalar sizes rather than
+vector-based rules. This article explains how scalar block layout
+eliminates alignment mismatches, enables seamless 1:1 memory mappings,
+and simplifies data transfer between the CPU and GPU.</p>
+<h2 id="the-traditional-alignment-problem">The Traditional Alignment
+Problem</h2>
+<p>Standard GLSL buffer layouts—primarily <code>std140</code> and
+<code>std430</code>—enforce strict, hardware-centric alignment rules
+that rarely match the default layout of C++ structures.</p>
+<p>Under <code>std140</code> and <code>std430</code>:</p>
+<ul>
+<li>A <code>vec3</code> is aligned to 16 bytes (the size of a
+<code>vec4</code>), even though it only consumes 12 bytes of data.</li>
+<li>In <code>std140</code>, arrays of any type round the stride of each
+element up to the base alignment of a <code>vec4</code> (16 bytes).</li>
+<li>Nested structures often enforce a base alignment rounded up to a
+multiple of 16 bytes.</li>
+</ul>
+<p>In contrast, standard C++ compilers follow natural data alignment
+rules. A <code>struct</code> containing three <code>float</code> values
+(such as a standard 3D vector library type) occupies 12 bytes without
+trailing padding unless explicitly aligned using
+<code>alignas(16)</code> or manual padding fields. This discrepancy
+often forces developers to write duplicate mirror structures on the CPU,
+manually insert padding variables, or use error-prone bit-packing
+tricks.</p>
+<h2 id="how-scalar-block-layout-works">How Scalar Block Layout
+Works</h2>
+<p>The scalar block layout layout modifier (enabled via
+<code>GL_EXT_scalar_block_layout</code> in GLSL and supported via
+<code>VK_EXT_scalar_block_layout</code> in Vulkan) replaces vector-based
+alignment rules with scalar alignment rules.</p>
+<p>Under a scalar layout:</p>
+<ul>
+<li>Every type is aligned to the size of its fundamental scalar
+component (e.g., 4 bytes for <code>float</code>, <code>int</code>, or
+<code>uint</code>; 8 bytes for <code>double</code> or 64-bit
+integers).</li>
+<li>A <code>vec3</code> requires only 4-byte alignment, meaning it takes
+exactly 12 contiguous bytes with no mandatory 4-byte padding at the
+end.</li>
+<li>Arrays and matrices are packed tightly according to their component
+scalar size rather than rounding elements up to 16 bytes.</li>
+</ul>
+<h2 id="direct-c-to-glsl-mapping">Direct C++ to GLSL Mapping</h2>
+<p>By adopting scalar layout, a C++ structure can directly mirror a GLSL
+shader storage buffer object (SSBO) without modification.</p>
+<p>Consider a mixed-member struct:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// C++ Struct</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Particle <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> position<span class="op">[</span><span class="dv">3</span><span class="op">];</span> <span class="co">// 12 bytes</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lifetime<span class="op">;</span>    <span class="co">// 4 bytes</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> id<span class="op">;</span>            <span class="co">// 4 bytes</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>In standard C++, <code>position</code> occupies 12 bytes, and
+<code>lifetime</code> immediately follows at offset 12 because 12 is
+naturally aligned to a 4-byte float boundary. The entire struct occupies
+20 bytes.</p>
+<p>Under <code>std430</code>, GLSL would treat a <code>vec3</code> as
+16-byte aligned, shifting <code>lifetime</code> to offset 16 and
+inflating the struct size to 24 or 32 bytes depending on layout
+rules.</p>
+<p>With scalar block layout applied in GLSL:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_scalar_block_layout : require</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Particle <span class="op">{</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> position<span class="op">;</span> <span class="co">// 12 bytes at offset 0</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lifetime<span class="op">;</span><span class="co">// 4 bytes at offset 12</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> id<span class="op">;</span>        <span class="co">// 4 bytes at offset 16</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>scalar<span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> ParticleBuffer <span class="op">{</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    Particle particles<span class="op">[];</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>The GLSL compiler positions <code>lifetime</code> at offset 12 and
+<code>id</code> at offset 16. The memory layout matches the C++ struct
+identically.</p>
+<h2 id="key-benefits">Key Benefits</h2>
+<ol type="1">
+<li><strong>Elimination of Manual Padding:</strong> Developers no longer
+need to insert artificial dummy variables (<code>float _pad;</code>)
+into C++ structs or maintain dual versions of data models.</li>
+<li><strong>Seamless Data Transfers:</strong> Buffer memory can be
+populated using direct memory copies (<code>memcpy</code>) or mapped
+pointers straight from CPU collections (such as
+<code>std::vector&lt;Particle&gt;</code>) without pre-processing or
+serialization passes.</li>
+<li><strong>Memory Bandwidth Optimization:</strong> Removing artificial
+padding reduces overall buffer sizes, saving GPU memory and reducing the
+required memory bandwidth for cache lines during high-throughput compute
+workloads.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

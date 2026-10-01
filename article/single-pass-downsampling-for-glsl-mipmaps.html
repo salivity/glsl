@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single Pass Downsampling for GLSL Mipmaps - glsl</title>
+    <meta name="description" content="Generating mipmap chains traditionally requires multiple compute or render passes with pipeline barriers inserted between every downsampled level. The Single Pass Downsampler (SPD) algorithm—originally developed by AMD as part of FidelityFX and widely">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/single-pass-downsampling-for-glsl-mipmaps">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Single Pass Downsampling for GLSL Mipmaps - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/single-pass-downsampling-for-glsl-mipmaps" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Generating mipmap chains traditionally requires multiple compute or render passes with pipeline barriers inserted between every downsampled level. The Single Pass Downsampler (SPD) algorithm—originally developed by AMD as part of FidelityFX and widely" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="single-pass-downsampling-for-glsl-mipmaps">Single Pass
+Downsampling for GLSL Mipmaps</h1>
+<p>Generating mipmap chains traditionally requires multiple compute or
+render passes with pipeline barriers inserted between every downsampled
+level. The <strong>Single Pass Downsampler (SPD)</strong>
+algorithm—originally developed by AMD as part of FidelityFX and widely
+implemented in modern GLSL compute pipelines—solves this bottleneck by
+constructing an entire mipmap pyramid within a single compute shader
+dispatch. By leveraging atomic counters in shared storage buffers
+alongside workgroup shared memory, SPD synchronizes workgroups
+dynamically on the GPU to process successive mip levels without
+returning control to the CPU host or requiring multiple dispatch
+calls.</p>
+<h3 id="the-multi-pass-bottleneck">The Multi-Pass Bottleneck</h3>
+<p>In standard mipmap generation, generating level <span
+class="math inline">\(N+1\)</span> requires level <span
+class="math inline">\(N\)</span> to be fully written and synchronized.
+On graphics APIs like Vulkan or OpenGL, this typically involves:</p>
+<ol type="1">
+<li>Binding level <span class="math inline">\(N\)</span> as a texture
+input and level <span class="math inline">\(N+1\)</span> as a
+framebuffer/storage image.</li>
+<li>Executing a dispatch or draw call.</li>
+<li>Inserting an execution and memory barrier.</li>
+<li>Repeating this process for every level down to <span
+class="math inline">\(1\times1\)</span>.</li>
+</ol>
+<p>This approach introduces significant CPU driver overhead and forces
+the GPU pipeline to drain repeatedly, leaving compute units
+underutilized during the final, lower-resolution mip levels.</p>
+<h3 id="the-single-pass-downsampler-spd-architecture">The Single Pass
+Downsampler (SPD) Architecture</h3>
+<p>The SPD algorithm circumvents separate dispatches by tracking
+completion dynamically across workgroups using global atomic operations.
+The process operates in two primary execution phases:</p>
+<h4 id="1-local-reduction-and-tile-processing">1. Local Reduction and
+Tile Processing</h4>
+<p>Each compute workgroup is assigned a distinct region of the base
+image (Mip 0), typically a <span class="math inline">\(64 \times
+64\)</span> texel tile.</p>
+<ul>
+<li>The workgroup loads texels from Mip 0 into workgroup shared memory
+(<code>shared</code> variables in GLSL).</li>
+<li>Using parallel reduction and workgroup barriers
+(<code>barrier()</code> and <code>memoryBarrierShared()</code>), the
+workgroup downsamples the tile locally to produce Mips 1 through 5.</li>
+<li>Each computed level is written to its respective storage image
+(<code>image2D</code>) using <code>imageStore</code>.</li>
+</ul>
+<h4 id="2-global-atomic-synchronization">2. Global Atomic
+Synchronization</h4>
+<p>Once a workgroup finishes processing its local tile up to Mip 5, it
+cannot proceed to Mip 6 independently because Mip 6 requires input from
+multiple adjacent workgroups.</p>
+<p>To resolve this dependency:</p>
+<ul>
+<li>The workgroup issues a <code>memoryBarrierImage()</code> to ensure
+its image writes are globally visible.</li>
+<li>The workgroup then executes an atomic increment
+(<code>atomicAdd</code>) on a global counter allocated in a Shader
+Storage Buffer Object (SSBO).</li>
+<li>All workgroups except the last one to finish terminate their
+execution.</li>
+<li>The final workgroup—identified when the atomic counter reaches the
+expected number of completed tiles—loads the downsampled data from Mip 5
+across all previous tiles into its shared memory.</li>
+<li>This surviving workgroup completes the remaining levels (Mip 6
+through the <span class="math inline">\(1\times1\)</span> tail) alone in
+the same dispatch.</li>
+</ul>
+<h3 id="glsl-implementation-requirements">GLSL Implementation
+Requirements</h3>
+<p>Implementing SPD in GLSL requires specific layout qualifiers and
+synchronization primitives:</p>
+<ul>
+<li><strong>Storage Images:</strong> Output mip levels are bound as an
+array of storage images or individual image bindings using
+<code>layout(binding = ..., [format]) writeonly uniform image2D u_Mips[]</code>.</li>
+<li><strong>Atomic Counter Storage:</strong> A shared SSBO holds the
+atomic counter array:
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">buffer</span> CounterBuffer <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> workgroupCounter<span class="op">[];</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div></li>
+<li><strong>Memory Coherence:</strong> Ensuring that image writes from
+early workgroups are visible to the final workgroup requires matching
+memory qualifiers (such as <code>coherent</code> on storage images if
+supported, or invoking <code>memoryBarrierImage()</code> prior to
+updating the atomic counter).</li>
+<li><strong>Workgroup Size:</strong> Thread configurations are commonly
+set to 256 threads (<code>layout(local_size_x = 256) in;</code>),
+enabling efficient downsampling patterns for <span
+class="math inline">\(64 \times 64\)</span> pixel inputs using <span
+class="math inline">\(2 \times 2\)</span> or <span
+class="math inline">\(4 \times 4\)</span> quad-reductions.</li>
+</ul>
+<h3 id="performance-benefits">Performance Benefits</h3>
+<p>By consolidating the mip chain generation into a single GPU
+invocation, the SPD algorithm achieves several performance benefits:</p>
+<ul>
+<li><strong>Elimination of Host Overhead:</strong> Only a single draw or
+dispatch command is recorded into the command buffer.</li>
+<li><strong>Reduced Pipeline Stalls:</strong> Eliminates intermediate
+pipeline barriers between mip levels.</li>
+<li><strong>Bandwidth Conservation:</strong> Higher mip levels are
+downsampled directly through fast LDS (Local Data Share/shared memory)
+rather than round-tripping through VRAM repeatedly.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GLSL subgroupMin Works Across Subgroup Lanes - glsl</title>
+    <meta name="description" content="GLSL’s subgroupMin function is an arithmetic subgroup operation that calculates the minimum scalar or vector component value across all active invocations within a subgroup without using shared memory. This article explains the underlying mechanism of">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-glsl-subgroup-min-works-across-subgroup-lanes">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GLSL subgroupMin Works Across Subgroup Lanes - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-glsl-subgroup-min-works-across-subgroup-lanes" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="GLSL’s subgroupMin function is an arithmetic subgroup operation that calculates the minimum scalar or vector component value across all active invocations within a subgroup without using shared memory. This article explains the underlying mechanism of" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-glsl-subgroupmin-works-across-subgroup-lanes">How GLSL
+subgroupMin Works Across Subgroup Lanes</h1>
+<p>GLSL’s <code>subgroupMin</code> function is an arithmetic subgroup
+operation that calculates the minimum scalar or vector component value
+across all active invocations within a subgroup without using shared
+memory. This article explains the underlying mechanism of
+<code>subgroupMin</code>, detailing how hardware-level lane
+communication, active lane masking, and parallel SIMD reduction trees
+work together to identify and distribute the smallest lane value with
+minimal latency.</p>
+<h3 id="the-subgroup-context">The Subgroup Context</h3>
+<p>In modern GPUs, threads are grouped into hardware-level SIMD
+execution units known as subgroups (referred to as "warps" on NVIDIA
+hardware or "wavefronts" on AMD and Intel hardware). A subgroup
+typically consists of 16, 32, or 64 invocations executing instructions
+in lockstep. Each individual thread in this unit is assigned an index
+called a lane ID.</p>
+<h3 id="active-lane-masking">Active Lane Masking</h3>
+<p>Before executing a reduction, the GPU evaluates which lanes are
+currently active. Invocations that have diverged (due to non-uniform
+branching) or terminated are marked inactive via the hardware's
+execution mask.</p>
+<p>When <code>subgroupMin(value)</code> is evaluated:</p>
+<ul>
+<li>Only currently active invocations participate in the operation.</li>
+<li>Inactive lanes are masked out by hardware, ensuring their undefined
+or stale register values do not affect the minimum calculation.</li>
+<li>If all lanes are inactive or an invocation is a helper invocation,
+implementation-specific masking rules ensure inactive lane values are
+ignored.</li>
+</ul>
+<h3 id="hardware-reduction-trees">Hardware Reduction Trees</h3>
+<p>Rather than iteratively comparing values one lane at a time, GPUs
+calculate <code>subgroupMin</code> through parallel tree reductions
+directly inside SIMD registers. This is executed using cross-lane
+instructions, such as shuffle, permute, or dedicated reduction
+hardware.</p>
+<p>In an <span class="math inline">\(N\)</span>-lane subgroup (where
+<span class="math inline">\(N\)</span> is typically a power of two), the
+calculation requires <span class="math inline">\(\log_2(N)\)</span>
+steps:</p>
+<ol type="1">
+<li><strong>Step 1:</strong> Lanes exchange their values with
+neighboring lanes at an offset (e.g., offset 1). Each lane computes the
+minimum between its own value and the neighbor's value.</li>
+<li><strong>Step 2:</strong> Lanes exchange these intermediate minimums
+with lanes at double the previous offset (e.g., offset 2) and take the
+minimum again.</li>
+<li><strong>Step 3 through <span
+class="math inline">\(\log_2(N)\)</span>:</strong> This process repeats,
+doubling the step size (e.g., offsets 4, 8, 16) until every lane’s
+calculation has incorporated the values from every other active lane in
+the subgroup.</li>
+</ol>
+<p>Certain architectures bypass explicit shuffle steps entirely by
+routing the values through dedicated, hardware-level crossbar reduction
+units (ALUs), which resolve the minimum across all participating
+registers in a small, fixed number of clock cycles.</p>
+<h3 id="distribution-and-synchronization">Distribution and
+Synchronization</h3>
+<p>Because the subgroup executes within the same hardware compute unit,
+the calculation requires no traditional memory synchronization barriers
+or cache flushes. Once the final step completes:</p>
+<ul>
+<li>The resolved minimum value is placed directly into the target
+register of every active invocation within that subgroup.</li>
+<li>All participating lanes immediately have access to the exact same
+minimum scalar or component value, allowing execution to continue in
+parallel.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

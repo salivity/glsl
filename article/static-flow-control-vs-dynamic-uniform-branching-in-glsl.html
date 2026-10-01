@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Static Flow Control vs Dynamic Uniform Branching in GLSL - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), managing code paths is critical for balancing runtime performance and shader maintainability. While compile-time static flow control and dynamic uniform branching both direct execution flow, they differ fundamentally in">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/static-flow-control-vs-dynamic-uniform-branching-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Static Flow Control vs Dynamic Uniform Branching in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/static-flow-control-vs-dynamic-uniform-branching-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), managing code paths is critical for balancing runtime performance and shader maintainability. While compile-time static flow control and dynamic uniform branching both direct execution flow, they differ fundamentally in" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="static-flow-control-vs-dynamic-uniform-branching-in-glsl">Static
+Flow Control vs Dynamic Uniform Branching in GLSL</h1>
+<p>In OpenGL Shading Language (GLSL), managing code paths is critical
+for balancing runtime performance and shader maintainability. While
+compile-time static flow control and dynamic uniform branching both
+direct execution flow, they differ fundamentally in when decisions are
+evaluated, how they impact the GPU hardware, and how they handle shader
+program generation. Compile-time flow control eliminates code paths
+prior to execution via the preprocessor or constant folding, while
+dynamic uniform branching resolves execution paths at runtime using
+values that remain constant across an entire draw call.</p>
+<h2 id="compile-time-static-flow-control">Compile-Time Static Flow
+Control</h2>
+<p>Compile-time static flow control relies on preprocessor directives
+(such as <code>#if</code>, <code>#ifdef</code>, and <code>#endif</code>)
+or control statements whose conditions consist entirely of compile-time
+constants. Because the state of the condition is fully known when the
+shader code is compiled, the driver optimizes away any untaken paths
+through dead-code elimination.</p>
+<ul>
+<li><strong>Evaluation Phase:</strong> Occurs during shader compilation
+on the CPU before the shader binary is sent to the GPU.</li>
+<li><strong>Hardware Impact:</strong> Generates zero runtime branching
+overhead. The resulting GPU assembly contains only the instructions for
+the active path, preserving optimal register usage and instruction
+caching.</li>
+<li><strong>Shader Management:</strong> Requires generating multiple
+specialized shader variations (shader permutations) to support different
+visual features or platform configurations, which can lead to larger
+build sizes and shader pipeline compilation hitches.</li>
+</ul>
+<h2 id="dynamic-uniform-branching">Dynamic Uniform Branching</h2>
+<p>Dynamic uniform branching uses standard language control flow
+statements (<code>if</code>, <code>else</code>, <code>switch</code>,
+<code>for</code>, <code>while</code>) conditioned on uniform variables.
+Uniforms are values provided by the host application that remain
+constant for every parallel invocation (thread) within a single draw
+call or dispatch group.</p>
+<ul>
+<li><strong>Evaluation Phase:</strong> Occurs at runtime on the GPU
+during execution.</li>
+<li><strong>Hardware Impact:</strong> Modern GPU architectures execute
+threads in lockstep groups called warps or wavefronts. Because a uniform
+condition evaluates to the exact same boolean result across all threads
+in a draw call, all threads follow the identical execution path. This
+avoids thread divergence (warp serialization), meaning there is no
+performance penalty from executing both sides of the branch.</li>
+<li><strong>Hardware Overhead:</strong> While warp divergence is
+avoided, the compiled shader must still contain the code and register
+allocations for both potential paths. This can increase register
+pressure and slightly decrease instruction cache efficiency compared to
+a statically specialized shader.</li>
+<li><strong>Shader Management:</strong> Avoids the combinatorial
+explosion of shader variants by allowing a single shader program to
+alter its behavior between draw calls simply by updating uniform
+values.</li>
+</ul>
+<h2 id="key-differences-summary">Key Differences Summary</h2>
+<ul>
+<li><strong>Decision Point:</strong> Compile-time static flow control is
+resolved during compilation; dynamic uniform branching is evaluated
+during the draw call execution on the GPU.</li>
+<li><strong>Divergence Risk:</strong> Neither mechanism causes thread
+divergence within a warp, but compile-time eliminates the alternative
+branch entirely, whereas uniform branching retains the branch logic in
+the compiled instruction stream.</li>
+<li><strong>Register Allocation:</strong> Compile-time flow control
+optimizes register usage strictly for the chosen path. Dynamic uniform
+branching must allocate enough registers to satisfy the most
+resource-heavy branch, even if that branch is not taken.</li>
+<li><strong>Workflow Flexibility:</strong> Dynamic uniform branching
+allows swapping behaviors per-object or per-frame without pipeline
+switching, whereas static flow control requires binding a completely
+different compiled shader program.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

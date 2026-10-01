@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Atomic Counter Contention Performance - glsl</title>
+    <meta name="description" content="When thousands of GPU threads concurrently access a single GLSL atomic counter, the resulting memory contention forces massively parallel hardware to serialize execution, often causing execution time to increase by 10x to over 100x compared to non-conten">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-atomic-counter-contention-performance">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Atomic Counter Contention Performance - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-atomic-counter-contention-performance" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="When thousands of GPU threads concurrently access a single GLSL atomic counter, the resulting memory contention forces massively parallel hardware to serialize execution, often causing execution time to increase by 10x to over 100x compared to non-conten" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-atomic-counter-contention-performance">GLSL Atomic Counter
+Contention Performance</h1>
+<p>When thousands of GPU threads concurrently access a single GLSL
+atomic counter, the resulting memory contention forces massively
+parallel hardware to serialize execution, often causing execution time
+to increase by 10x to over 100x compared to non-contended operations.
+This article explains the underlying hardware mechanics responsible for
+this performance drop, quantifies the latency penalties, and details the
+standard architectural patterns used to alleviate atomic
+bottlenecks.</p>
+<h3 id="the-mechanics-of-atomic-serialization">The Mechanics of Atomic
+Serialization</h3>
+<p>Modern GPUs achieve high throughput by executing thousands of threads
+simultaneously across Compute Units (CUs) or Streaming Multiprocessors
+(SMs). However, atomic operations such as <code>atomicAdd()</code> on a
+single GLSL buffer variable require mutual exclusion to ensure memory
+consistency.</p>
+<p>When thousands of invocations target the exact same 32-bit or 64-bit
+memory address:</p>
+<ol type="1">
+<li><strong>Hardware Queue Saturation:</strong> Atomic updates are
+routed to a single memory partition and handled sequentially by
+dedicated atomic execution units, typically located at the L2 cache or
+memory controller level.</li>
+<li><strong>Lockstep Stalls:</strong> Within a warp or wavefront
+(typically 32 to 64 threads), atomic requests to the same address are
+serialized. If all 32 threads in a warp access the counter, the warp
+must issue 32 distinct operations instead of executing in a single
+cycle.</li>
+<li><strong>Cross-SM Interconnect Congestion:</strong> When multiple
+warps across all SMs bombard the same memory bank, the GPU’s internal
+crossbar or interconnect becomes saturated with traffic. Memory
+pipelines stall, preventing independent arithmetic and texture
+instructions from proceeding.</li>
+</ol>
+<h3 id="the-quantified-performance-penalty">The Quantified Performance
+Penalty</h3>
+<p>The actual performance penalty depends heavily on the GPU
+architecture, but the impact is universally severe:</p>
+<ul>
+<li><strong>Throughput Collapse:</strong> Under zero contention (each
+thread accessing distinct memory), atomic throughput scales nearly
+linearly with the number of processing units. Under absolute contention
+on a single address, throughput drops to the clock frequency of the
+single servicing L2 cache bank or atomic unit—often capped at roughly
+one atomic operation every 1 to 4 clock cycles.</li>
+<li><strong>Latency Multipliers:</strong> A standard L2 cache hit
+typically resolves within 50 to 100 cycles. With severe contention from
+tens of thousands of active threads, request queues back up, causing
+effective memory latency to spike to thousands of cycles per
+thread.</li>
+<li><strong>Overall Execution Degradation:</strong> In compute or
+fragment shaders where a single global counter is incremented by every
+invocation, benchmarks routinely show a 90% to 99% reduction in shader
+dispatch efficiency compared to a baseline without global atomics.</li>
+</ul>
+<h3 id="optimization-strategies-to-avoid-contention">Optimization
+Strategies to Avoid Contention</h3>
+<p>Direct updates to a single global atomic counter should be avoided in
+performance-critical paths. The following patterns distribute or
+eliminate the contention:</p>
+<ul>
+<li><strong>Subgroup/Warp-Level Aggregation:</strong> Use GLSL subgroup
+extensions (e.g., <code>GL_KHR_shader_subgroup_arithmetic</code>) to sum
+values across the warp using intrinsic ballot or shuffle instructions
+(<code>subgroupAdd()</code>). A single designated thread within the
+subgroup then executes the global <code>atomicAdd()</code> using the
+subgroup's collective total, reducing global memory transactions by a
+factor of 32 or 64.</li>
+<li><strong>Shared Memory Reductions:</strong> Within a compute
+workgroup, perform the accumulation in fast, low-latency
+<code>shared</code> memory. Once the workgroup completes the local
+reduction, a single thread updates the global counter.</li>
+<li><strong>Prefix Sum (Scan) Algorithms:</strong> For scenarios like
+stream compaction or append buffers, replace unbounded atomic counters
+with multi-pass prefix sums to calculate write offsets deterministically
+without runtime memory contention.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

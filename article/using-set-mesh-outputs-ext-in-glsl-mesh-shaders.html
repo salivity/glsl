@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Using SetMeshOutputsEXT in GLSL Mesh Shaders - glsl</title>
+    <meta name="description" content="This article explains how the SetMeshOutputsEXT built-in function operates in GLSL mesh shaders under the VKEXTmeshshader extension. It details how the function dynamically sets runtime vertex and primitive counts, how it interacts with compile-time maxi">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/using-set-mesh-outputs-ext-in-glsl-mesh-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Using SetMeshOutputsEXT in GLSL Mesh Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/using-set-mesh-outputs-ext-in-glsl-mesh-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the SetMeshOutputsEXT built-in function operates in GLSL mesh shaders under the VKEXTmeshshader extension. It details how the function dynamically sets runtime vertex and primitive counts, how it interacts with compile-time maxi" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="using-setmeshoutputsext-in-glsl-mesh-shaders">Using
+SetMeshOutputsEXT in GLSL Mesh Shaders</h1>
+<p>This article explains how the <code>SetMeshOutputsEXT</code> built-in
+function operates in GLSL mesh shaders under the
+<code>VK_EXT_mesh_shader</code> extension. It details how the function
+dynamically sets runtime vertex and primitive counts, how it interacts
+with compile-time maximum allocation limits, the execution rules
+required to use it safely, and a concise code example demonstrating its
+proper integration.</p>
+<h2 id="compile-time-maximums-vs-runtime-allocations">Compile-Time
+Maximums vs. Runtime Allocations</h2>
+<p>When writing a mesh shader in GLSL, you must declare the maximum
+number of vertices and primitives a workgroup can ever emit using
+compile-time layout qualifiers:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">32</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">triangles</span><span class="op">,</span> <span class="dt">max_vertices</span> <span class="op">=</span> <span class="dv">64</span><span class="op">,</span> max_primitives <span class="op">=</span> <span class="dv">126</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span></code></pre></div>
+<p>These qualifiers define the upper memory bounds the hardware
+allocates for the workgroup. However, a workgroup rarely needs to output
+the maximum capacity every time, especially when performing GPU-driven
+culling (such as back-face or frustum culling).
+<code>SetMeshOutputsEXT</code> provides the mechanism to declare the
+exact number of vertices and primitives generated during a specific
+workgroup execution.</p>
+<h2 id="how-setmeshoutputsext-functions">How SetMeshOutputsEXT
+Functions</h2>
+<p>The function signature is defined as:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">SetMeshOutputsEXT</span><span class="op">(</span><span class="dt">uint</span> vertexCount<span class="op">,</span> <span class="dt">uint</span> primitiveCount<span class="op">);</span></span></code></pre></div>
+<p>When called, it informs the rasterizer and downstream pipeline stages
+of the actual topology size:</p>
+<ul>
+<li><strong><code>vertexCount</code></strong>: The dynamic number of
+vertices this workgroup will populate in output arrays like
+<code>gl_MeshVerticesEXT[]</code>.</li>
+<li><strong><code>primitiveCount</code></strong>: The dynamic number of
+primitives (e.g., triangles, lines, or points) this workgroup will
+define in index arrays like
+<code>gl_PrimitiveTriangleIndicesEXT[]</code>.</li>
+</ul>
+<p>Both parameters must be less than or equal to the values declared in
+<code>max_vertices</code> and <code>max_primitives</code>. Passing
+values greater than the declared maximums results in undefined behavior.
+If either count is set to <code>0</code>, the pipeline emits no geometry
+for that category, allowing workgroups to discard entire meshlets with
+zero primitive generation overhead.</p>
+<h2 id="execution-rules-and-placement">Execution Rules and
+Placement</h2>
+<p>To use <code>SetMeshOutputsEXT</code> correctly, you must adhere to
+several execution constraints:</p>
+<ol type="1">
+<li><strong>Order of Execution</strong>: You must call
+<code>SetMeshOutputsEXT</code> before writing to any per-vertex or
+per-primitive output arrays. Writing to outputs before setting their
+counts is invalid.</li>
+<li><strong>Workgroup Uniformity</strong>: The function modifies the
+output state for the entire workgroup. While it does not strictly need
+to be called by every thread, if multiple threads call it, they must
+pass identical values. The standard practice is to let invocation 0 set
+the counts or compute the counts uniformly across the workgroup.</li>
+<li><strong>Single Execution</strong>: The function should be executed
+once per workgroup before the output phase. Calling it multiple times
+with varying values within the same workgroup leads to undefined
+behavior.</li>
+</ol>
+<h2 id="basic-implementation-example">Basic Implementation Example</h2>
+<p>The following pattern demonstrates how dynamic counts are evaluated
+and assigned before populating vertex and index data:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_mesh_shader : require</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">32</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">triangles</span><span class="op">,</span> <span class="dt">max_vertices</span> <span class="op">=</span> <span class="dv">3</span><span class="op">,</span> max_primitives <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> gl_MeshPerVertexEXT <span class="op">{</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> <span class="bu">gl_Position</span><span class="op">;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> gl_MeshVerticesEXT<span class="op">[];</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Determine dynamic visibility (e.g., dynamic LOD or culling check)</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> isVisible <span class="op">=</span> <span class="kw">true</span><span class="op">;</span> </span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> numVertices <span class="op">=</span> isVisible <span class="op">?</span> <span class="dv">3</span> <span class="op">:</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> numPrimitives <span class="op">=</span> isVisible <span class="op">?</span> <span class="dv">1</span> <span class="op">:</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Declare dynamic outputs prior to writing output arrays</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">SetMeshOutputsEXT</span><span class="op">(</span>numVertices<span class="op">,</span> numPrimitives<span class="op">);</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(!</span>isVisible<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Populate data safely within bounds</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">gl_LocalInvocationIndex</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>        gl_PrimitiveTriangleIndicesEXT<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dt">uvec3</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">);</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">gl_LocalInvocationIndex</span> <span class="op">&lt;</span> <span class="dv">3</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>        gl_MeshVerticesEXT<span class="op">[</span><span class="bu">gl_LocalInvocationIndex</span><span class="op">].</span><span class="fu">gl_Position</span> <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Through this mechanism, <code>SetMeshOutputsEXT</code> grants mesh
+shaders fine-grained control over workload amplification and dynamic
+data output directly on the GPU.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

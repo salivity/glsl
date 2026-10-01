@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gl_MaxDrawBuffers and Multiple Render Targets in GLSL - glsl</title>
+    <meta name="description" content="This article explains the role of the glMaxDrawBuffers built-in constant in OpenGL Shading Language (GLSL) and how it governs Multiple Render Target (MRT) implementations. It details how this variable sets a hard limit on simultaneous fragment shader out">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gl-max-draw-buffers-and-multiple-render-targets-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="gl_MaxDrawBuffers and Multiple Render Targets in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gl-max-draw-buffers-and-multiple-render-targets-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains the role of the glMaxDrawBuffers built-in constant in OpenGL Shading Language (GLSL) and how it governs Multiple Render Target (MRT) implementations. It details how this variable sets a hard limit on simultaneous fragment shader out" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="gl_maxdrawbuffers-and-multiple-render-targets-in-glsl">gl_MaxDrawBuffers
+and Multiple Render Targets in GLSL</h1>
+<p>This article explains the role of the <code>gl_MaxDrawBuffers</code>
+built-in constant in OpenGL Shading Language (GLSL) and how it governs
+Multiple Render Target (MRT) implementations. It details how this
+variable sets a hard limit on simultaneous fragment shader outputs, the
+relationship between hardware capabilities and shader compilation, and
+the practical implications for architecting rendering pipelines such as
+deferred shading.</p>
+<h2 id="understanding-gl_maxdrawbuffers">Understanding
+gl_MaxDrawBuffers</h2>
+<p>In GLSL, <code>gl_MaxDrawBuffers</code> is a built-in constant that
+defines the maximum number of simultaneous render targets to which a
+fragment shader can write. It reflects the implementation-dependent
+OpenGL state limit accessed through the CPU-side query
+<code>glGetIntegerv(GL_MAX_DRAW_BUFFERS, ...)</code>.</p>
+<p>When executing a draw call, the pipeline routes output values from
+the fragment shader to attached color buffers in a Framebuffer Object
+(FBO). The value of <code>gl_MaxDrawBuffers</code> acts as the
+compile-time and link-time ceiling for these output channels.</p>
+<h2 id="how-the-constraint-is-enforced-in-glsl">How the Constraint is
+Enforced in GLSL</h2>
+<p>The constraint manifests differently depending on whether you use
+legacy GLSL or modern GLSL with user-defined outputs:</p>
+<h3 id="1-legacy-glsl-gl_fragdata">1. Legacy GLSL
+(<code>gl_FragData</code>)</h3>
+<p>In legacy versions of GLSL (such as GLSL 1.20), multiple render
+targets are accessed via the built-in array:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="va">gl_FragData</span><span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> albedo<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="va">gl_FragData</span><span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">=</span> normal<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>In this context, <code>gl_FragData</code> is statically sized as
+<code>gl_FragData[gl_MaxDrawBuffers]</code>. Attempting to access an
+index greater than or equal to <code>gl_MaxDrawBuffers</code> results in
+a compilation or link error.</p>
+<h3 id="2-modern-glsl-layoutlocation--n">2. Modern GLSL
+(<code>layout(location = n)</code>)</h3>
+<p>In modern GLSL (version 3.30 and above), MRT is handled using
+explicitly bound <code>out</code> variables:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> outAlbedo<span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> outNormal<span class="op">;</span></span></code></pre></div>
+<p>The <code>location</code> qualifier specifies the index of the draw
+buffer destination. If you assign an output to a <code>location</code>
+index that is greater than or equal to <code>gl_MaxDrawBuffers</code>,
+the shader will fail to link. The hardware cannot allocate an output
+register beyond this index for simultaneous writing.</p>
+<h2 id="relationship-to-framebuffer-limits">Relationship to Framebuffer
+Limits</h2>
+<p>A common point of confusion is the distinction between two related
+OpenGL limits:</p>
+<ul>
+<li><strong><code>GL_MAX_DRAW_BUFFERS</code> (mirrored by
+<code>gl_MaxDrawBuffers</code>):</strong> The maximum number of color
+buffers that a shader can write to in a single pass via
+<code>glDrawBuffers</code>.</li>
+<li><strong><code>GL_MAX_COLOR_ATTACHMENTS</code>:</strong> The maximum
+number of color attachments an FBO can hold simultaneously.</li>
+</ul>
+<p>While an FBO might support 8 or 16 color attachments,
+<code>gl_MaxDrawBuffers</code> limits how many of those attachments can
+be written to simultaneously in one drawing operation. The active
+outputs mapped by <code>glDrawBuffers</code> cannot exceed
+<code>gl_MaxDrawBuffers</code>.</p>
+<h2 id="practical-architectural-implications">Practical Architectural
+Implications</h2>
+<ol type="1">
+<li><strong>G-Buffer Design in Deferred Rendering:</strong> Complex
+pipelines often need to output diffuse color, world normals, roughness,
+metallic properties, and depth/velocity in a single pass. Developers
+must verify that the total number of distinct render targets required
+does not exceed <code>gl_MaxDrawBuffers</code>. The core specification
+guarantees a minimum of at least 8 draw buffers in modern desktop
+OpenGL, though embedded systems (OpenGL ES) may guarantee as few as
+4.</li>
+<li><strong>Channel Packing:</strong> When an algorithm requires more
+attributes than <code>gl_MaxDrawBuffers</code> permits, developers must
+pack multiple scalar properties into single four-channel (RGBA) vectors
+rather than using separate render targets.</li>
+<li><strong>Multi-Pass Fallbacks:</strong> If the required data still
+exceeds <code>gl_MaxDrawBuffers</code>, the rendering algorithm must be
+split into multiple passes, redrawing the geometry and outputting the
+remaining data to a secondary set of buffers.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

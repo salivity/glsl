@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gl_MaxComputeWorkGroupInvocations Limit in GLSL - glsl</title>
+    <meta name="description" content="This article explains how the built-in GLSL constant glMaxComputeWorkGroupInvocations restricts the total number of execution threads within a compute shader workgroup. Compute shaders organize parallel execution into local workgroups defined across thre">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gl-max-compute-work-group-invocations-limit-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="gl_MaxComputeWorkGroupInvocations Limit in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gl-max-compute-work-group-invocations-limit-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the built-in GLSL constant glMaxComputeWorkGroupInvocations restricts the total number of execution threads within a compute shader workgroup. Compute shaders organize parallel execution into local workgroups defined across thre" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="gl_maxcomputeworkgroupinvocations-limit-in-glsl">gl_MaxComputeWorkGroupInvocations
+Limit in GLSL</h1>
+<p>This article explains how the built-in GLSL constant
+<code>gl_MaxComputeWorkGroupInvocations</code> restricts the total
+number of execution threads within a compute shader workgroup. Compute
+shaders organize parallel execution into local workgroups defined across
+three dimensions, and this constant serves as a hard limit on their
+combined product. Understanding how this limitation interacts with
+per-dimension size limits, shader compilation, and underlying GPU
+hardware architecture is essential for writing valid, high-performance
+compute shaders.</p>
+<h3 id="the-definition-and-mathematical-constraint">The Definition and
+Mathematical Constraint</h3>
+<p>In OpenGL compute shaders, you define the dimensions of a local
+workgroup using the layout qualifier in your GLSL code:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span>local_size_x <span class="op">=</span> X<span class="op">,</span> local_size_y <span class="op">=</span> Y<span class="op">,</span> local_size_z <span class="op">=</span> Z<span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span></code></pre></div>
+<p>The built-in constant <code>gl_MaxComputeWorkGroupInvocations</code>
+dictates the maximum total number of invocations (threads) allowed in a
+single workgroup. The OpenGL specification mandates that the product of
+the workgroup dimensions must not exceed this value:</p>
+<p><span class="math display">\[X \times Y \times Z \le
+\text{gl\_MaxComputeWorkGroupInvocations}\]</span></p>
+<p>If the product of your dimensions exceeds this limit, the shader
+compiler or linker will issue an error and fail to create the shader
+program.</p>
+<h3 id="distinction-from-gl_maxcomputeworkgroupsize">Distinction from
+<code>gl_MaxComputeWorkGroupSize</code></h3>
+<p>A common source of confusion is the difference between
+<code>gl_MaxComputeWorkGroupInvocations</code> and
+<code>gl_MaxComputeWorkGroupSize</code>. They govern workgroup
+boundaries differently:</p>
+<ul>
+<li><strong><code>gl_MaxComputeWorkGroupSize</code> (an array of three
+integers):</strong> Sets the maximum allowable size along each
+individual axis (<span class="math inline">\(X\)</span>, <span
+class="math inline">\(Y\)</span>, or <span
+class="math inline">\(Z\)</span>).</li>
+<li><strong><code>gl_MaxComputeWorkGroupInvocations</code> (a single
+integer):</strong> Sets the absolute cap on the <em>total volume</em>
+(<span class="math inline">\(X \times Y \times Z\)</span>) of the
+workgroup.</li>
+</ul>
+<p>For example, a typical modern GPU might report:</p>
+<ul>
+<li><code>gl_MaxComputeWorkGroupSize.x</code> = 1024</li>
+<li><code>gl_MaxComputeWorkGroupSize.y</code> = 1024</li>
+<li><code>gl_MaxComputeWorkGroupSize.z</code> = 64</li>
+<li><code>gl_MaxComputeWorkGroupInvocations</code> = 1024</li>
+</ul>
+<p>Under these hardware limits, setting a workgroup layout to
+<code>(local_size_x = 1024, local_size_y = 1, local_size_z = 1)</code>
+is valid because <span class="math inline">\(1024 \le 1024\)</span>.
+However, setting the layout to
+<code>(local_size_x = 32, local_size_y = 33, local_size_z = 1)</code>
+violates the limit, because <span class="math inline">\(32 \times 33 =
+1056\)</span>, which exceeds the 1024 invocation ceiling—even though
+individual <span class="math inline">\(X\)</span> and <span
+class="math inline">\(Y\)</span> values are well within their respective
+1024 limits.</p>
+<h3 id="hardware-rationale">Hardware Rationale</h3>
+<p>GPU hardware imposes <code>gl_MaxComputeWorkGroupInvocations</code>
+due to physical resource allocation within execution units (such as
+NVIDIA Streaming Multiprocessors or AMD Compute Units). Every invocation
+within a workgroup requires physical resources:</p>
+<ol type="1">
+<li><strong>Register Allocation:</strong> Every thread allocates a set
+of vector and scalar registers. Larger workgroups consume more register
+space simultaneously.</li>
+<li><strong>Shared Memory (<code>shared</code> variables):</strong>
+Workgroups share a block of high-speed, on-chip SRAM. Hardware
+schedulers can only coordinate a fixed maximum number of threads
+accessing this block at one time.</li>
+<li><strong>Warp/Wavefront Scheduling:</strong> GPUs group invocations
+into warps (32 threads) or wavefronts (32 or 64 threads). The hardware
+scheduler limits how many active warps or wavefronts can belong to a
+single cooperative thread block.</li>
+</ol>
+<p>The core OpenGL 4.3 specification requires implementations to support
+a minimum <code>gl_MaxComputeWorkGroupInvocations</code> value of at
+least 1024, matching standard hardware architecture requirements across
+major vendors.</p>
+<h3 id="querying-the-limit">Querying the Limit</h3>
+<p>To ensure your application creates portable compute shaders, you
+should query this limit on the CPU side before dispatching compute
+workloads:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>GLint maxInvocations<span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>glGetIntegerv<span class="op">(</span>GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS<span class="op">,</span> <span class="op">&amp;</span>maxInvocations<span class="op">);</span></span></code></pre></div>
+<p>Within GLSL, the constant is automatically available as a
+compile-time value, enabling static checks and sizing of shared data
+structures:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">shared</span> <span class="dt">float</span> sharedData<span class="op">[</span>gl_MaxComputeWorkGroupInvocations<span class="op">];</span></span></code></pre></div>
+<p>Designing workgroup dimensions that conform to
+<code>gl_MaxComputeWorkGroupInvocations</code>—while keeping total
+threads as multiples of native warp or wavefront sizes (typically 32 or
+64)—ensures maximum hardware occupancy and optimal shader compilation
+across different graphics hardware.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Ray Queries: Validating Procedural Hits - glsl</title>
+    <meta name="description" content="GLSL ray queries enable shaders to traverse acceleration structures inline, halting at candidate intersections to allow user code to accept, reject, or compute hit results. When traversing procedural geometry defined by Axis-Aligned Bounding Boxes (AABBs">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-ray-queries-validating-procedural-hits">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Ray Queries: Validating Procedural Hits - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-ray-queries-validating-procedural-hits" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="GLSL ray queries enable shaders to traverse acceleration structures inline, halting at candidate intersections to allow user code to accept, reject, or compute hit results. When traversing procedural geometry defined by Axis-Aligned Bounding Boxes (AABBs" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-ray-queries-validating-procedural-hits">GLSL Ray Queries:
+Validating Procedural Hits</h1>
+<p>GLSL ray queries enable shaders to traverse acceleration structures
+inline, halting at candidate intersections to allow user code to accept,
+reject, or compute hit results. When traversing procedural geometry
+defined by Axis-Aligned Bounding Boxes (AABBs), ray queries pause to let
+the developer determine if a mathematical primitive inside the bounding
+volume was actually struck. This article explains the procedural
+candidate hit validation lifecycle in <code>GL_EXT_ray_query</code>,
+detailing the operational boundary between custom intersection logic,
+parametric hit generation, and the confirmation routines that commit
+intersections to the ray traversal state.</p>
+<h3 id="ray-query-traversal-and-candidate-discovery">Ray Query Traversal
+and Candidate Discovery</h3>
+<p>During an inline ray query traversal loop driven by
+<code>rayQueryProceedEXT()</code>, the traversal stops whenever the
+hardware traversal unit encounters an intersection that cannot be
+automatically resolved. For procedural geometry, the acceleration
+structure stores bounding boxes rather than explicit polygons.</p>
+<p>When a ray intersects an AABB, <code>rayQueryProceedEXT()</code>
+returns <code>true</code>, and calling
+<code>rayQueryGetIntersectionTypeEXT(rayQuery, false)</code> yields
+<code>gl_RayQueryCandidateIntersectionAABBEXT</code>. This flags that a
+procedural primitive's bounding volume has been entered, temporarily
+suspending traversal so that the shader can execute analytical
+intersection math.</p>
+<h3 id="procedural-generation-vs-triangle-confirmation">Procedural
+Generation vs. Triangle Confirmation</h3>
+<p>A critical architectural distinction in <code>GL_EXT_ray_query</code>
+is how triangle and procedural candidates are confirmed:</p>
+<ul>
+<li><strong>Triangle Candidates
+(<code>rayQueryConfirmIntersectionEXT</code>):</strong> Built-in
+fixed-function intersection units automatically calculate triangle
+barycentrics and the intersection distance <span
+class="math inline">\(t\)</span>. The shader only needs to decide
+whether to accept or ignore the hit (for example, evaluating alpha
+masking) using
+<code>rayQueryConfirmIntersectionEXT(rayQuery)</code>.</li>
+<li><strong>Procedural Candidates
+(<code>rayQueryGenerateIntersectionEXT</code>):</strong> Because an AABB
+only represents a bounding volume, no hit point or parametric distance
+<span class="math inline">\(t\)</span> exists until the shader
+calculates it. Therefore, procedural hits are not confirmed via the
+parameterless <code>rayQueryConfirmIntersectionEXT()</code>. Instead,
+they are validated and submitted using
+<code>rayQueryGenerateIntersectionEXT(rayQuery, float tHit)</code>.</li>
+</ul>
+<p>Attempting to execute <code>rayQueryConfirmIntersectionEXT()</code>
+on a candidate of type
+<code>gl_RayQueryCandidateIntersectionAABBEXT</code> is invalid
+according to the SPIR-V and GLSL specifications; the procedural
+validation path strictly requires generating an explicit distance <span
+class="math inline">\(t\)</span>.</p>
+<h3 id="the-procedural-hit-validation-workflow">The Procedural Hit
+Validation Workflow</h3>
+<p>Validating a procedural candidate within a GLSL ray query involves a
+sequential execution flow:</p>
+<ol type="1">
+<li><p><strong>Candidate Identification:</strong> After
+<code>rayQueryProceedEXT()</code> returns <code>true</code>, verify that
+the candidate is procedural:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span><span class="fu">rayQueryGetIntersectionTypeEXT</span><span class="op">(</span>rayQuery<span class="op">,</span> <span class="kw">false</span><span class="op">)</span> <span class="op">==</span> gl_RayQueryCandidateIntersectionAABBEXT<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Proceed with custom procedural intersection</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></li>
+<li><p><strong>Ray Space Transformation:</strong> Retrieve the
+object-space ray parameters for the candidate primitive using built-in
+query accessors such as
+<code>rayQueryGetIntersectionObjectRayOriginEXT(rayQuery, false)</code>
+and
+<code>rayQueryGetIntersectionObjectRayDirectionEXT(rayQuery, false)</code>.</p></li>
+<li><p><strong>Analytical Intersection:</strong> Execute user-defined
+intersection equations (such as ray-sphere, ray-cylinder, or signed
+distance field raymarching) within the local bounding space. This test
+yields a candidate hit distance <span
+class="math inline">\(t\)</span>.</p></li>
+<li><p><strong>Range Testing and Submission:</strong> Verify that the
+computed <span class="math inline">\(t\)</span> satisfies the current
+ray bounds (<span class="math inline">\(t_{\text{min}} \le t \le
+t_{\text{max}}\)</span>). If the hit is valid, invoke:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">rayQueryGenerateIntersectionEXT</span><span class="op">(</span>rayQuery<span class="op">,</span> tHit<span class="op">);</span></span></code></pre></div></li>
+</ol>
+<h3 id="state-commitment-and-traversal-shortening">State Commitment and
+Traversal Shortening</h3>
+<p>Executing <code>rayQueryGenerateIntersectionEXT()</code> validates
+the procedural hit by communicating the calculated distance back to the
+traversal engine. If <span class="math inline">\(tHit\)</span> is closer
+than the current committed intersection distance and lies within the
+active <span class="math inline">\([t_{\text{min}},
+t_{\text{max}}]\)</span> interval, the query replaces the current
+candidate state with this hit.</p>
+<p>Upon the next invocation of <code>rayQueryProceedEXT()</code>, the
+traversal engine commits this intersection, effectively clamping <span
+class="math inline">\(t_{\text{max}}\)</span> to the newly validated
+distance. This dynamic ray shortening prunes subsequent, more distant
+bounding volumes from triggering false procedural candidates throughout
+the remainder of the traversal.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

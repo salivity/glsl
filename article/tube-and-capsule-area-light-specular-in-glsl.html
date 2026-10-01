@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tube and Capsule Area Light Specular in GLSL - glsl</title>
+    <meta name="description" content="This article explains the Representative Point algorithm used to calculate real-time specular highlights for tube and capsule area lights in GLSL. You will learn how the technique approximates area light integration by finding the closest point between a">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/tube-and-capsule-area-light-specular-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Tube and Capsule Area Light Specular in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/tube-and-capsule-area-light-specular-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains the Representative Point algorithm used to calculate real-time specular highlights for tube and capsule area lights in GLSL. You will learn how the technique approximates area light integration by finding the closest point between a" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="tube-and-capsule-area-light-specular-in-glsl">Tube and Capsule
+Area Light Specular in GLSL</h1>
+<p>This article explains the Representative Point algorithm used to
+calculate real-time specular highlights for tube and capsule area lights
+in GLSL. You will learn how the technique approximates area light
+integration by finding the closest point between a reflection vector and
+a finite line segment, how to adjust for the light's radius, and how to
+implement the algorithm inside a standard physically based shading
+model.</p>
+<h2 id="the-representative-point-technique">The Representative Point
+Technique</h2>
+<p>Directly integrating the Cook-Torrance microfacet specular BRDF over
+an area light source is too computationally expensive for real-time
+rendering. The standard solution, popularized by Brian Karis in Unreal
+Engine 4, is the <strong>Representative Point Method</strong>.</p>
+<p>Instead of integrating across the entire surface of the tube or
+capsule, the algorithm finds a single point on the light source that
+contributes the most to the specular reflection along the ideal mirror
+reflection direction <span class="math inline">\(\mathbf{R}\)</span>.
+Once this point is determined, it is treated as a standard point light
+source, and the surface roughness is adjusted to account for the light's
+physical radius and preserve energy conservation.</p>
+<h2 id="step-by-step-algorithm-breakdown">Step-by-Step Algorithm
+Breakdown</h2>
+<p>A capsule or tube light is defined by two endpoints, <span
+class="math inline">\(\mathbf{A}\)</span> and <span
+class="math inline">\(\mathbf{B}\)</span>, and a radius <span
+class="math inline">\(r\)</span>. The segment vector is <span
+class="math inline">\(\mathbf{L}_d = \mathbf{B} -
+\mathbf{A}\)</span>.</p>
+<h3 id="1-finding-the-closest-point-on-the-segment-to-the-ray">1.
+Finding the Closest Point on the Segment to the Ray</h3>
+<p>Given a shading point <span
+class="math inline">\(\mathbf{P}\)</span>, view vector <span
+class="math inline">\(\mathbf{V}\)</span>, surface normal <span
+class="math inline">\(\mathbf{N}\)</span>, and the reflection vector
+<span class="math inline">\(\mathbf{R} = \text{reflect}(-\mathbf{V},
+\mathbf{N})\)</span>, the goal is to find the parameter <span
+class="math inline">\(t \in [0, 1]\)</span> along the line segment that
+minimizes the distance to the reflection ray.</p>
+<ol type="1">
+<li><p>Compute vectors from the shading position to the segment
+endpoints: <span class="math display">\[\mathbf{L}_0 = \mathbf{A} -
+\mathbf{P}\]</span> <span class="math display">\[\mathbf{L}_1 =
+\mathbf{B} - \mathbf{P}\]</span> <span
+class="math display">\[\mathbf{L}_d = \mathbf{L}_1 -
+\mathbf{L}_0\]</span></p></li>
+<li><p>Project the reflection vector <span
+class="math inline">\(\mathbf{R}\)</span> onto the line segment to find
+the intersection of the ray and segment planes: <span
+class="math display">\[t = \frac{(\mathbf{R} \cdot
+\mathbf{L}_0)(\mathbf{R} \cdot \mathbf{L}_d) - (\mathbf{L}_0 \cdot
+\mathbf{L}_d)}{|\mathbf{L}_d|^2 - (\mathbf{R} \cdot
+\mathbf{L}_d)^2}\]</span></p></li>
+<li><p>Clamp <span class="math inline">\(t\)</span> to the range <span
+class="math inline">\([0, 1]\)</span> to restrict the representative
+point to the segment bounds.</p></li>
+</ol>
+<h3 id="2-accounting-for-capsule-radius">2. Accounting for Capsule
+Radius</h3>
+<p>The parameter <span class="math inline">\(t\)</span> yields the
+closest point along the central 1D axis of the light: <span
+class="math display">\[\mathbf{P}_{\text{segment}} = \mathbf{L}_0 + t
+\cdot \mathbf{L}_d\]</span></p>
+<p>Because a capsule has a volume defined by radius <span
+class="math inline">\(r\)</span>, the highlight must appear on the
+surface of the capsule rather than its interior line. The point is
+projected toward the reflection ray: <span
+class="math display">\[\mathbf{L}_{\text{center}} =
+\mathbf{P}_{\text{segment}}\]</span> <span
+class="math display">\[\mathbf{P}_{\text{rep}} =
+\mathbf{L}_{\text{center}} - \mathbf{R} \cdot
+\text{clamp}\left(\frac{\mathbf{L}_{\text{center}} \cdot
+\mathbf{R}}{|\mathbf{R}|}, -r, r\right)\]</span></p>
+<p>Alternatively, normalizing the vector from <span
+class="math inline">\(\mathbf{P}_{\text{segment}}\)</span> to the ray
+and offsetting by <span class="math inline">\(r\)</span> provides an
+effective approximation.</p>
+<h3 id="3-roughness-modification-for-energy-conservation">3. Roughness
+Modification for Energy Conservation</h3>
+<p>Because an area light broadens the specular lobe, evaluating a point
+light at <span class="math inline">\(\mathbf{P}_{\text{rep}}\)</span>
+with the original material roughness <span
+class="math inline">\(\alpha\)</span> would produce a specular highlight
+that is too sharp and overly intense. Karis applies an empirical
+roughness expansion based on the angular extent of the light:</p>
+<p><span class="math display">\[\alpha&#39; = \text{clamp}\left(\alpha +
+\frac{r}{2 d}, 0.0, 1.0\right)\]</span></p>
+<p>where <span class="math inline">\(d =
+|\mathbf{P}_{\text{rep}}|\)</span> is the distance from the shading
+point to the representative point.</p>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>Below is a complete GLSL function implementing the representative
+point calculation for a capsule light:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">getTubeLightRepresentativePoint</span><span class="op">(</span><span class="dt">vec3</span> worldPos<span class="op">,</span> <span class="dt">vec3</span> R<span class="op">,</span> <span class="dt">vec3</span> lightA<span class="op">,</span> <span class="dt">vec3</span> lightB<span class="op">,</span> <span class="dt">float</span> radius<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> L0 <span class="op">=</span> lightA <span class="op">-</span> worldPos<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> L1 <span class="op">=</span> lightB <span class="op">-</span> worldPos<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> Ld <span class="op">=</span> L1 <span class="op">-</span> L0<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Vector projections to locate the closest point on the ray</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> R_dot_L0 <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>R<span class="op">,</span> L0<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> R_dot_Ld <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>R<span class="op">,</span> Ld<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> L0_dot_Ld <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>L0<span class="op">,</span> Ld<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> Ld_dot_Ld <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>Ld<span class="op">,</span> Ld<span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Solve for t along the segment</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denom <span class="op">=</span> Ld_dot_Ld <span class="op">-</span> R_dot_Ld <span class="op">*</span> R_dot_Ld<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> t <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>denom <span class="op">&gt;</span> <span class="fl">1e-5</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>        t <span class="op">=</span> <span class="op">(</span>R_dot_L0 <span class="op">*</span> R_dot_Ld <span class="op">-</span> L0_dot_Ld<span class="op">)</span> <span class="op">/</span> denom<span class="op">;</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    t <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>t<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Base point along the central bone</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> P_seg <span class="op">=</span> L0 <span class="op">+</span> t <span class="op">*</span> Ld<span class="op">;</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Project onto capsule surface along the reflection ray</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> centerToRay <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>P_seg<span class="op">,</span> R<span class="op">)</span> <span class="op">*</span> R <span class="op">-</span> P_seg<span class="op">;</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> closestPoint <span class="op">=</span> P_seg <span class="op">+</span> centerToRay <span class="op">*</span> <span class="bu">clamp</span><span class="op">(</span>radius <span class="op">/</span> <span class="bu">max</span><span class="op">(</span><span class="bu">length</span><span class="op">(</span>centerToRay<span class="op">),</span> <span class="fl">1e-5</span><span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> closestPoint<span class="op">;</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">evaluateCapsuleSpecular</span><span class="op">(</span><span class="dt">vec3</span> N<span class="op">,</span> <span class="dt">vec3</span> V<span class="op">,</span> <span class="dt">vec3</span> worldPos<span class="op">,</span> <span class="dt">vec3</span> lightA<span class="op">,</span> <span class="dt">vec3</span> lightB<span class="op">,</span> <span class="dt">float</span> radius<span class="op">,</span> <span class="dt">float</span> roughness<span class="op">,</span> <span class="dt">vec3</span> F0<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> R <span class="op">=</span> <span class="bu">reflect</span><span class="op">(-</span>V<span class="op">,</span> N<span class="op">);</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate representative point</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> L_rep <span class="op">=</span> <span class="fu">getTubeLightRepresentativePoint</span><span class="op">(</span>worldPos<span class="op">,</span> R<span class="op">,</span> lightA<span class="op">,</span> lightB<span class="op">,</span> radius<span class="op">);</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> dist <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>L_rep<span class="op">);</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> L <span class="op">=</span> L_rep <span class="op">/</span> dist<span class="op">;</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> H <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>V <span class="op">+</span> L<span class="op">);</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Expand roughness based on light radius and distance</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> alpha <span class="op">=</span> roughness <span class="op">*</span> roughness<span class="op">;</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> alphaPrime <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>alpha <span class="op">+</span> <span class="op">(</span>radius <span class="op">/</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">*</span> dist<span class="op">)),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Standard Cook-Torrance evaluation using modified roughness alphaPrime</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotL <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> L<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotV <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> V<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotH <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> H<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> VdotH <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>V<span class="op">,</span> H<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Normal Distribution Function (GGX)</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a2 <span class="op">=</span> alphaPrime <span class="op">*</span> alphaPrime<span class="op">;</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denomNDF <span class="op">=</span> <span class="op">(</span>NdotH <span class="op">*</span> NdotH <span class="op">*</span> <span class="op">(</span>a2 <span class="op">-</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">+</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> D <span class="op">=</span> a2 <span class="op">/</span> <span class="op">(</span><span class="fl">3.14159265</span> <span class="op">*</span> denomNDF <span class="op">*</span> denomNDF<span class="op">);</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Geometric Attenuation (Schlick-GGX)</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> k <span class="op">=</span> <span class="op">(</span>alphaPrime <span class="op">+</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">*</span> <span class="op">(</span>alphaPrime <span class="op">+</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">/</span> <span class="fl">8.0</span><span class="op">;</span></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> G <span class="op">=</span> <span class="op">(</span>NdotV <span class="op">/</span> <span class="op">(</span>NdotV <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> k<span class="op">)</span> <span class="op">+</span> k<span class="op">))</span> <span class="op">*</span> <span class="op">(</span>NdotL <span class="op">/</span> <span class="op">(</span>NdotL <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> k<span class="op">)</span> <span class="op">+</span> k<span class="op">));</span></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Fresnel (Schlick)</span></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> F <span class="op">=</span> F0 <span class="op">+</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> F0<span class="op">)</span> <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> VdotH<span class="op">,</span> <span class="fl">5.0</span><span class="op">);</span></span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Energy-conserving area light normalization factor</span></span>
+<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sphereFactor <span class="op">=</span> alpha <span class="op">/</span> alphaPrime<span class="op">;</span></span>
+<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span>D <span class="op">*</span> G <span class="op">*</span> F<span class="op">)</span> <span class="op">/</span> <span class="bu">max</span><span class="op">(</span><span class="fl">4.0</span> <span class="op">*</span> NdotV <span class="op">*</span> NdotL<span class="op">,</span> <span class="fl">1e-4</span><span class="op">)</span> <span class="op">*</span> <span class="op">(</span>sphereFactor <span class="op">*</span> sphereFactor<span class="op">);</span></span>
+<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By substituting the static light position with the calculated
+representative position and scaling the roughness parameter, the
+specular highlight stretches smoothly along the length and circumference
+of the tube light with minimal overhead.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

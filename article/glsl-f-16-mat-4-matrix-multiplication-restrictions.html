@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL f16mat4 Matrix Multiplication Restrictions - glsl</title>
+    <meta name="description" content="Using explicit half-precision floating-point matrices like f16mat4 in GLSL offers substantial memory bandwidth and throughput improvements on supported hardware, but it introduces strict mathematical, architectural, and language-level limitations. This a">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-f-16-mat-4-matrix-multiplication-restrictions">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL f16mat4 Matrix Multiplication Restrictions - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-f-16-mat-4-matrix-multiplication-restrictions" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Using explicit half-precision floating-point matrices like f16mat4 in GLSL offers substantial memory bandwidth and throughput improvements on supported hardware, but it introduces strict mathematical, architectural, and language-level limitations. This a" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-f16mat4-matrix-multiplication-restrictions">GLSL f16mat4
+Matrix Multiplication Restrictions</h1>
+<p>Using explicit half-precision floating-point matrices like
+<code>f16mat4</code> in GLSL offers substantial memory bandwidth and
+throughput improvements on supported hardware, but it introduces strict
+mathematical, architectural, and language-level limitations. This
+article outlines the operational restrictions imposed on
+<code>f16mat4</code> matrix multiplication, focusing on explicit type
+safety rules, dynamic range boundaries, intermediate accumulation
+semantics, and driver-level requirements.</p>
+<h3 id="extension-and-target-requirements">Extension and Target
+Requirements</h3>
+<p>To use <code>f16mat4</code>, the shader must explicitly enable the
+float16 arithmetic extension:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require</span></span></code></pre></div>
+<p>Compilation requires targeting an environment that supports explicit
+16-bit floating-point capabilities, such as SPIR-V 1.0+ with the
+<code>Float16</code> capability enabled, alongside underlying GPU
+architecture support for native 16-bit operations. If the hardware lacks
+native FP16 execution units, the driver may emulate the operation using
+standard 32-bit floats, nullifying potential performance gains.</p>
+<h3 id="strict-type-matching-and-disallowed-conversions">Strict Type
+Matching and Disallowed Conversions</h3>
+<p>Explicit precision extensions in GLSL enforce strict type matching.
+Matrix multiplication involving <code>f16mat4</code> is subject to the
+following rules:</p>
+<ul>
+<li><strong>No Implicit Promotion:</strong> Multiplication between an
+<code>f16mat4</code> and a standard 32-bit <code>mat4</code>,
+<code>vec4</code>, or scalar <code>float</code> is strictly invalid.
+Mixed-precision matrix multiplication causes a compile-time error.</li>
+<li><strong>Explicit Casting Required:</strong> Any interaction between
+standard types and explicit half-precision types requires explicit
+constructor casting (e.g., converting a <code>vec4</code> to
+<code>f16vec4</code> before multiplying by an
+<code>f16mat4</code>).</li>
+<li><strong>Operand Shape Compatibility:</strong> Standard linear
+algebra sizing rules apply strictly. You may multiply an
+<code>f16mat4</code> by another <code>f16mat4</code>, an
+<code>f16mat4</code> by an <code>f16vec4</code> (column vector
+transformation), or an <code>f16vec4</code> by an <code>f16mat4</code>
+(row vector transformation).</li>
+</ul>
+<h3 id="dynamic-range-and-overflow-constraints">Dynamic Range and
+Overflow Constraints</h3>
+<p>Half-precision floats follow the IEEE 754 binary16 format, which
+severely restricts the valid numerical range compared to
+single-precision:</p>
+<ul>
+<li><strong>Range Limits:</strong> The maximum representable finite
+value is <span class="math inline">\(65504\)</span>, and the minimum
+positive normalized value is approximately <span
+class="math inline">\(6.10 \times 10^{-5}\)</span>.</li>
+<li><strong>Premature Overflow:</strong> A <span class="math inline">\(4
+\times 4\)</span> matrix multiplication computes each entry as the dot
+product of four products: <span class="math inline">\(\sum_{i=0}^{3}
+A_{ik} B_{kj}\)</span>. If intermediate products exceed <span
+class="math inline">\(65504\)</span>, the value immediately overflows to
+infinity (<span class="math inline">\(\text{Inf}\)</span>). This can
+occur even if the inputs appear moderate (for example, multiplying
+coordinates larger than <span class="math inline">\(\sim 128\)</span> by
+a scale factor larger than <span class="math inline">\(\sim
+512\)</span>).</li>
+<li><strong>Rapid Precision Loss:</strong> With only 10 bits of mantissa
+(yielding roughly 3.3 decimal digits of precision), repeated matrix
+transforms (such as hierarchical model transforms) compound rounding
+errors significantly faster than 32-bit operations.</li>
+</ul>
+<h3 id="intermediate-accumulation-semantics">Intermediate Accumulation
+Semantics</h3>
+<p>Under <code>GL_EXT_shader_explicit_arithmetic_types_float16</code>,
+the specification does not mandate intermediate 32-bit accumulation for
+dot products and matrix operations. Unless an implementation
+specifically optimizes or targets a fused multiply-add path with
+extended precision, both the intermediate multiplications and additions
+occur in native 16-bit precision. Consequently, precision is truncated
+at each addition step within the 4-component dot product, increasing
+truncation bias.</p>
+<h3 id="subnormal-flushing-ftz">Subnormal Flushing (FTZ)</h3>
+<p>Many GPU architectures operate on 16-bit floating-point values using
+Flush-to-Zero (FTZ) mode by default to maximize throughput:</p>
+<ul>
+<li>Numbers smaller than the minimum normalized value (<span
+class="math inline">\(2^{-14} \approx 6.10 \times 10^{-5}\)</span>) are
+automatically flushed to zero.</li>
+<li>Denormalized inputs to an <code>f16mat4</code> multiplication are
+often treated as zero before computation begins.</li>
+<li>Fine-scale translation or minute rotation increments in a matrix
+will collapse to zero, leading to visible stuttering or geometric
+cracking if <code>f16mat4</code> is used directly for world-space vertex
+positioning.</li>
+</ul>
+<h3 id="memory-layout-and-alignment-rules">Memory Layout and Alignment
+Rules</h3>
+<p>When loading or storing <code>f16mat4</code> matrices via Uniform
+Buffer Objects (UBO) or Shader Storage Buffer Objects (SSBO):</p>
+<ul>
+<li>Under <code>std140</code>, packing rules generally pad matrix
+columns up to standard base alignment boundaries, often requiring
+vector-equivalent padding.</li>
+<li>Under <code>std430</code> (or <code>scalar</code> layout via
+extensions), an <code>f16mat4</code> is composed of four consecutive
+<code>f16vec4</code> columns, with each column aligned to 8 bytes (since
+each <code>float16_t</code> is 2 bytes). Misaligned source memory will
+cause undefined behavior or invalid reads prior to the multiplication
+step.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

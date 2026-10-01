@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Built-in Matrix Types Exist in Modern GLSL? - glsl</title>
+    <meta name="description" content="Modern OpenGL Shading Language (GLSL) provides a comprehensive set of built-in matrix types designed for geometric transformations, lighting calculations, and projection mathematics. These types cover both square and non-square dimensions with support fo">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-built-in-matrix-types-exist-in-modern-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Built-in Matrix Types Exist in Modern GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-built-in-matrix-types-exist-in-modern-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Modern OpenGL Shading Language (GLSL) provides a comprehensive set of built-in matrix types designed for geometric transformations, lighting calculations, and projection mathematics. These types cover both square and non-square dimensions with support fo" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-built-in-matrix-types-exist-in-modern-glsl">What Built-in
+Matrix Types Exist in Modern GLSL?</h1>
+<p>Modern OpenGL Shading Language (GLSL) provides a comprehensive set of
+built-in matrix types designed for geometric transformations, lighting
+calculations, and projection mathematics. These types cover both square
+and non-square dimensions with support for single-precision and
+double-precision floating-point formats. In GLSL, matrix types are
+defined using column-major ordering, meaning data is accessed and
+structured as a collection of column vectors.</p>
+<h2 id="matrix-naming-conventions">Matrix Naming Conventions</h2>
+<p>Matrix types in GLSL use the syntax <code>matNxM</code> or
+<code>dmatNxM</code>, where <code>N</code> specifies the number of
+columns and <code>M</code> specifies the number of rows. This notation
+is the inverse of standard mathematical matrix conventions (which
+typically specify rows first). When a matrix is square (<span
+class="math inline">\(N = M\)</span>), shorthand aliases like
+<code>matN</code> and <code>dmatN</code> are standard.</p>
+<h2 id="single-precision-matrix-types-float">Single-Precision Matrix
+Types (<code>float</code>)</h2>
+<p>Single-precision 32-bit floating-point matrices are the most commonly
+used types in standard graphics pipelines.</p>
+<ul>
+<li><strong><code>mat2</code> (or <code>mat2x2</code>):</strong> 2
+columns <span class="math inline">\(\times\)</span> 2 rows</li>
+<li><strong><code>mat2x3</code>:</strong> 2 columns <span
+class="math inline">\(\times\)</span> 3 rows</li>
+<li><strong><code>mat2x4</code>:</strong> 2 columns <span
+class="math inline">\(\times\)</span> 4 rows</li>
+<li><strong><code>mat3x2</code>:</strong> 3 columns <span
+class="math inline">\(\times\)</span> 2 rows</li>
+<li><strong><code>mat3</code> (or <code>mat3x3</code>):</strong> 3
+columns <span class="math inline">\(\times\)</span> 3 rows (commonly
+used for normal transformations and 2D affine operations)</li>
+<li><strong><code>mat3x4</code>:</strong> 3 columns <span
+class="math inline">\(\times\)</span> 4 rows</li>
+<li><strong><code>mat4x2</code>:</strong> 4 columns <span
+class="math inline">\(\times\)</span> 2 rows</li>
+<li><strong><code>mat4x3</code>:</strong> 4 columns <span
+class="math inline">\(\times\)</span> 3 rows (often used for skeletal
+animation and skinning)</li>
+<li><strong><code>mat4</code> (or <code>mat4x4</code>):</strong> 4
+columns <span class="math inline">\(\times\)</span> 4 rows (the standard
+type for 3D Model-View-Projection pipelines)</li>
+</ul>
+<h2 id="double-precision-matrix-types-double">Double-Precision Matrix
+Types (<code>double</code>)</h2>
+<p>Introduced in GLSL 4.00 for precision-sensitive applications such as
+large-scale planetary rendering or scientific simulation, 64-bit
+double-precision types use the <code>dmat</code> prefix:</p>
+<ul>
+<li><strong><code>dmat2</code> (or <code>dmat2x2</code>):</strong> 2
+columns <span class="math inline">\(\times\)</span> 2 rows</li>
+<li><strong><code>dmat2x3</code>:</strong> 2 columns <span
+class="math inline">\(\times\)</span> 3 rows</li>
+<li><strong><code>dmat2x4</code>:</strong> 2 columns <span
+class="math inline">\(\times\)</span> 4 rows</li>
+<li><strong><code>dmat3x2</code>:</strong> 3 columns <span
+class="math inline">\(\times\)</span> 2 rows</li>
+<li><strong><code>dmat3</code> (or <code>dmat3x3</code>):</strong> 3
+columns <span class="math inline">\(\times\)</span> 3 rows</li>
+<li><strong><code>dmat3x4</code>:</strong> 3 columns <span
+class="math inline">\(\times\)</span> 4 rows</li>
+<li><strong><code>dmat4x2</code>:</strong> 4 columns <span
+class="math inline">\(\times\)</span> 2 rows</li>
+<li><strong><code>dmat4x3</code>:</strong> 4 columns <span
+class="math inline">\(\times\)</span> 3 rows</li>
+<li><strong><code>dmat4</code> (or <code>dmat4x4</code>):</strong> 4
+columns <span class="math inline">\(\times\)</span> 4 rows</li>
+</ul>
+<h2 id="core-features-and-operations">Core Features and Operations</h2>
+<p>GLSL treats matrices as first-class types with built-in hardware
+optimization:</p>
+<ul>
+<li><strong>Column Indexing:</strong> Indexing a matrix once yields a
+column vector (e.g., <code>myMat[0]</code> returns the first column as a
+<code>vec4</code>), while double-indexing accesses individual scalar
+elements via <code>myMat[col][row]</code>.</li>
+<li><strong>Arithmetic Operations:</strong> Standard algebraic operators
+(<code>+</code>, <code>-</code>, <code>*</code>) perform linear algebra
+transformations directly. Multiplying a matrix by a vector
+(<code>mat4 * vec4</code>) transforms the vector, while multiplying two
+matrices performs standard matrix multiplication.</li>
+<li><strong>Built-in Functions:</strong> Modern GLSL provides built-in
+intrinsic functions including <code>transpose(m)</code>,
+<code>determinant(m)</code>, and <code>inverse(m)</code> for square
+matrices.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

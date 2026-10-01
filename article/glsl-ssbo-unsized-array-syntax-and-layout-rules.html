@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL SSBO Unsized Array Syntax and Layout Rules - glsl</title>
+    <meta name="description" content="Shader Storage Buffer Objects (SSBOs) in the OpenGL Shading Language (GLSL) provide the ability to bind dynamically sized data to shaders using unsized arrays. This guide covers the syntax requirements for declaring these runtime-sized arrays, the struct">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-ssbo-unsized-array-syntax-and-layout-rules">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL SSBO Unsized Array Syntax and Layout Rules - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-ssbo-unsized-array-syntax-and-layout-rules" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Shader Storage Buffer Objects (SSBOs) in the OpenGL Shading Language (GLSL) provide the ability to bind dynamically sized data to shaders using unsized arrays. This guide covers the syntax requirements for declaring these runtime-sized arrays, the struct" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-ssbo-unsized-array-syntax-and-layout-rules">GLSL SSBO
+Unsized Array Syntax and Layout Rules</h1>
+<p>Shader Storage Buffer Objects (SSBOs) in the OpenGL Shading Language
+(GLSL) provide the ability to bind dynamically sized data to shaders
+using unsized arrays. This guide covers the syntax requirements for
+declaring these runtime-sized arrays, the structural constraints that
+govern their placement within an interface block, and the memory layout
+qualifiers—specifically <code>std430</code> and <code>std140</code>—that
+determine element padding and memory alignment.</p>
+<h3 id="basic-syntax">Basic Syntax</h3>
+<p>An unsized array is declared using empty square brackets
+<code>[]</code> as the array dimension. It must reside inside a shader
+storage block defined with the <code>buffer</code> keyword:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> DataBlock <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> count<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> factor<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> elements<span class="op">[];</span> <span class="co">// Unsized array</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<h3 id="placement-and-structural-rules">Placement and Structural
+Rules</h3>
+<p>GLSL enforces strict constraints regarding where and how unsized
+arrays can be declared within SSBOs:</p>
+<ol type="1">
+<li><strong>Last Member Restriction:</strong> An unsized array can only
+appear as the very last member of a shader storage block. Placing an
+unsized array before any other member results in a compile-time
+error.</li>
+<li><strong>Single Unsized Array per Block:</strong> A single interface
+block can contain at most one unsized array.</li>
+<li><strong>No Unsized Arrays in Structs:</strong> Structures defined in
+GLSL cannot contain unsized arrays, meaning you cannot have an unsized
+array nested inside a struct member of a buffer. However, you can create
+an unsized array <em>of</em> structures, provided that the struct itself
+has a fixed size and the array is the final block member.</li>
+<li><strong>Runtime Length Query:</strong> You can query the number of
+elements in the array at runtime using the <code>.length()</code>
+method:
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> totalElements <span class="op">=</span> elements<span class="op">.</span><span class="fu">length</span><span class="op">();</span></span></code></pre></div>
+This value is computed dynamically by the driver based on the size of
+the OpenGL buffer object currently bound to the binding point.</li>
+</ol>
+<h3 id="memory-layout-rules">Memory Layout Rules</h3>
+<p>The memory alignment and padding of unsized array elements depend on
+the block's layout qualifier. SSBOs typically use either
+<code>std430</code> or <code>std140</code>.</p>
+<h4 id="the-std430-layout-recommended">The <code>std430</code> Layout
+(Recommended)</h4>
+<p>The <code>std430</code> qualifier is designed specifically for SSBOs
+and offers tighter packing for arrays compared to
+<code>std140</code>:</p>
+<ul>
+<li><strong>Scalar and Vector Arrays:</strong> Elements in an array of
+scalars (such as <code>float</code> or <code>int</code>) or vectors are
+aligned to their natural size. For example, in
+<code>float elements[]</code>, each element has an alignment and stride
+of 4 bytes. In <code>vec2 elements[]</code>, the stride is 8 bytes.</li>
+<li><strong>Struct Arrays:</strong> If the unsized array contains
+user-defined structs, each struct element is aligned according to the
+largest member alignment in the struct, rounded up to the nearest
+multiple of the base alignment.</li>
+</ul>
+<h4 id="the-std140-layout">The <code>std140</code> Layout</h4>
+<p>While supported, <code>std140</code> imposes strict alignment rules
+that often waste memory:</p>
+<ul>
+<li><strong>Forced 16-byte Alignment:</strong> In <code>std140</code>,
+every array element is rounded up to the size of a <code>vec4</code> (16
+bytes), regardless of the base type. A <code>float elements[]</code>
+under <code>std140</code> allocates 16 bytes per float, leaving 12 bytes
+of padding between entries.</li>
+</ul>
+<h3 id="unsized-array-of-structures-example">Unsized Array of Structures
+Example</h3>
+<p>When declaring an unsized array of user-defined types, ensure all
+nested types are fully defined with fixed sizes:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Particle <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> position<span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lifetime<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> velocity<span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> mass<span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">buffer</span> ParticleSystem <span class="op">{</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> activeCount<span class="op">;</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    Particle particles<span class="op">[];</span> <span class="co">// Unsized array of structs as the last member</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>In this <code>std430</code> layout, each <code>Particle</code> struct
+aligns to 16 bytes (due to the <code>vec3</code> requiring 16-byte
+alignment), making the total stride of the <code>particles</code> array
+32 bytes per element with no trailing unused space.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mediump Precision Artifacts in GLSL ES Coordinates - glsl</title>
+    <meta name="description" content="The mediump precision qualifier in OpenGL ES Shading Language (GLSL ES) balances performance and memory bandwidth on mobile GPUs, but its restricted bit-depth can severely degrade coordinate calculations. This article explores how the reduced numerical r">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/mediump-precision-artifacts-in-glsl-es-coordinates">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="mediump Precision Artifacts in GLSL ES Coordinates - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/mediump-precision-artifacts-in-glsl-es-coordinates" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The mediump precision qualifier in OpenGL ES Shading Language (GLSL ES) balances performance and memory bandwidth on mobile GPUs, but its restricted bit-depth can severely degrade coordinate calculations. This article explores how the reduced numerical r" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="mediump-precision-artifacts-in-glsl-es-coordinates">mediump
+Precision Artifacts in GLSL ES Coordinates</h1>
+<p>The <code>mediump</code> precision qualifier in OpenGL ES Shading
+Language (GLSL ES) balances performance and memory bandwidth on mobile
+GPUs, but its restricted bit-depth can severely degrade coordinate
+calculations. This article explores how the reduced numerical range and
+mantissa precision of <code>mediump</code> cause rendering
+artifacts—including texture swimming, spatial jitter, banding, and moiré
+effects—during vertex, texture, and procedural coordinate
+transformations, as well as practical techniques to mitigate these
+visual errors.</p>
+<h3 id="the-limits-of-mediump-precision">The Limits of mediump
+Precision</h3>
+<p>In GLSL ES, the <code>mediump</code> qualifier enforces a minimum
+representation that typically maps to IEEE 754 half-precision (16-bit
+floating-point, or FP16). Under this specification:</p>
+<ul>
+<li><strong>Mantissa:</strong> 10 bits of explicit precision (roughly 3
+to 4 decimal digits of precision).</li>
+<li><strong>Exponent:</strong> 5 bits, giving an operational range of
+approximately <span class="math inline">\(\pm 65,504\)</span> (minimum
+absolute value of <span class="math inline">\(\approx 2^{-14} \approx
+6.1 \times 10^{-5}\)</span>).</li>
+<li><strong>Relative Resolution:</strong> Differences smaller than
+roughly <span class="math inline">\(0.000976\)</span> (<span
+class="math inline">\(2^{-10}\)</span>) cannot be distinguished when
+values approach <span class="math inline">\(1.0\)</span>.</li>
+</ul>
+<p>When calculating spatial positions or texture coordinates, these
+limitations produce significant rounding and truncation errors,
+especially when inputs vary over wide ranges.</p>
+<h3 id="common-rendering-artifacts-in-coordinate-calculations">Common
+Rendering Artifacts in Coordinate Calculations</h3>
+<h4 id="1-texture-swimming-and-jitter">1. Texture Swimming and
+Jitter</h4>
+<p>When continuous texture coordinates (UVs) are computed using
+<code>mediump</code>, the 10-bit mantissa restricts the number of unique
+sample points across a surface. As coordinates grow beyond <span
+class="math inline">\([0.0, 1.0]\)</span>—such as in tiled terrains,
+repeating background patterns, or scrolling textures—the step size
+between representable numbers widens:</p>
+<ul>
+<li>At a UV coordinate of <span class="math inline">\(1.0\)</span>, the
+minimum delta between steps is approximately <span
+class="math inline">\(0.00098\)</span>.</li>
+<li>At a UV coordinate of <span class="math inline">\(64.0\)</span>, the
+step size expands to approximately <span
+class="math inline">\(0.0625\)</span>.</li>
+</ul>
+<p>This quantization forces texture lookups to snap abruptly from one
+texel to another during camera motion. The visual result is "texture
+swimming," where the surface appears to crawl, vibrate, or jitter
+inconsistently.</p>
+<h4 id="2-geometric-shaking-in-world-space-transforms">2. Geometric
+Shaking in World-Space Transforms</h4>
+<p>Using <code>mediump</code> for position vectors in the vertex shader
+introduces truncation during world-space or view-space matrix
+transformations. If an object is positioned far from the coordinate
+origin, the higher bits consume the available mantissa, leaving minimal
+precision for fine spatial movements.</p>
+<p>Vertices snap to a coarse virtual grid. When the camera pans or
+rotates, vertices pop between discrete grid locations, creating
+noticeable vertex shaking and geometric deformation.</p>
+<h4 id="3-stepping-and-banding-in-procedural-generation">3. Stepping and
+Banding in Procedural Generation</h4>
+<p>In procedural shaders (such as screen-space raymarching, Signed
+Distance Functions (SDFs), or noise-based shaders), coordinates drive
+mathematical evaluations over continuous domains.</p>
+<p>In a raymarcher, for example, position vectors accumulate step
+lengths along the camera ray. Low-precision accumulation causes the ray
+to undershoot or overshoot geometric boundaries irregularly. This
+produces concentric ring artifacts, jagged edges, or stepped banding
+along smoothly curved surfaces.</p>
+<h4 id="4-moiré-patterns-and-aliasing">4. Moiré Patterns and
+Aliasing</h4>
+<p>When coordinate precision drops, the derivative functions
+(<code>dFdx</code>, <code>dFdy</code>) used by the GPU to select mipmap
+levels receive discontinuous inputs. The irregular derivative
+calculations cause the texture sampler to fluctuate wildly between
+adjacent mipmap levels. This causes high-frequency moiré patterns and
+visual noise in areas where smooth filtering should occur.</p>
+<h3 id="mitigation-strategies">Mitigation Strategies</h3>
+<ul>
+<li><strong>Use <code>highp</code> for Position and Coordinate
+Pipelines:</strong> Reserve <code>highp</code> (32-bit float) for all
+position inputs, interpolated varying coordinates (such as UVs), and
+projection matrices.</li>
+<li><strong>Employ Camera-Relative Coordinates:</strong> Subtract the
+camera position from world-space objects on the CPU before passing
+matrices to the GPU. Keeping coordinate values small preserves the
+mantissa's fractional precision.</li>
+<li><strong>Wrap UVs Early:</strong> For repeating textures, wrap
+texture coordinates within the <span class="math inline">\([0.0,
+1.0]\)</span> interval using <code>fract()</code> before passing them to
+texture sampling functions, preventing coordinate values from
+inflating.</li>
+<li><strong>Confine <code>mediump</code> to Colors and Normals:</strong>
+Restrict <code>mediump</code> usage to normalized vectors, color
+blending, light calculations, and other mathematical operations bounded
+strictly within <span class="math inline">\([-1.0, 1.0]\)</span> or
+<span class="math inline">\([0.0, 1.0]\)</span>.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

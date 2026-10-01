@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Is gl_LocalInvocationIndex Calculated in GLSL? - glsl</title>
+    <meta name="description" content="In GLSL compute shaders, glLocalInvocationIndex is a built-in 1D integer variable that uniquely identifies an invocation within its local workgroup. It is computed by flattening the three-dimensional glLocalInvocationID into a single linear scalar value">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-is-gl-local-invocation-index-calculated-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Is gl_LocalInvocationIndex Calculated in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-is-gl-local-invocation-index-calculated-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL compute shaders, glLocalInvocationIndex is a built-in 1D integer variable that uniquely identifies an invocation within its local workgroup. It is computed by flattening the three-dimensional glLocalInvocationID into a single linear scalar value" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-is-gl_localinvocationindex-calculated-in-glsl">How Is
+gl_LocalInvocationIndex Calculated in GLSL?</h1>
+<p>In GLSL compute shaders, <code>gl_LocalInvocationIndex</code> is a
+built-in 1D integer variable that uniquely identifies an invocation
+within its local workgroup. It is computed by flattening the
+three-dimensional <code>gl_LocalInvocationID</code> into a single linear
+scalar value using row-major ordering where the X dimension is the most
+rapidly changing coordinate, followed by Y, and then Z. Understanding
+this calculation is essential for managing shared memory layouts,
+optimizing cache locality, and indexing flat buffers efficiently.</p>
+<h2 id="the-mathematical-formula">The Mathematical Formula</h2>
+<p>The relationship between the 3D local invocation identifier
+(<code>gl_LocalInvocationID</code>), the local workgroup dimensions
+(<code>gl_WorkGroupSize</code>), and the 1D index is defined formally by
+the OpenGL and Vulkan shading language specifications as:</p>
+<p><span class="math display">\[gl\_LocalInvocationIndex =
+gl\_LocalInvocationID.z \times gl\_WorkGroupSize.x \times
+gl\_WorkGroupSize.y + gl\_LocalInvocationID.y \times gl\_WorkGroupSize.x
++ gl\_LocalInvocationID.x\]</span></p>
+<p>In this equation:</p>
+<ul>
+<li><code>gl_WorkGroupSize.x</code>, <code>gl_WorkGroupSize.y</code>,
+and <code>gl_WorkGroupSize.z</code> represent the dimensions declared in
+the shader layout qualifier
+(<code>layout(local_size_x = ..., local_size_y = ..., local_size_z = ...) in;</code>).</li>
+<li><code>gl_LocalInvocationID.x</code> ranges from <span
+class="math inline">\(0\)</span> to <span
+class="math inline">\(gl\_WorkGroupSize.x - 1\)</span>.</li>
+<li><code>gl_LocalInvocationID.y</code> ranges from <span
+class="math inline">\(0\)</span> to <span
+class="math inline">\(gl\_WorkGroupSize.y - 1\)</span>.</li>
+<li><code>gl_LocalInvocationID.z</code> ranges from <span
+class="math inline">\(0\)</span> to <span
+class="math inline">\(gl\_WorkGroupSize.z - 1\)</span>.</li>
+</ul>
+<h2 id="step-by-step-example">Step-by-Step Example</h2>
+<p>Consider a compute shader defined with a local workgroup size of
+<span class="math inline">\(4 \times 4 \times 2\)</span>:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">4</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">4</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span></code></pre></div>
+<p>For a thread executing at invocation coordinates
+<code>gl_LocalInvocationID = uvec3(2, 3, 1)</code>:</p>
+<ol type="1">
+<li>Multiply the Z coordinate by the total number of threads in an XY
+slice:</li>
+</ol>
+<p><span class="math display">\[1 \times (4 \times 4) = 16\]</span></p>
+<ol start="2" type="1">
+<li>Multiply the Y coordinate by the width of a single row along the X
+axis:</li>
+</ol>
+<p><span class="math display">\[3 \times 4 = 12\]</span></p>
+<ol start="3" type="1">
+<li>Add the X coordinate offset:</li>
+</ol>
+<p><span class="math display">\[2\]</span></p>
+<ol start="4" type="1">
+<li>Sum all components together:</li>
+</ol>
+<p><span class="math display">\[16 + 12 + 2 = 30\]</span></p>
+<p>The resulting <code>gl_LocalInvocationIndex</code> for this thread is
+<strong>30</strong>, covering a valid index range from <span
+class="math inline">\(0\)</span> to <span
+class="math inline">\(31\)</span> (<span class="math inline">\(4 \times
+4 \times 2 - 1\)</span>).</p>
+<h2 id="common-practical-applications">Common Practical
+Applications</h2>
+<p>Computing and using <code>gl_LocalInvocationIndex</code> directly
+serves several primary purposes in compute shaders:</p>
+<ul>
+<li><strong>Shared Memory Indexing:</strong> Flat <code>shared</code>
+arrays (declared without multidimensional bounds) can be addressed
+directly with <code>gl_LocalInvocationIndex</code> without manual index
+arithmetic.</li>
+<li><strong>Single-Thread Workgroup Initialization:</strong> A common
+pattern is checking <code>if (gl_LocalInvocationIndex == 0u)</code> to
+execute single-threaded initialization routines or reset workgroup-level
+variables before calling <code>barrier()</code>.</li>
+<li><strong>Coalesced Memory Access:</strong> Mapping linearized 1D
+compute threads directly to contiguous array elements in Shader Storage
+Buffer Objects (SSBOs) ensures aligned, coalesced memory access across
+hardware warps and wavefronts.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

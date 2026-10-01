@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpDecorate in SPIR-V: Mapping GLSL Layout Qualifiers - glsl</title>
+    <meta name="description" content="In SPIR-V, the intermediate representation used by Vulkan and modern graphics APIs, high-level shader constructs must be converted into a standardized, hardware-independent binary format. When compiling GLSL to SPIR-V, GLSL layout(...) qualifiers—which">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/op-decorate-in-spir-v-mapping-glsl-layout-qualifiers">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="OpDecorate in SPIR-V: Mapping GLSL Layout Qualifiers - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/op-decorate-in-spir-v-mapping-glsl-layout-qualifiers" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In SPIR-V, the intermediate representation used by Vulkan and modern graphics APIs, high-level shader constructs must be converted into a standardized, hardware-independent binary format. When compiling GLSL to SPIR-V, GLSL layout(...) qualifiers—which" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="opdecorate-in-spir-v-mapping-glsl-layout-qualifiers">OpDecorate
+in SPIR-V: Mapping GLSL Layout Qualifiers</h1>
+<p>In SPIR-V, the intermediate representation used by Vulkan and modern
+graphics APIs, high-level shader constructs must be converted into a
+standardized, hardware-independent binary format. When compiling GLSL to
+SPIR-V, GLSL <code>layout(...)</code> qualifiers—which control resource
+bindings, memory offsets, and interface locations—do not map to distinct
+computation or typing instructions. Instead, SPIR-V relies on the
+<code>OpDecorate</code> instruction (and its struct-specific
+counterpart, <code>OpMemberDecorate</code>) to attach external layout
+metadata, interface rules, and pipeline linkage parameters to variable
+and type identifiers.</p>
+<h2 id="the-separation-of-type-and-metadata">The Separation of Type and
+Metadata</h2>
+<p>SPIR-V separates the structural definition of data types and
+variables from the metadata that describes how the GPU interfaces with
+them. For example, an <code>OpVariable</code> instruction defines a
+storage pointer and storage class, but it contains no native fields to
+specify Vulkan descriptor bindings or input/output locations.</p>
+<p><code>OpDecorate</code> bridges this gap. It takes a target
+identifier (<code>&lt;id&gt;</code>), a <code>Decoration</code> enum
+specifying the layout attribute, and optional literal arguments defined
+by that decoration. This decoupled architecture allows the compiler and
+GPU drivers to inspect pipeline interfaces without altering core type
+systems.</p>
+<h2 id="mapping-interface-locations">Mapping Interface Locations</h2>
+<p>In GLSL, input and output attributes between shader stages are
+explicitly bound to hardware interface slots using layout
+qualifiers:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec4</span> inPosition<span class="op">;</span></span></code></pre></div>
+<p>When compiled to SPIR-V, the compiler produces:</p>
+<ol type="1">
+<li>An <code>OpVariable</code> defining the variable in the
+<code>Input</code> storage class with a unique ID (e.g.,
+<code>%inPosition</code>).</li>
+<li>An <code>OpDecorate</code> instruction mapping the layout
+attribute:</li>
+</ol>
+<pre class="text"><code>OpDecorate %inPosition Location 0</code></pre>
+<p>Additional interface qualifiers like <code>component</code> or
+<code>index</code> (used for dual-source blending) map similarly to
+<code>OpDecorate %target Component &lt;val&gt;</code> and
+<code>OpDecorate %target Index &lt;val&gt;</code>.</p>
+<h2 id="mapping-descriptor-sets-and-bindings">Mapping Descriptor Sets
+and Bindings</h2>
+<p>Uniform buffers, storage buffers, and textures use descriptor sets
+and bindings to link shader code to host API resource layouts:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="kw">uniform</span> UniformBufferObject <span class="op">{</span> <span class="op">...</span> <span class="op">}</span> ubo<span class="op">;</span></span></code></pre></div>
+<p>SPIR-V represents this resource linking using two distinct
+<code>OpDecorate</code> calls targeted at the resource's variable
+declaration:</p>
+<pre class="text"><code>OpDecorate %ubo DescriptorSet 1
+OpDecorate %ubo Binding 2</code></pre>
+<p>The driver reads these decorations during pipeline creation to map
+the variable to the corresponding <code>VkDescriptorSetLayout</code>
+entries without parsing underlying buffer structure types.</p>
+<h2 id="buffer-member-offsets-and-opmemberdecorate">Buffer Member
+Offsets and OpMemberDecorate</h2>
+<p>For data stored in buffers (such as <code>std140</code> or
+<code>std430</code> blocks), GLSL manages byte alignments and member
+packing implicitly or through explicit <code>offset</code> and
+<code>align</code> qualifiers:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std140</span><span class="op">)</span> <span class="kw">uniform</span> CameraData <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">layout</span><span class="op">(</span><span class="dt">offset</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">mat4</span> view<span class="op">;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">layout</span><span class="op">(</span><span class="dt">offset</span> <span class="op">=</span> <span class="dv">64</span><span class="op">)</span> <span class="dt">mat4</span> proj<span class="op">;</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>Because individual structure fields do not have their own unique
+SPIR-V <code>&lt;id&gt;</code>, SPIR-V provides
+<code>OpMemberDecorate</code>. This instruction targets a composite type
+<code>&lt;id&gt;</code> alongside a literal member index:</p>
+<pre class="text"><code>OpMemberDecorate %CameraData 0 Offset 0
+OpMemberDecorate %CameraData 0 MatrixStride 16
+OpMemberDecorate %CameraData 0 ColMajor
+OpMemberDecorate %CameraData 1 Offset 64
+OpMemberDecorate %CameraData 1 MatrixStride 16
+OpMemberDecorate %CameraData 1 ColMajor</code></pre>
+<p>Additionally, the block itself receives an
+<code>OpDecorate %CameraData Block</code> or <code>BufferBlock</code>
+decoration, satisfying the GLSL memory layout rules required by the
+target graphics API.</p>
+<h2 id="architectural-advantages">Architectural Advantages</h2>
+<p>Using <code>OpDecorate</code> to handle GLSL layout qualifiers
+delivers several compiler benefits:</p>
+<ul>
+<li><strong>Reflection:</strong> Host tools and runtime drivers can
+extract pipeline metadata by scanning only decoration instructions,
+bypassing shader control flow and execution graphs.</li>
+<li><strong>Modularity:</strong> Target platform backends can rewrite,
+add, or strip layout attributes (such as remapping bindings or stripping
+debug names) without re-generating types or rewriting instructions.</li>
+<li><strong>Portability:</strong> Frontends for languages like HLSL,
+Slang, or GLSL all target the same unified set of SPIR-V decorations,
+standardizing how pipeline layouts are defined across different shading
+languages.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

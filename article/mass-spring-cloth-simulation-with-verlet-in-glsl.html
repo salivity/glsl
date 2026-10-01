@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mass-Spring Cloth Simulation with Verlet in GLSL - glsl</title>
+    <meta name="description" content="This article details the mathematical formulation and GLSL implementation of Verlet numerical integration for mass-spring cloth simulations. It covers the core integration equations, force accumulation across structural, shear, and flexion springs, and h">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/mass-spring-cloth-simulation-with-verlet-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Mass-Spring Cloth Simulation with Verlet in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/mass-spring-cloth-simulation-with-verlet-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article details the mathematical formulation and GLSL implementation of Verlet numerical integration for mass-spring cloth simulations. It covers the core integration equations, force accumulation across structural, shear, and flexion springs, and h" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="mass-spring-cloth-simulation-with-verlet-in-glsl">Mass-Spring
+Cloth Simulation with Verlet in GLSL</h1>
+<p>This article details the mathematical formulation and GLSL
+implementation of Verlet numerical integration for mass-spring cloth
+simulations. It covers the core integration equations, force
+accumulation across structural, shear, and flexion springs, and how to
+execute the entire simulation pipeline efficiently on the GPU using GLSL
+compute shaders.</p>
+<hr />
+<h3 id="the-verlet-integration-formulation">The Verlet Integration
+Formulation</h3>
+<p>Verlet integration is a second-order numerical method that computes
+future particle positions based on current and previous positions,
+eliminating the need to store velocity explicitly. This implicit
+velocity representation provides natural numerical stability, making it
+ideal for real-time cloth systems.</p>
+<p>The standard Verlet formula is derived from the Taylor expansion of
+position <span class="math inline">\(\mathbf{x}(t)\)</span>:</p>
+<p><span class="math display">\[\mathbf{x}(t + \Delta t) =
+2\mathbf{x}(t) - \mathbf{x}(t - \Delta t) + \mathbf{a}(t)\Delta t^2 +
+\mathcal{O}(\Delta t^4)\]</span></p>
+<p>To account for air resistance or energy dissipation, a damping factor
+<span class="math inline">\(d \in [0, 1]\)</span> is introduced to damp
+the implicit velocity term <span class="math inline">\((\mathbf{x}(t) -
+\mathbf{x}(t - \Delta t))\)</span>:</p>
+<p><span class="math display">\[\mathbf{x}_{\text{next}} =
+\mathbf{x}_{\text{curr}} + (1 - d)(\mathbf{x}_{\text{curr}} -
+\mathbf{x}_{\text{prev}}) + \frac{\mathbf{F}_{\text{total}}}{m}\Delta
+t^2\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(\mathbf{x}_{\text{next}}\)</span> is the
+position at <span class="math inline">\(t + \Delta t\)</span>.</li>
+<li><span class="math inline">\(\mathbf{x}_{\text{curr}}\)</span> is the
+position at <span class="math inline">\(t\)</span>.</li>
+<li><span class="math inline">\(\mathbf{x}_{\text{prev}}\)</span> is the
+position at <span class="math inline">\(t - \Delta t\)</span>.</li>
+<li><span class="math inline">\(\mathbf{F}_{\text{total}}\)</span> is
+the net force acting on the particle.</li>
+<li><span class="math inline">\(m\)</span> is the particle mass.</li>
+<li><span class="math inline">\(\Delta t\)</span> is the simulation
+timestep.</li>
+</ul>
+<hr />
+<h3 id="mass-spring-system-dynamics">Mass-Spring System Dynamics</h3>
+<p>A cloth grid consists of particles arranged in a 2D network connected
+by three types of springs:</p>
+<ol type="1">
+<li><strong>Structural Springs:</strong> Connect particle <span
+class="math inline">\((i, j)\)</span> to immediate orthogonal neighbors
+<span class="math inline">\((i \pm 1, j)\)</span> and <span
+class="math inline">\((i, j \pm 1)\)</span> to resist stretching and
+compression.</li>
+<li><strong>Shear Springs:</strong> Connect particle <span
+class="math inline">\((i, j)\)</span> diagonally to <span
+class="math inline">\((i \pm 1, j \pm 1)\)</span> to resist in-plane
+shearing.</li>
+<li><strong>Flexion (Bending) Springs:</strong> Connect particle <span
+class="math inline">\((i, j)\)</span> to secondary orthogonal neighbors
+<span class="math inline">\((i \pm 2, j)\)</span> and <span
+class="math inline">\((i, j \pm 2)\)</span> to resist out-of-plane
+bending.</li>
+</ol>
+<p>For any pair of connected particles <span
+class="math inline">\(\mathbf{x}_i\)</span> and <span
+class="math inline">\(\mathbf{x}_j\)</span>, the restoring spring force
+<span class="math inline">\(\mathbf{F}_{ij}\)</span> acting on particle
+<span class="math inline">\(i\)</span> is calculated using Hooke's
+Law:</p>
+<p><span class="math display">\[\mathbf{F}_{ij} = -k \left(
+\|\mathbf{x}_i - \mathbf{x}_j\| - L_0 \right) \frac{\mathbf{x}_i -
+\mathbf{x}_j}{\|\mathbf{x}_i - \mathbf{x}_j\|}\]</span></p>
+<p>Where <span class="math inline">\(k\)</span> is the spring stiffness
+coefficient and <span class="math inline">\(L_0\)</span> is the rest
+length between the two particles.</p>
+<p>The total force <span
+class="math inline">\(\mathbf{F}_{\text{total}}\)</span> acting on
+particle <span class="math inline">\(i\)</span> is the sum of external
+forces (e.g., gravity, wind) and internal spring forces:</p>
+<p><span class="math display">\[\mathbf{F}_{\text{total}} = m\mathbf{g}
++ \mathbf{F}_{\text{ext}} + \sum_{j \in \mathcal{N}(i)}
+\mathbf{F}_{ij}\]</span></p>
+<hr />
+<h3 id="glsl-compute-implementation">GLSL Compute Implementation</h3>
+<p>On the GPU, particle data is stored in textures or Shader Storage
+Buffer Objects (SSBOs). When using textures, two buffers (ping-pong)
+store current and previous positions.</p>
+<p>Below is a GLSL compute shader illustrating the force computation and
+Verlet integration step.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">16</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">16</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>rgba32f<span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">uniform</span> <span class="dt">image2D</span> u_PrevPos<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>rgba32f<span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">uniform</span> <span class="dt">image2D</span> u_CurrPos<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>rgba32f<span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="dt">writeonly</span> <span class="kw">uniform</span> <span class="dt">image2D</span> u_NextPos<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_DeltaTime<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_Damping<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_Mass<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span>  u_Gravity<span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">ivec2</span> u_GridSize<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="co">// Spring parameters: (offset_x, offset_y, rest_length, stiffness)</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Spring <span class="op">{</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span> <span class="dt">offset</span><span class="op">;</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> restLength<span class="op">;</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> stiffness<span class="op">;</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="co">// Computes force exerted on particle at &#39;coord&#39; by a neighbor at &#39;coord + offset&#39;</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">computeSpringForce</span><span class="op">(</span><span class="dt">ivec2</span> coord<span class="op">,</span> <span class="dt">vec3</span> pos<span class="op">,</span> <span class="dt">ivec2</span> <span class="dt">offset</span><span class="op">,</span> <span class="dt">float</span> restLength<span class="op">,</span> <span class="dt">float</span> stiffness<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span> neighborCoord <span class="op">=</span> coord <span class="op">+</span> <span class="dt">offset</span><span class="op">;</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Boundary check</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>neighborCoord<span class="op">.</span><span class="fu">x</span> <span class="op">&lt;</span> <span class="dv">0</span> <span class="op">||</span> neighborCoord<span class="op">.</span><span class="fu">x</span> <span class="op">&gt;=</span> u_GridSize<span class="op">.</span><span class="fu">x</span> <span class="op">||</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>        neighborCoord<span class="op">.</span><span class="fu">y</span> <span class="op">&lt;</span> <span class="dv">0</span> <span class="op">||</span> neighborCoord<span class="op">.</span><span class="fu">y</span> <span class="op">&gt;=</span> u_GridSize<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> neighborPos <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>u_CurrPos<span class="op">,</span> neighborCoord<span class="op">).</span><span class="fu">xyz</span><span class="op">;</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> delta <span class="op">=</span> pos <span class="op">-</span> neighborPos<span class="op">;</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> dist <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>delta<span class="op">);</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>dist <span class="op">&lt;</span> <span class="fl">1e-6</span><span class="op">)</span> <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Hooke&#39;s Law: F = -k * (x - L0) * normalize(delta)</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">-</span>stiffness <span class="op">*</span> <span class="op">(</span>dist <span class="op">-</span> restLength<span class="op">)</span> <span class="op">*</span> <span class="op">(</span>delta <span class="op">/</span> dist<span class="op">);</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span> coord <span class="op">=</span> <span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">xy</span><span class="op">);</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>coord<span class="op">.</span><span class="fu">x</span> <span class="op">&gt;=</span> u_GridSize<span class="op">.</span><span class="fu">x</span> <span class="op">||</span> coord<span class="op">.</span><span class="fu">y</span> <span class="op">&gt;=</span> u_GridSize<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> currData <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>u_CurrPos<span class="op">,</span> coord<span class="op">);</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> currPos <span class="op">=</span> currData<span class="op">.</span><span class="fu">xyz</span><span class="op">;</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> isPinned <span class="op">=</span> currData<span class="op">.</span><span class="fu">w</span><span class="op">;</span> <span class="co">// 1.0 if fixed in space, 0.0 if dynamic</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Pinned particles do not integrate</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>isPinned <span class="op">&gt;</span> <span class="fl">0.5</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>        <span class="bu">imageStore</span><span class="op">(</span>u_NextPos<span class="op">,</span> coord<span class="op">,</span> <span class="dt">vec4</span><span class="op">(</span>currPos<span class="op">,</span> isPinned<span class="op">));</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> prevPos <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>u_PrevPos<span class="op">,</span> coord<span class="op">).</span><span class="fu">xyz</span><span class="op">;</span></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Accumulate external forces</span></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> totalForce <span class="op">=</span> u_Mass <span class="op">*</span> u_Gravity<span class="op">;</span></span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Define neighbor offsets for Structural, Shear, and Bending springs</span></span>
+<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> d <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span> <span class="co">// Base cell dimension</span></span>
+<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> diag <span class="op">=</span> <span class="fl">1.41421356</span> <span class="op">*</span> d<span class="op">;</span></span>
+<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Structural springs</span></span>
+<span id="cb1-66"><a href="#cb1-66" aria-hidden="true" tabindex="-1"></a>    totalForce <span class="op">+=</span> <span class="fu">computeSpringForce</span><span class="op">(</span>coord<span class="op">,</span> currPos<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(</span> <span class="dv">1</span><span class="op">,</span>  <span class="dv">0</span><span class="op">),</span> d<span class="op">,</span> <span class="fl">1500.0</span><span class="op">);</span></span>
+<span id="cb1-67"><a href="#cb1-67" aria-hidden="true" tabindex="-1"></a>    totalForce <span class="op">+=</span> <span class="fu">computeSpringForce</span><span class="op">(</span>coord<span class="op">,</span> currPos<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(-</span><span class="dv">1</span><span class="op">,</span>  <span class="dv">0</span><span class="op">),</span> d<span class="op">,</span> <span class="fl">1500.0</span><span class="op">);</span></span>
+<span id="cb1-68"><a href="#cb1-68" aria-hidden="true" tabindex="-1"></a>    totalForce <span class="op">+=</span> <span class="fu">computeSpringForce</span><span class="op">(</span>coord<span class="op">,</span> currPos<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(</span> <span class="dv">0</span><span class="op">,</span>  <span class="dv">1</span><span class="op">),</span> d<span class="op">,</span> <span class="fl">1500.0</span><span class="op">);</span></span>
+<span id="cb1-69"><a href="#cb1-69" aria-hidden="true" tabindex="-1"></a>    totalForce <span class="op">+=</span> <span class="fu">computeSpringForce</span><span class="op">(</span>coord<span class="op">,</span> currPos<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(</span> <span class="dv">0</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> d<span class="op">,</span> <span class="fl">1500.0</span><span class="op">);</span></span>
+<span id="cb1-70"><a href="#cb1-70" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-71"><a href="#cb1-71" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Shear springs</span></span>
+<span id="cb1-72"><a href="#cb1-72" aria-hidden="true" tabindex="-1"></a>    totalForce <span class="op">+=</span> <span class="fu">computeSpringForce</span><span class="op">(</span>coord<span class="op">,</span> currPos<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(</span> <span class="dv">1</span><span class="op">,</span>  <span class="dv">1</span><span class="op">),</span> diag<span class="op">,</span> <span class="fl">1000.0</span><span class="op">);</span></span>
+<span id="cb1-73"><a href="#cb1-73" aria-hidden="true" tabindex="-1"></a>    totalForce <span class="op">+=</span> <span class="fu">computeSpringForce</span><span class="op">(</span>coord<span class="op">,</span> currPos<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(-</span><span class="dv">1</span><span class="op">,</span>  <span class="dv">1</span><span class="op">),</span> diag<span class="op">,</span> <span class="fl">1000.0</span><span class="op">);</span></span>
+<span id="cb1-74"><a href="#cb1-74" aria-hidden="true" tabindex="-1"></a>    totalForce <span class="op">+=</span> <span class="fu">computeSpringForce</span><span class="op">(</span>coord<span class="op">,</span> currPos<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(</span> <span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> diag<span class="op">,</span> <span class="fl">1000.0</span><span class="op">);</span></span>
+<span id="cb1-75"><a href="#cb1-75" aria-hidden="true" tabindex="-1"></a>    totalForce <span class="op">+=</span> <span class="fu">computeSpringForce</span><span class="op">(</span>coord<span class="op">,</span> currPos<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> diag<span class="op">,</span> <span class="fl">1000.0</span><span class="op">);</span></span>
+<span id="cb1-76"><a href="#cb1-76" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-77"><a href="#cb1-77" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Bending springs</span></span>
+<span id="cb1-78"><a href="#cb1-78" aria-hidden="true" tabindex="-1"></a>    totalForce <span class="op">+=</span> <span class="fu">computeSpringForce</span><span class="op">(</span>coord<span class="op">,</span> currPos<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(</span> <span class="dv">2</span><span class="op">,</span>  <span class="dv">0</span><span class="op">),</span> <span class="fl">2.0</span> <span class="op">*</span> d<span class="op">,</span> <span class="fl">500.0</span><span class="op">);</span></span>
+<span id="cb1-79"><a href="#cb1-79" aria-hidden="true" tabindex="-1"></a>    totalForce <span class="op">+=</span> <span class="fu">computeSpringForce</span><span class="op">(</span>coord<span class="op">,</span> currPos<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(-</span><span class="dv">2</span><span class="op">,</span>  <span class="dv">0</span><span class="op">),</span> <span class="fl">2.0</span> <span class="op">*</span> d<span class="op">,</span> <span class="fl">500.0</span><span class="op">);</span></span>
+<span id="cb1-80"><a href="#cb1-80" aria-hidden="true" tabindex="-1"></a>    totalForce <span class="op">+=</span> <span class="fu">computeSpringForce</span><span class="op">(</span>coord<span class="op">,</span> currPos<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(</span> <span class="dv">0</span><span class="op">,</span>  <span class="dv">2</span><span class="op">),</span> <span class="fl">2.0</span> <span class="op">*</span> d<span class="op">,</span> <span class="fl">500.0</span><span class="op">);</span></span>
+<span id="cb1-81"><a href="#cb1-81" aria-hidden="true" tabindex="-1"></a>    totalForce <span class="op">+=</span> <span class="fu">computeSpringForce</span><span class="op">(</span>coord<span class="op">,</span> currPos<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(</span> <span class="dv">0</span><span class="op">,</span> <span class="op">-</span><span class="dv">2</span><span class="op">),</span> <span class="fl">2.0</span> <span class="op">*</span> d<span class="op">,</span> <span class="fl">500.0</span><span class="op">);</span></span>
+<span id="cb1-82"><a href="#cb1-82" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-83"><a href="#cb1-83" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Acceleration</span></span>
+<span id="cb1-84"><a href="#cb1-84" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> acceleration <span class="op">=</span> totalForce <span class="op">/</span> u_Mass<span class="op">;</span></span>
+<span id="cb1-85"><a href="#cb1-85" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-86"><a href="#cb1-86" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Verlet Integration step</span></span>
+<span id="cb1-87"><a href="#cb1-87" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> velocity <span class="op">=</span> <span class="op">(</span>currPos <span class="op">-</span> prevPos<span class="op">)</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> u_Damping<span class="op">);</span></span>
+<span id="cb1-88"><a href="#cb1-88" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> nextPos <span class="op">=</span> currPos <span class="op">+</span> velocity <span class="op">+</span> acceleration <span class="op">*</span> <span class="op">(</span>u_DeltaTime <span class="op">*</span> u_DeltaTime<span class="op">);</span></span>
+<span id="cb1-89"><a href="#cb1-89" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-90"><a href="#cb1-90" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Output newly integrated position</span></span>
+<span id="cb1-91"><a href="#cb1-91" aria-hidden="true" tabindex="-1"></a>    <span class="bu">imageStore</span><span class="op">(</span>u_NextPos<span class="op">,</span> coord<span class="op">,</span> <span class="dt">vec4</span><span class="op">(</span>nextPos<span class="op">,</span> <span class="fl">0.0</span><span class="op">));</span></span>
+<span id="cb1-92"><a href="#cb1-92" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<hr />
+<h3 id="state-cycling-and-buffer-swapping">State Cycling and Buffer
+Swapping</h3>
+<p>To advance the simulation each frame:</p>
+<ol type="1">
+<li>Run the compute shader with <code>u_PrevPos</code> containing <span
+class="math inline">\(\mathbf{x}(t - \Delta t)\)</span>,
+<code>u_CurrPos</code> containing <span
+class="math inline">\(\mathbf{x}(t)\)</span>, and <code>u_NextPos</code>
+bound to a writeable target for <span class="math inline">\(\mathbf{x}(t
++ \Delta t)\)</span>.</li>
+<li>Insert a memory barrier using
+<code>glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)</code>.</li>
+<li>Shift buffer pointers so that <span
+class="math inline">\(\mathbf{x}(t)\)</span> becomes the new
+<code>u_PrevPos</code>, and <span class="math inline">\(\mathbf{x}(t +
+\Delta t)\)</span> becomes the new <code>u_CurrPos</code>.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Using gl_ClipDistance for User Clipping Planes in GLSL - glsl</title>
+    <meta name="description" content="This article explains how the built-in glClipDistance array establishes custom user clipping planes within the OpenGL programmable pipeline. It covers the mathematical principles behind signed plane distances, the evaluation of clipping values in vertex">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/using-gl-clip-distance-for-user-clipping-planes-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Using gl_ClipDistance for User Clipping Planes in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/using-gl-clip-distance-for-user-clipping-planes-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the built-in glClipDistance array establishes custom user clipping planes within the OpenGL programmable pipeline. It covers the mathematical principles behind signed plane distances, the evaluation of clipping values in vertex" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="using-gl_clipdistance-for-user-clipping-planes-in-glsl">Using
+gl_ClipDistance for User Clipping Planes in GLSL</h1>
+<p>This article explains how the built-in <code>gl_ClipDistance</code>
+array establishes custom user clipping planes within the OpenGL
+programmable pipeline. It covers the mathematical principles behind
+signed plane distances, the evaluation of clipping values in vertex and
+geometry shaders, the mandatory client-side OpenGL state setup, and the
+subsequent hardware interpolation and primitive discarding stages.</p>
+<h2 id="overview-of-gl_clipdistance">Overview of gl_ClipDistance</h2>
+<p>In GLSL, <code>gl_ClipDistance</code> is a built-in output float
+array available in vertex, tessellation, and geometry shader stages.
+Instead of relying purely on the fixed view-frustum clipping boundaries
+(near, far, left, right, top, bottom), developers use
+<code>gl_ClipDistance</code> to define arbitrary, user-specified
+clipping half-spaces. Each element of the array corresponds to an active
+clipping plane enabled in the OpenGL context.</p>
+<h2 id="the-mathematical-principle">The Mathematical Principle</h2>
+<p>A user clipping plane is defined mathematically in Hessian normal
+form by a four-component vector:</p>
+<p><span class="math display">\[\mathbf{P} = (A, B, C, D)\]</span></p>
+<p>Where <span class="math inline">\((A, B, C)\)</span> represents the
+normalized normal vector of the plane, and <span
+class="math inline">\(D\)</span> represents the distance offset from the
+origin. For any vertex position <span class="math inline">\(\mathbf{v} =
+(x, y, z, 1.0)\)</span> in the same coordinate space (typically world
+space or view space), the signed distance <span
+class="math inline">\(d\)</span> from the vertex to the plane is
+calculated using the dot product:</p>
+<p><span class="math display">\[d = \mathbf{P} \cdot \mathbf{v} = Ax +
+By + Cz + D\]</span></p>
+<ul>
+<li>If <span class="math inline">\(d \ge 0.0\)</span>, the vertex lies
+in the positive half-space (the visible region) and is preserved.</li>
+<li>If <span class="math inline">\(d &lt; 0.0\)</span>, the vertex lies
+in the negative half-space and is subject to clipping.</li>
+</ul>
+<p>Assigning this scalar result to an index of
+<code>gl_ClipDistance</code> communicates the vertex's spatial
+relationship to that specific clipping plane.</p>
+<h2 id="opengl-host-configuration">OpenGL Host Configuration</h2>
+<p>Before the GPU hardware respects the values written to
+<code>gl_ClipDistance</code>, the corresponding clipping plane must be
+explicitly enabled through the OpenGL API on the host application
+side:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>glEnable<span class="op">(</span>GL_CLIP_DISTANCE0<span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>glEnable<span class="op">(</span>GL_CLIP_DISTANCE1<span class="op">);</span> <span class="co">// If using a second plane</span></span></code></pre></div>
+<p>If a plane index is written in GLSL but not enabled via
+<code>glEnable(GL_CLIP_DISTANCEi)</code>, the hardware ignores the
+computed distance for that index. The maximum number of supported planes
+can be queried at runtime using
+<code>glGetIntegerv(GL_MAX_CLIP_DISTANCES, &amp;maxClipDistances)</code>,
+which is guaranteed to be at least 8 in modern implementations.</p>
+<h2 id="implementation-in-the-vertex-shader">Implementation in the
+Vertex Shader</h2>
+<p>When no geometry or tessellation shader is present, distances are
+calculated directly in the vertex shader. The size of the
+<code>gl_ClipDistance</code> array must either be declared explicitly or
+implicitly sized through indexing.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> aPos<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> uModel<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> uView<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> uProjection<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec4</span> uClipPlane<span class="op">;</span> <span class="co">// Plane equation in world space (Ax + By + Cz + D)</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">float</span> <span class="bu">gl_ClipDistance</span><span class="op">[</span><span class="dv">1</span><span class="op">];</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> worldPosition <span class="op">=</span> uModel <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>aPos<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate signed distance to the plane</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_ClipDistance</span><span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>worldPosition<span class="op">,</span> uClipPlane<span class="op">);</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> uProjection <span class="op">*</span> uView <span class="op">*</span> worldPosition<span class="op">;</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The coordinate system used for the plane equation and vertex position
+must match. World space is preferred because it avoids recalculating
+plane equations when the camera moves.</p>
+<h2 id="handling-in-the-geometry-shader">Handling in the Geometry
+Shader</h2>
+<p>If a geometry shader is introduced into the pipeline, it intercepts
+the outputs of the vertex shader. The vertex shader's assignments to
+<code>gl_ClipDistance</code> do not automatically propagate to
+rasterization.</p>
+<p>In the geometry shader:</p>
+<ol type="1">
+<li>The incoming distances are read from
+<code>gl_in[i].gl_ClipDistance[]</code>.</li>
+<li>The outgoing distances must be explicitly written to
+<code>gl_ClipDistance[]</code> for every generated vertex before calling
+<code>EmitVertex()</code>.</li>
+</ol>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">triangles</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">triangle_strip</span><span class="op">,</span> <span class="dt">max_vertices</span> <span class="op">=</span> <span class="dv">3</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">float</span> gl_ClipDistanceIn<span class="op">[][</span><span class="dv">1</span><span class="op">];</span> <span class="co">// Custom in or via gl_in depending on GLSL version</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">float</span> <span class="bu">gl_ClipDistance</span><span class="op">[</span><span class="dv">1</span><span class="op">];</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> i<span class="op">++)</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">{</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">gl_Position</span> <span class="op">=</span> <span class="va">gl_in</span><span class="op">[</span>i<span class="op">].</span><span class="fu">gl_Position</span><span class="op">;</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Pass through distance from vertex stage or calculate per-vertex</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">gl_ClipDistance</span><span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="va">gl_in</span><span class="op">[</span>i<span class="op">].</span><span class="fu">gl_ClipDistance</span><span class="op">[</span><span class="dv">0</span><span class="op">];</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">EmitVertex</span><span class="op">();</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    <span class="bu">EndPrimitive</span><span class="op">();</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="hardware-interpolation-and-primitive-clipping">Hardware
+Interpolation and Primitive Clipping</h2>
+<p>Following the primitive assembly stage (post-vertex or
+post-geometry), the fixed-function rasterizer processes the
+<code>gl_ClipDistance</code> outputs:</p>
+<ol type="1">
+<li><strong>Interpolation:</strong> The scalar distance values are
+linearly interpolated across the faces of triangles and along
+lines.</li>
+<li><strong>Boundary Determination:</strong> The hardware locates the
+zero-crossing points where interpolated distance equals <span
+class="math inline">\(0.0\)</span>.</li>
+<li><strong>Primitive Reconstruction:</strong>
+<ul>
+<li>If all vertices of a primitive have values <span
+class="math inline">\(\ge 0.0\)</span>, the primitive passes
+unchanged.</li>
+<li>If all vertices have values <span class="math inline">\(&lt;
+0.0\)</span>, the entire primitive is rejected before fragment
+processing.</li>
+<li>If a primitive straddles the plane (having both positive and
+negative vertices), the hardware clips the geometry precisely along the
+plane boundary. New vertices are generated at the intersection line,
+interpolating all vertex attributes (UVs, normals, colors), and the
+exterior portion is discarded.</li>
+</ul></li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

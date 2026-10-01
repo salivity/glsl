@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>64-Bit Atomics with GL_EXT_shader_atomic_int64 - glsl</title>
+    <meta name="description" content="The OpenGL and Vulkan shading language extension GLEXTshaderatomicint64 allows compute and graphics shaders to perform atomic operations directly on 64-bit signed and unsigned integers. This article provides a technical overview of the extension's role i">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/64-bit-atomics-with-gl-ext-shader-atomic-int-64">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="64-Bit Atomics with GL_EXT_shader_atomic_int64 - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/64-bit-atomics-with-gl-ext-shader-atomic-int-64" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The OpenGL and Vulkan shading language extension GLEXTshaderatomicint64 allows compute and graphics shaders to perform atomic operations directly on 64-bit signed and unsigned integers. This article provides a technical overview of the extension's role i" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="64-bit-atomics-with-gl_ext_shader_atomic_int64">64-Bit Atomics
+with GL_EXT_shader_atomic_int64</h1>
+<p>The OpenGL and Vulkan shading language extension
+<code>GL_EXT_shader_atomic_int64</code> allows compute and graphics
+shaders to perform atomic operations directly on 64-bit signed and
+unsigned integers. This article provides a technical overview of the
+extension's role in GLSL, detailing how it lifts historical 32-bit
+constraints, the specific atomic functions it introduces, the memory
+models it affects, and its practical applications in modern GPU
+computing.</p>
+<h3 id="overcoming-32-bit-limitations">Overcoming 32-Bit
+Limitations</h3>
+<p>Standard GLSL natively restricts atomic memory operations—such as
+<code>atomicAdd</code> and <code>atomicCompSwap</code>—to 32-bit integer
+types (<code>int</code> and <code>uint</code>). In high-performance
+rendering and GPGPU tasks, 32-bit integers frequently fall short due to
+range limitations or alignment needs. The
+<code>GL_EXT_shader_atomic_int64</code> extension eliminates this
+bottleneck by integrating native hardware support for 64-bit atomic
+operations, removing the need for complex, software-emulated multi-word
+locking mechanisms that degrade GPU performance.</p>
+<h3 id="key-capabilities-and-functions">Key Capabilities and
+Functions</h3>
+<p>When enabled in a shader via
+<code>#extension GL_EXT_shader_atomic_int64 : require</code>, the
+extension overloads standard GLSL built-in atomic functions to accept
+<code>int64_t</code> and <code>uint64_t</code> data types. These
+operations apply to both buffer variables (such as Shader Storage Buffer
+Objects) and compute shader <code>shared</code> memory variables.</p>
+<p>The extension enables the following 64-bit atomic functions:</p>
+<ul>
+<li><strong>Arithmetic Operations:</strong> <code>atomicAdd</code>,
+<code>atomicMin</code>, and <code>atomicMax</code></li>
+<li><strong>Bitwise Operations:</strong> <code>atomicAnd</code>,
+<code>atomicOr</code>, and <code>atomicXor</code></li>
+<li><strong>Exchange and Compare:</strong> <code>atomicExchange</code>
+and <code>atomicCompSwap</code></li>
+</ul>
+<p>Each operation guarantees atomic read-modify-write behavior across
+concurrently executing invocations within a workgroup or across the
+entire GPU.</p>
+<h3 id="critical-use-cases">Critical Use Cases</h3>
+<p>The introduction of 64-bit atomic operations enables advanced GPU
+algorithms that require wide data tracking:</p>
+<ul>
+<li><strong>Large-Scale Global Counters:</strong> Applications that
+process billions of primitives or samples can easily overflow a 32-bit
+counter (capped at ~4.29 billion). A 64-bit atomic counter prevents
+overflow in persistent GPU workloads.</li>
+<li><strong>Packing Data with Handles:</strong> Developers can pack
+multiple values—such as a 32-bit depth value alongside a 32-bit
+primitive ID or material index—into a single 64-bit integer. Using
+<code>atomicMin</code> or <code>atomicMax</code> on these packed values
+allows algorithms like Order-Independent Transparency (OIT) or software
+rasterization to perform atomic depth-testing and payload updates
+simultaneously.</li>
+<li><strong>64-Bit Pointers and Addressing:</strong> In advanced GPU
+compute pipelines employing GPU virtual addressing or bindless resource
+management, memory pointers are typically 64 bits wide.
+<code>GL_EXT_shader_atomic_int64</code> allows the atomic insertion and
+traversal of nodes in lock-free GPU data structures, such as linked
+lists, hash tables, and spatial acceleration hierarchies.</li>
+</ul>
+<h3 id="dependencies-and-requirements">Dependencies and
+Requirements</h3>
+<p><code>GL_EXT_shader_atomic_int64</code> requires foundational support
+for 64-bit integer arithmetic, typically provided by extensions such as
+<code>GL_ARB_gpu_shader_int64</code> or
+<code>GL_EXT_shader_explicit_arithmetic_types_int64</code>. On the
+hardware level, it depends on underlying GPU architecture support for
+native 64-bit atomic instructions, making it standard on modern discrete
+GPUs and supported mobile architectures.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

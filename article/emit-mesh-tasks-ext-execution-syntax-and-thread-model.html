@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EmitMeshTasksEXT Execution Syntax and Thread Model - glsl</title>
+    <meta name="description" content="This article provides an overview of the EmitMeshTasksEXT function in GLSL task shaders under the VKEXTmeshshader extension. It details the precise execution syntax, rules governing invocation behavior and control flow, the thread allocation model from t">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/emit-mesh-tasks-ext-execution-syntax-and-thread-model">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="EmitMeshTasksEXT Execution Syntax and Thread Model - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/emit-mesh-tasks-ext-execution-syntax-and-thread-model" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of the EmitMeshTasksEXT function in GLSL task shaders under the VKEXTmeshshader extension. It details the precise execution syntax, rules governing invocation behavior and control flow, the thread allocation model from t" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="emitmeshtasksext-execution-syntax-and-thread-model">EmitMeshTasksEXT
+Execution Syntax and Thread Model</h1>
+<p>This article provides an overview of the
+<code>EmitMeshTasksEXT</code> function in GLSL task shaders under the
+<code>VK_EXT_mesh_shader</code> extension. It details the precise
+execution syntax, rules governing invocation behavior and control flow,
+the thread allocation model from task workgroups to mesh workgroups, and
+payload data synchronization requirements.</p>
+<hr />
+<h3 id="execution-syntax">Execution Syntax</h3>
+<p>The <code>EmitMeshTasksEXT</code> function is available exclusively
+within GLSL task shaders enabled by the <code>GL_EXT_mesh_shader</code>
+extension. Its function signature is defined as follows:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">EmitMeshTasksEXT</span><span class="op">(</span><span class="dt">uint</span> groupCountX<span class="op">,</span> <span class="dt">uint</span> groupCountY<span class="op">,</span> <span class="dt">uint</span> groupCountZ<span class="op">);</span></span></code></pre></div>
+<h4 id="parameters">Parameters:</h4>
+<ul>
+<li><strong><code>groupCountX</code></strong>: The number of mesh shader
+workgroups to spawn along the X dimension.</li>
+<li><strong><code>groupCountY</code></strong>: The number of mesh shader
+workgroups to spawn along the Y dimension.</li>
+<li><strong><code>groupCountZ</code></strong>: The number of mesh shader
+workgroups to spawn along the Z dimension.</li>
+</ul>
+<p>Setting any dimension to <code>0</code> results in zero mesh shader
+workgroups being spawned, effectively culling all downstream geometry
+for that task workgroup.</p>
+<h4 id="basic-usage-example">Basic Usage Example:</h4>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_mesh_shader : require</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">32</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> TaskPayload <span class="op">{</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> baseIndex<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> meshletIndices<span class="op">[</span><span class="dv">64</span><span class="op">];</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>taskPayloadSharedEXT TaskPayload payload<span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Perform culling or compute meshlet distribution across invocations</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> threadID <span class="op">=</span> <span class="bu">gl_LocalInvocationIndex</span><span class="op">;</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Write shared payload data</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>threadID <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        payload<span class="op">.</span><span class="fu">baseIndex</span> <span class="op">=</span> <span class="dv">128</span><span class="op">;</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Ensure all payload writes are complete</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">memoryBarrierShared</span><span class="op">();</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="bu">barrier</span><span class="op">();</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Spawn 16 mesh shader workgroups across a 1D grid</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    <span class="fu">EmitMeshTasksEXT</span><span class="op">(</span><span class="dv">16</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<hr />
+<h3 id="control-flow-and-execution-rules">Control Flow and Execution
+Rules</h3>
+<p>The execution of <code>EmitMeshTasksEXT</code> differs significantly
+from standard shader functions due to specific architectural and
+compiler constraints:</p>
+<ol type="1">
+<li><p><strong>Workgroup Uniform Control Flow</strong>: All invocations
+within the task shader workgroup must execute
+<code>EmitMeshTasksEXT</code> in uniform control flow. It cannot be
+conditionally placed within a dynamic branch where only a subset of
+threads execute it (such as inside
+<code>if (gl_LocalInvocationIndex == 0)</code>). Divergent execution
+leads to undefined behavior.</p></li>
+<li><p><strong>Workgroup Termination</strong>: Executing
+<code>EmitMeshTasksEXT</code> implicitly terminates the execution of the
+calling task shader workgroup. Any code placed after
+<code>EmitMeshTasksEXT</code> will either not be executed or cause
+compilation/validation errors depending on the driver
+implementation.</p></li>
+<li><p><strong>Single Execution Limit</strong>: Exactly one dynamic
+execution of <code>EmitMeshTasksEXT</code> is permitted per task shader
+workgroup. Calling it multiple times in loops or separate control paths
+is invalid.</p></li>
+</ol>
+<hr />
+<h3 id="thread-allocation-and-scheduling-model">Thread Allocation and
+Scheduling Model</h3>
+<p>The task-to-mesh pipeline establishes a hierarchical compute model
+consisting of two linked workgroup stages:</p>
+<pre><code>[ DrawMeshTasksEXT Command ]
+          │
+          ▼
+┌───────────────────────────┐
+│ Task Shader Workgroup Grid│
+│ (User-defined XYZ count)  │
+└─────────────┬─────────────┘
+              │  EmitMeshTasksEXT(gx, gy, gz)
+              ▼
+┌───────────────────────────┐
+│ Mesh Shader Workgroup Grid│
+│ (gx × gy × gz per task WG)│
+└───────────────────────────┘</code></pre>
+<h4 id="1-input-workgroup-sizing">1. Input Workgroup Sizing</h4>
+<p>The task shader itself is dispatched via Vulkan API commands such as
+<code>vkCmdDrawMeshTasksEXT</code>. The local thread count per task
+workgroup is defined by the standard compute layout qualifier:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> X<span class="op">,</span> local_size_y <span class="op">=</span> Y<span class="op">,</span> local_size_z <span class="op">=</span> Z<span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span></code></pre></div>
+<h4 id="2-downstream-mesh-workgroup-generation">2. Downstream Mesh
+Workgroup Generation</h4>
+<p>When <code>EmitMeshTasksEXT(gx, gy, gz)</code> runs, the GPU
+allocates a 3D grid of mesh shader workgroups totaling
+<code>gx * gy * gz</code>.</p>
+<ul>
+<li>Each spawned mesh workgroup inherits the execution context of the
+specific task workgroup that emitted it.</li>
+<li>Inside the spawned mesh shader, the workgroup coordinates are read
+using <code>gl_WorkGroupID</code>, ranging from <code>(0, 0, 0)</code>
+up to <code>(gx - 1, gy - 1, gz - 1)</code>.</li>
+<li>Each mesh workgroup operates with its own independent thread count
+as defined by the mesh shader’s <code>layout(local_size_x, ...)</code>
+directive.</li>
+</ul>
+<h4 id="3-payload-allocation-and-synchronization">3. Payload Allocation
+and Synchronization</h4>
+<p>Data is passed from the task shader workgroup to the downstream mesh
+shader workgroups via variables marked with the
+<code>taskPayloadSharedEXT</code> storage qualifier.</p>
+<ul>
+<li><strong>Lifetime and Scope</strong>: The payload memory persists
+until all mesh shader workgroups launched by that specific task
+workgroup have completed.</li>
+<li><strong>Synchronization</strong>: Writes to
+<code>taskPayloadSharedEXT</code> memory must be made visible to all
+threads using <code>memoryBarrierShared()</code> and synchronized using
+<code>barrier()</code> prior to calling <code>EmitMeshTasksEXT</code>.
+Downstream mesh shader workgroups can read this data concurrently as
+read-only memory.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL layout(quads) UV Domain Generation Explained - glsl</title>
+    <meta name="description" content="In a GLSL tessellation evaluation shader (TES), specifying the layout(quads) input layout qualifier instructs the primitive generator to create a two-dimensional grid over a normalized square domain. This overview explains how layout(quads) redefines the">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-layout-quads-uv-domain-generation-explained">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL layout(quads) UV Domain Generation Explained - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-layout-quads-uv-domain-generation-explained" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In a GLSL tessellation evaluation shader (TES), specifying the layout(quads) input layout qualifier instructs the primitive generator to create a two-dimensional grid over a normalized square domain. This overview explains how layout(quads) redefines the" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-layoutquads-uv-domain-generation-explained">GLSL
+layout(quads) UV Domain Generation Explained</h1>
+<p>In a GLSL tessellation evaluation shader (TES), specifying the
+<code>layout(quads)</code> input layout qualifier instructs the
+primitive generator to create a two-dimensional grid over a normalized
+square domain. This overview explains how <code>layout(quads)</code>
+redefines the abstract UV coordinate space, dictates the format and
+values of the built-in <code>gl_TessCoord</code> variable, changes the
+mapping of inner and outer tessellation levels, and enables standard
+bilinear interpolation instead of barycentric coordinate math.</p>
+<h3 id="the-2d-rectangular-domain">The 2D Rectangular Domain</h3>
+<p>When an input primitive is declared with <code>layout(quads)</code>,
+the fixed-function primitive generation stage constructs a tessellated
+domain defined over the unit square <span class="math inline">\([0.0,
+1.0] \times [0.0, 1.0]\)</span>. This is fundamentally different from
+<code>layout(triangles)</code>, which generates an equilateral triangle
+domain governed by barycentric coordinates. The quad domain represents a
+continuous UV space with four distinct boundaries:</p>
+<ul>
+<li><span class="math inline">\(u = 0.0\)</span> (Left edge)</li>
+<li><span class="math inline">\(u = 1.0\)</span> (Right edge)</li>
+<li><span class="math inline">\(v = 0.0\)</span> (Bottom edge)</li>
+<li><span class="math inline">\(v = 1.0\)</span> (Top edge)</li>
+</ul>
+<h3 id="modification-of-gl_tesscoord">Modification of
+<code>gl_TessCoord</code></h3>
+<p>The evaluation shader receives the location of each generated vertex
+within this domain through the built-in vector
+<code>gl_TessCoord</code>. Under <code>layout(quads)</code>, the
+components of <code>gl_TessCoord</code> behave as follows:</p>
+<ul>
+<li><code>gl_TessCoord.x</code>: Represents the normalized <span
+class="math inline">\(u\)</span>-coordinate, ranging from <span
+class="math inline">\(0.0\)</span> to <span
+class="math inline">\(1.0\)</span>.</li>
+<li><code>gl_TessCoord.y</code>: Represents the normalized <span
+class="math inline">\(v\)</span>-coordinate, ranging from <span
+class="math inline">\(0.0\)</span> to <span
+class="math inline">\(1.0\)</span>.</li>
+<li><code>gl_TessCoord.z</code>: Is unused and always set to <span
+class="math inline">\(0.0\)</span>.</li>
+</ul>
+<p>Because only the X and Y components vary, shaders evaluate quad
+topology using standard two-dimensional Cartesian coordinates
+(<code>gl_TessCoord.xy</code>).</p>
+<h3 id="mapping-tessellation-levels-to-uv-axes">Mapping Tessellation
+Levels to UV Axes</h3>
+<p>The distribution and density of generated UV coordinates are governed
+by the tessellation levels calculated in the tessellation control shader
+(TCS):</p>
+<ul>
+<li><strong>Inner Levels (<code>gl_TessLevelInner</code>)</strong>: A
+quad uses two inner tessellation levels.
+<code>gl_TessLevelInner[0]</code> specifies the number of subdivisions
+along the vertical (<span class="math inline">\(v\)</span>) axis, while
+<code>gl_TessLevelInner[1]</code> specifies the subdivisions along the
+horizontal (<span class="math inline">\(u\)</span>) axis. Together, they
+define the interior grid density of UV samples.</li>
+<li><strong>Outer Levels (<code>gl_TessLevelOuter</code>)</strong>: A
+quad uses all four outer levels. Each index directly corresponds to one
+of the four perimeter edges of the <span class="math inline">\([0,
+1]\)</span> domain:
+<ul>
+<li><code>gl_TessLevelOuter[0]</code>: Subdivides the edge where <span
+class="math inline">\(u = 0.0\)</span>.</li>
+<li><code>gl_TessLevelOuter[1]</code>: Subdivides the edge where <span
+class="math inline">\(v = 0.0\)</span>.</li>
+<li><code>gl_TessLevelOuter[2]</code>: Subdivides the edge where <span
+class="math inline">\(u = 1.0\)</span>.</li>
+<li><code>gl_TessLevelOuter[3]</code>: Subdivides the edge where <span
+class="math inline">\(v = 1.0\)</span>.</li>
+</ul></li>
+</ul>
+<p>Transitioning between the interior grid and perimeter boundaries
+creates non-uniform UV coordinate stepping near the edges to match
+neighboring patches with different tessellation factors.</p>
+<h3 id="vertex-position-interpolation">Vertex Position
+Interpolation</h3>
+<p>Because <code>layout(quads)</code> produces independent <span
+class="math inline">\(u\)</span> and <span
+class="math inline">\(v\)</span> coordinates rather than a 3-component
+barycentric weight vector, vertex attributes such as position, normals,
+and texture coordinates are computed via bilinear interpolation or
+tensor product surfaces (such as bicubic Bézier patches). In a standard
+four-control-point quad patch, bilinear interpolation is applied
+directly using <code>gl_TessCoord.x</code> and
+<code>gl_TessCoord.y</code>:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> p0 <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span><span class="va">gl_in</span><span class="op">[</span><span class="dv">0</span><span class="op">].</span><span class="fu">gl_Position</span><span class="op">,</span> <span class="va">gl_in</span><span class="op">[</span><span class="dv">1</span><span class="op">].</span><span class="fu">gl_Position</span><span class="op">,</span> <span class="bu">gl_TessCoord</span><span class="op">.</span><span class="fu">x</span><span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> p1 <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span><span class="va">gl_in</span><span class="op">[</span><span class="dv">3</span><span class="op">].</span><span class="fu">gl_Position</span><span class="op">,</span> <span class="va">gl_in</span><span class="op">[</span><span class="dv">2</span><span class="op">].</span><span class="fu">gl_Position</span><span class="op">,</span> <span class="bu">gl_TessCoord</span><span class="op">.</span><span class="fu">x</span><span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="bu">gl_Position</span> <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>p0<span class="op">,</span> p1<span class="op">,</span> <span class="bu">gl_TessCoord</span><span class="op">.</span><span class="fu">y</span><span class="op">);</span></span></code></pre></div>
+<p>By switching to <code>layout(quads)</code>, the tessellation
+evaluation stage transitions from simplex-based coordinate weighting to
+structured 2D UV mapping, making it the preferred primitive
+configuration for terrain grids, displacement mapping, and parametric
+surfaces.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Transpose on Non-Square Matrices - glsl</title>
+    <meta name="description" content="The transpose built-in function in the OpenGL Shading Language (GLSL) swaps the row and column indices of any valid matrix type. When applied to non-square matrices, it inverts the dimensional shape of the matrix—converting a matrix with $C$ columns an">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-transpose-on-non-square-matrices">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Transpose on Non-Square Matrices - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-transpose-on-non-square-matrices" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The transpose built-in function in the OpenGL Shading Language (GLSL) swaps the row and column indices of any valid matrix type. When applied to non-square matrices, it inverts the dimensional shape of the matrix—converting a matrix with $C$ columns an" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-transpose-on-non-square-matrices">GLSL Transpose on
+Non-Square Matrices</h1>
+<p>The <code>transpose</code> built-in function in the OpenGL Shading
+Language (GLSL) swaps the row and column indices of any valid matrix
+type. When applied to non-square matrices, it inverts the dimensional
+shape of the matrix—converting a matrix with <span
+class="math inline">\(C\)</span> columns and <span
+class="math inline">\(R\)</span> rows into one with <span
+class="math inline">\(R\)</span> columns and <span
+class="math inline">\(C\)</span> rows—while remapping the individual
+components across the main diagonal.</p>
+<h3 id="dimensional-transformation">Dimensional Transformation</h3>
+<p>GLSL specifies matrix types in column-major order using the notation
+<code>matCxR</code>, where <code>C</code> represents the number of
+columns and <code>R</code> represents the number of rows. When you pass
+a non-square matrix to <code>transpose()</code>, the return type is
+automatically converted to match the swapped dimensions:</p>
+<ul>
+<li>A <code>mat2x3</code> (2 columns, 3 rows) becomes a
+<code>mat3x2</code> (3 columns, 2 rows).</li>
+<li>A <code>mat2x4</code> (2 columns, 4 rows) becomes a
+<code>mat4x2</code> (4 columns, 2 rows).</li>
+<li>A <code>mat3x2</code> (3 columns, 2 rows) becomes a
+<code>mat2x3</code> (2 columns, 3 rows).</li>
+<li>A <code>mat3x4</code> (3 columns, 4 rows) becomes a
+<code>mat4x3</code> (4 columns, 3 rows).</li>
+<li>A <code>mat4x2</code> (4 columns, 2 rows) becomes a
+<code>mat2x4</code> (2 columns, 4 rows).</li>
+<li>A <code>mat4x3</code> (4 columns, 3 rows) becomes a
+<code>mat3x4</code> (3 columns, 4 rows).</li>
+</ul>
+<h3 id="component-mapping">Component Mapping</h3>
+<p>The mathematical operation behind <code>transpose</code> maps every
+element at column <span class="math inline">\(j\)</span> and row <span
+class="math inline">\(i\)</span> in the source matrix to column <span
+class="math inline">\(i\)</span> and row <span
+class="math inline">\(j\)</span> in the target matrix:</p>
+<p><span class="math display">\[\text{Result}[i][j] =
+\text{Source}[j][i]\]</span></p>
+<p>Because GLSL addresses matrices using
+<code>matrix[column][row]</code>, the indices simply swap order. The
+first column of the original matrix becomes the first row of the
+transposed matrix, the second column becomes the second row, and so
+forth.</p>
+<h3 id="code-example">Code Example</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Define a 2-column, 3-row matrix</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">mat2x3</span> originalMat <span class="op">=</span> <span class="dt">mat2x3</span><span class="op">(</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="fl">1.0</span><span class="op">,</span> <span class="fl">2.0</span><span class="op">,</span> <span class="fl">3.0</span><span class="op">,</span>  <span class="co">// Column 0</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="fl">4.0</span><span class="op">,</span> <span class="fl">5.0</span><span class="op">,</span> <span class="fl">6.0</span>   <span class="co">// Column 1</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Transpose the matrix</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="dt">mat3x2</span> transposedMat <span class="op">=</span> <span class="bu">transpose</span><span class="op">(</span>originalMat<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co">// transposedMat is now a 3-column, 2-row matrix:</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co">// Column 0: (1.0, 4.0)</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co">// Column 1: (2.0, 5.0)</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="co">// Column 2: (3.0, 6.0)</span></span></code></pre></div>
+<h3 id="purpose-and-common-uses">Purpose and Common Uses</h3>
+<p>Non-square matrices are frequently used in graphics programming to
+reduce register usage and bandwidth when full <span
+class="math inline">\(4\times4\)</span> transforms are unnecessary, such
+as in affine transformations (<span
+class="math inline">\(4\times3\)</span> or <span
+class="math inline">\(3\times4\)</span> matrices) or 2D projection
+mathematics. Using <code>transpose</code> on non-square matrices allows
+shaders to:</p>
+<ol type="1">
+<li><strong>Align Storage Formats:</strong> Convert data stored in
+row-major uniform buffers directly into GLSL's native column-major
+processing format.</li>
+<li><strong>Switch Vector Multiplication Order:</strong> Enable
+vector-matrix multiplication equivalencies, converting <span
+class="math inline">\((M \cdot v)\)</span> operations into <span
+class="math inline">\((v \cdot M^T)\)</span> formulations.</li>
+<li><strong>Restructure Projections:</strong> Reorient packed
+transformation matrices for skinning, instancing, or custom geometric
+projections without manual component shuffling.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

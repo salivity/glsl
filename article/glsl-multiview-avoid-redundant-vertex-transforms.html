@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Multiview: Avoid Redundant Vertex Transforms - glsl</title>
+    <meta name="description" content="Multiview rendering significantly enhances graphics efficiency in virtual reality and stereoscopic rendering by drawing a scene to multiple render targets simultaneously using a single draw call. By leveraging extensions such as GLOVRmultiview and GLOVRm">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-multiview-avoid-redundant-vertex-transforms">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Multiview: Avoid Redundant Vertex Transforms - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-multiview-avoid-redundant-vertex-transforms" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Multiview rendering significantly enhances graphics efficiency in virtual reality and stereoscopic rendering by drawing a scene to multiple render targets simultaneously using a single draw call. By leveraging extensions such as GLOVRmultiview and GLOVRm" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-multiview-avoid-redundant-vertex-transforms">GLSL
+Multiview: Avoid Redundant Vertex Transforms</h1>
+<p>Multiview rendering significantly enhances graphics efficiency in
+virtual reality and stereoscopic rendering by drawing a scene to
+multiple render targets simultaneously using a single draw call. By
+leveraging extensions such as <code>GL_OVR_multiview</code> and
+<code>GL_OVR_multiview2</code>, developers can execute vertex shaders
+that share common calculations across all views. This architecture
+directly addresses performance bottlenecks by decoupling
+view-independent geometry operations—such as skeletal animation and
+world-space transforms—from view-dependent projections, effectively
+eliminating redundant vertex processing passes.</p>
+<h3 id="the-redundancy-of-traditional-multi-pass-pipelines">The
+Redundancy of Traditional Multi-Pass Pipelines</h3>
+<p>In standard stereoscopic rendering, graphics applications typically
+generate images for each eye using one of two inefficient methods:</p>
+<ol type="1">
+<li><strong>Multiple Draw Calls:</strong> The application issues a
+separate draw call for each view. This forces the GPU to execute the
+entire vertex pipeline twice, repeating expensive view-invariant
+calculations like vertex skinning, morph target blending, physics
+transformations, and model-to-world matrix multiplications.</li>
+<li><strong>Geometry Shader Instancing:</strong> A single draw call
+passes vertices to a geometry shader, which duplicates primitives and
+routes them to different array layers. While this avoids multiple API
+calls, geometry shaders frequently introduce pipeline stalls, expand
+memory bandwidth consumption, and cannot easily share vertex-stage
+calculations across duplicates.</li>
+</ol>
+<h3 id="decoupling-computations-via-gl_viewid_ovr">Decoupling
+Computations via <code>gl_ViewID_OVR</code></h3>
+<p>Multiview rendering resolves this problem at the vertex shader stage
+through the built-in variable <code>gl_ViewID_OVR</code>. When multiview
+is enabled, the vertex shader executes with awareness of which view it
+is currently computing, allowing the programmer to structure GLSL code
+so that identical calculations are only evaluated once.</p>
+<p>Vertex transformations fall into two distinct categories:</p>
+<ul>
+<li><strong>View-Independent Transforms:</strong> Skeletal animation
+matrices, morphing, and transformations from object space to world space
+depend exclusively on the model and its animation state. These values
+are identical whether rendered for the left eye or the right eye.</li>
+<li><strong>View-Dependent Transforms:</strong> The transformation from
+world space to clip space (view and projection matrices) and
+camera-relative calculations (such as specular view vectors) vary by
+eye.</li>
+</ul>
+<p>By isolating these categories in GLSL, the vertex shader evaluates
+the heavy view-independent transformations first, saves the intermediate
+result in world space, and then applies view-specific transformations
+conditionally based on <code>gl_ViewID_OVR</code>.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 300 es</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_OVR_multiview2 : enable</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>num_views <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> aPosition<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> aNormal<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> uModelMatrix<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> uViewProjection<span class="op">[</span><span class="dv">2</span><span class="op">];</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec3</span> vWorldNormal<span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Common, view-independent transform: Computed once</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> worldPosition <span class="op">=</span> uModelMatrix <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>aPosition<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    vWorldNormal <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span>uModelMatrix<span class="op">)</span> <span class="op">*</span> aNormal<span class="op">;</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// View-dependent transform: Indexed via gl_ViewID_OVR</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> uViewProjection<span class="op">[</span>gl_ViewID_OVR<span class="op">]</span> <span class="op">*</span> worldPosition<span class="op">;</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="hardware-level-execution-and-driver-optimization">Hardware-Level
+Execution and Driver Optimization</h3>
+<p>Under the <code>GL_OVR_multiview</code> specification, the GPU driver
+can optimize shader execution beyond simple software indexing. Because
+the pipeline evaluates both views within the same drawing context,
+modern GPU architectures can execute the scalar and vector instructions
+corresponding to view-independent code in shared execution paths.</p>
+<p>Rather than re-fetching vertex buffers, decompressing attributes, and
+recalculating skeletal weights per view, the hardware fetches and
+processes the raw vertex attributes once. The derived values are then
+broadcast to the viewport-routing hardware alongside the eye-specific
+clip-space positions.</p>
+<p>Furthermore, using <code>GL_OVR_multiview2</code> relaxes the
+constraint that requires all shader outputs to be view-invariant,
+allowing select interpolants to vary per view only when strictly
+necessary. This fine-grained control ensures memory bandwidth and
+register allocations are utilized solely for data that differs between
+viewpoints.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

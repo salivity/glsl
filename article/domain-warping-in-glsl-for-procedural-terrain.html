@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Domain Warping in GLSL for Procedural Terrain - glsl</title>
+    <meta name="description" content="Domain warping is a procedural generation technique that distorts coordinate spaces using noise functions, enabling the creation of organic, turbulent topographies. In GLSL, applying domain warping to procedural heightmaps disrupts the uniform regularity">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/domain-warping-in-glsl-for-procedural-terrain">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Domain Warping in GLSL for Procedural Terrain - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/domain-warping-in-glsl-for-procedural-terrain" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Domain warping is a procedural generation technique that distorts coordinate spaces using noise functions, enabling the creation of organic, turbulent topographies. In GLSL, applying domain warping to procedural heightmaps disrupts the uniform regularity" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="domain-warping-in-glsl-for-procedural-terrain">Domain Warping in
+GLSL for Procedural Terrain</h1>
+<p>Domain warping is a procedural generation technique that distorts
+coordinate spaces using noise functions, enabling the creation of
+organic, turbulent topographies. In GLSL, applying domain warping to
+procedural heightmaps disrupts the uniform regularity of standard Perlin
+or Simplex noise, replacing predictable rolling hills with chaotic,
+fluid-like structures such as twisted canyons, sharp ridges, and
+stratified mountain ranges. This guide breaks down the core mathematics
+of domain warping, demonstrates its implementation using GLSL shaders,
+and explains how chaining noise layers simulates complex geological
+turbulence.</p>
+<h3 id="the-mechanics-of-domain-warping">The Mechanics of Domain
+Warping</h3>
+<p>Standard procedural terrain calculates an elevation <span
+class="math inline">\(h\)</span> by feeding spatial coordinates directly
+into a noise algorithm:</p>
+<p><span class="math display">\[h = \text{noise}(p)\]</span></p>
+<p>Where <span class="math inline">\(p\)</span> represents a
+two-dimensional or three-dimensional position vector (<code>vec2</code>
+or <code>vec3</code>). While effective for basic undulating landscapes,
+this approach produces predictable patterns that lack the dynamic
+shearing and directional flow seen in natural geology.</p>
+<p>Domain warping alters this pipeline by modifying the coordinate space
+<em>before</em> evaluating the final noise function. By sampling an
+initial noise function to offset the coordinates, the domain itself is
+deformed:</p>
+<p><span class="math display">\[p&#39; = p + \alpha \cdot
+\vec{g}(p)\]</span> <span class="math display">\[h =
+\text{noise}(p&#39;)\]</span></p>
+<p>In this equation, <span class="math inline">\(\vec{g}(p)\)</span> is
+a vector-valued noise function (often derived from multiple offset noise
+samples), and <span class="math inline">\(\alpha\)</span> is a scaling
+factor controlling the intensity of the warp. The resulting sample pulls
+and compresses the underlying coordinate grid, creating shearing effects
+and swirling, turbulent behavior.</p>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>In a GLSL fragment or compute shader, domain warping is typically
+combined with Fractional Brownian Motion (fBm) to generate multi-octave
+detail. Rather than using raw noise, using fBm produces continuous,
+natural-looking variance across different scales.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Assumes a standard 2D noise function: float noise(vec2 p);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Fractional Brownian Motion to aggregate noise octaves</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">fbm</span><span class="op">(</span><span class="dt">vec2</span> p<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> value <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> amplitude <span class="op">=</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> frequency <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">5</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        value <span class="op">+=</span> amplitude <span class="op">*</span> <span class="bu">noise</span><span class="op">(</span>p <span class="op">*</span> frequency<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        frequency <span class="op">*=</span> <span class="fl">2.0</span><span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        amplitude <span class="op">*=</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> value<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="co">// Single-layer domain warped terrain</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">terrainSimpleWarp</span><span class="op">(</span><span class="dt">vec2</span> p<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> distortion <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        <span class="fu">fbm</span><span class="op">(</span>p <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">)),</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        <span class="fu">fbm</span><span class="op">(</span>p <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">5.2</span><span class="op">,</span> <span class="fl">1.3</span><span class="op">))</span> <span class="co">// Offset to decorrelate axes</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fu">fbm</span><span class="op">(</span>p <span class="op">+</span> <span class="fl">4.0</span> <span class="op">*</span> distortion<span class="op">);</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="cascading-warp-for-extreme-turbulence">Cascading Warp for
+Extreme Turbulence</h3>
+<p>To achieve advanced geological turbulence, you can chain multiple
+domain warps together. By feeding the distorted coordinates of one layer
+into another, the terrain develops sharp folds, overhang-like
+appearances, and complex vortex patterns reminiscent of fluid dynamics
+and tectonic deformation.</p>
+<p>In GLSL, a two-tier nested warp can be written as follows:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">terrainTurbulentWarp</span><span class="op">(</span><span class="dt">vec2</span> p<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> q <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        <span class="fu">fbm</span><span class="op">(</span>p <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">)),</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        <span class="fu">fbm</span><span class="op">(</span>p <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">5.2</span><span class="op">,</span> <span class="fl">1.3</span><span class="op">))</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> r <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        <span class="fu">fbm</span><span class="op">(</span>p <span class="op">+</span> <span class="fl">4.0</span> <span class="op">*</span> q <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">1.7</span><span class="op">,</span> <span class="fl">9.2</span><span class="op">)),</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">fbm</span><span class="op">(</span>p <span class="op">+</span> <span class="fl">4.0</span> <span class="op">*</span> q <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">8.3</span><span class="op">,</span> <span class="fl">2.8</span><span class="op">))</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Final height calculation using the nested coordinate space</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fu">fbm</span><span class="op">(</span>p <span class="op">+</span> <span class="fl">4.0</span> <span class="op">*</span> r<span class="op">);</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>In this setup:</p>
+<ol type="1">
+<li>Vector <code>q</code> applies an initial wave of deformation across
+the base coordinates.</li>
+<li>Vector <code>r</code> samples the domain already shifted by
+<code>q</code>, twisting the coordinates a second time.</li>
+<li>The final elevation uses <code>r</code> to index into the primary
+height function, compounding the structural turbulence.</li>
+</ol>
+<h3 id="tuning-terrain-characteristics">Tuning Terrain
+Characteristics</h3>
+<p>Controlling the look of the generated terrain depends on three
+primary variables:</p>
+<ul>
+<li><strong>Displacement Amplitude:</strong> Modifying the multiplier
+applied to the offset vectors (<code>q</code> and <code>r</code>)
+dictates how violently the space is stretched. High values yield wispy,
+marbled, and violently folded terrain, while low values produce subtle,
+soft variations.</li>
+<li><strong>Vector Offsets:</strong> Adding static offsets (such as
+<code>vec2(1.7, 9.2)</code>) inside the intermediate fBm calls prevents
+the <span class="math inline">\(x\)</span> and <span
+class="math inline">\(y\)</span> distortions from mirroring each other
+diagonally, ensuring asymmetric, natural terrain formations.</li>
+<li><strong>Octave Reduction on Warping Layers:</strong> Evaluating
+high-octave fBm for every warp stage is computationally expensive.
+Running the initial distortion vectors (<code>q</code> and
+<code>r</code>) with fewer octaves (e.g., 2 to 3 iterations) and
+reserving higher octaves (5 to 8 iterations) for the final height sample
+maximizes GPU performance while retaining sharp, high-frequency terrain
+features.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

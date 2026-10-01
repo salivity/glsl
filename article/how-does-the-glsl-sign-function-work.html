@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does the GLSL sign Function Work? - glsl</title>
+    <meta name="description" content="The sign function in OpenGL Shading Language (GLSL) is a built-in mathematical function designed to extract the sign of a scalar or vector input. It evaluates numerical values and maps them strictly to -1.0, 0.0, or 1.0 (or their integer/double equivalen">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-the-glsl-sign-function-work">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does the GLSL sign Function Work? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-the-glsl-sign-function-work" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The sign function in OpenGL Shading Language (GLSL) is a built-in mathematical function designed to extract the sign of a scalar or vector input. It evaluates numerical values and maps them strictly to -1.0, 0.0, or 1.0 (or their integer/double equivalen" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-the-glsl-sign-function-work">How Does the GLSL sign
+Function Work?</h1>
+<p>The <code>sign</code> function in OpenGL Shading Language (GLSL) is a
+built-in mathematical function designed to extract the sign of a scalar
+or vector input. It evaluates numerical values and maps them strictly to
+<code>-1.0</code>, <code>0.0</code>, or <code>1.0</code> (or their
+integer/double equivalents), providing a standardized way to determine
+polarity and direction without conditional branching.</p>
+<h2 id="core-evaluation-rules">Core Evaluation Rules</h2>
+<p>The <code>sign</code> function evaluates input values based on three
+distinct mathematical conditions:</p>
+<ul>
+<li><strong>Positive Inputs (<span class="math inline">\(x &gt;
+0\)</span>):</strong> Any value strictly greater than zero returns
+<code>1.0</code>.</li>
+<li><strong>Zero Inputs (<span class="math inline">\(x =
+0\)</span>):</strong> Any input equal to zero returns
+<code>0.0</code>.</li>
+<li><strong>Negative Inputs (<span class="math inline">\(x &lt;
+0\)</span>):</strong> Any value strictly less than zero returns
+<code>-1.0</code>.</li>
+</ul>
+<p>Mathematically, the function is defined as:</p>
+<p><span class="math display">\[\text{sign}(x) = \begin{cases}  1.0
+&amp; \text{if } x &gt; 0.0 \\  0.0 &amp; \text{if } x = 0.0 \\  -1.0
+&amp; \text{if } x &lt; 0.0  \end{cases}\]</span></p>
+<h2 id="vector-and-component-wise-execution">Vector and Component-Wise
+Execution</h2>
+<p>In GLSL, <code>sign</code> is overloaded for scalar and vector types,
+including <code>float</code>, <code>vec2</code>, <code>vec3</code>,
+<code>vec4</code>, as well as integer (<code>int</code>,
+<code>ivec2</code>, etc.) and double-precision types where
+supported.</p>
+<p>When passed a vector, the function operates component-wise. Each
+element in the vector is evaluated independently according to the
+standard rules:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> values <span class="op">=</span> <span class="dt">vec3</span><span class="op">(-</span><span class="fl">4.5</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">12.8</span><span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> result <span class="op">=</span> <span class="bu">sign</span><span class="op">(</span>values<span class="op">);</span> </span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// result contains vec3(-1.0, 0.0, 1.0)</span></span></code></pre></div>
+<h2 id="floating-point-and-edge-cases">Floating-Point and Edge
+Cases</h2>
+<p>Because GLSL adheres to IEEE 754 floating-point standards where
+supported by hardware, specific edge cases behave predictably:</p>
+<ul>
+<li><strong>Signed Zeros (<code>+0.0</code> and
+<code>-0.0</code>):</strong> In standard IEEE 754 arithmetic,
+<code>-0.0 == +0.0</code> evaluates to true. Therefore,
+<code>sign(-0.0)</code> typically returns <code>0.0</code>, rather than
+<code>-1.0</code> or <code>-0.0</code>.</li>
+<li><strong>Not-a-Number (NaN):</strong> Passing <code>NaN</code> into
+<code>sign()</code> yields undefined or <code>NaN</code> behavior
+depending on the underlying GPU architecture and driver
+implementation.</li>
+<li><strong>Infinities (<code>+infinity</code> and
+<code>-infinity</code>):</strong> Positive infinity evaluates to
+<code>1.0</code>, while negative infinity evaluates to
+<code>-1.0</code>.</li>
+</ul>
+<h2 id="common-shader-applications">Common Shader Applications</h2>
+<p>Because GPUs execute SIMD (Single Instruction, Multiple Data)
+operations most efficiently when avoiding dynamic divergence,
+<code>sign()</code> is frequently utilized to write branchless shader
+code:</p>
+<ul>
+<li><strong>Normal Flipping and Alignment:</strong> Determining whether
+geometry faces toward or away from a reference plane.</li>
+<li><strong>Branchless Direction Logic:</strong> Multiplying motion
+vectors or UV offsets by the sign of a control variable instead of using
+<code>if</code>/<code>else</code> blocks.</li>
+<li><strong>Signed Distance Fields (SDFs):</strong> Differentiating
+between the interior (<span class="math inline">\(&lt; 0\)</span>) and
+exterior (<span class="math inline">\(&gt; 0\)</span>) regions of
+procedural shapes.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

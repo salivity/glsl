@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Implement Parallax Occlusion Mapping in GLSL - glsl</title>
+    <meta name="description" content="This article provides an implementation guide for parallax occlusion mapping (POM) using ray intersection loops within a GLSL fragment shader. Parallax occlusion mapping enhances surface detail by shifting texture coordinates based on the camera's viewin">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-to-implement-parallax-occlusion-mapping-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How to Implement Parallax Occlusion Mapping in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-to-implement-parallax-occlusion-mapping-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an implementation guide for parallax occlusion mapping (POM) using ray intersection loops within a GLSL fragment shader. Parallax occlusion mapping enhances surface detail by shifting texture coordinates based on the camera's viewin" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-to-implement-parallax-occlusion-mapping-in-glsl">How to
+Implement Parallax Occlusion Mapping in GLSL</h1>
+<p>This article provides an implementation guide for parallax occlusion
+mapping (POM) using ray intersection loops within a GLSL fragment
+shader. Parallax occlusion mapping enhances surface detail by shifting
+texture coordinates based on the camera's viewing angle and a height
+map, simulating 3D depth on flat geometry. Below, you will learn the
+mathematical principles of tangent-space ray marching, the construction
+of the GLSL intersection loop, and the interpolation step required to
+achieve smooth, sub-step surface displacement.</p>
+<h2 id="tangent-space-transformation">Tangent Space Transformation</h2>
+<p>Ray marching for parallax occlusion mapping must occur in tangent
+space, where the surface normal aligns with the Z-axis, and the U and V
+texture axes align with the X and Y axes.</p>
+<p>In the vertex shader, compute the tangent-to-world transformation
+matrix (or its inverse) and transform the view vector into tangent
+space:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Vertex Shader snippet</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>vViewDirTangent <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="bu">transpose</span><span class="op">(</span><span class="dt">mat3</span><span class="op">(</span>tangent<span class="op">,</span> bitangent<span class="op">,</span> normal<span class="op">))</span> <span class="op">*</span> <span class="op">(</span>cameraPosition <span class="op">-</span> worldPosition<span class="op">));</span></span></code></pre></div>
+<p>The resulting <code>vViewDirTangent</code> vector indicates how the
+camera ray travels across the UV coordinates relative to surface
+depth.</p>
+<h2 id="the-ray-intersection-loop-concept">The Ray Intersection Loop
+Concept</h2>
+<p>The POM algorithm treats the height map as a continuous 3D volume
+with a depth range from <code>0.0</code> (top surface) to
+<code>1.0</code> (bottom surface). The ray starts at the top surface and
+steps forward along the view direction:</p>
+<ol type="1">
+<li><strong>Calculate the Maximum Shift:</strong> The view vector's XY
+components determine the direction of UV displacement, while the Z
+component determines the steepness. Dividing XY by Z scales the shift
+appropriately according to the viewing angle.</li>
+<li><strong>Determine Step Count:</strong> Grazing angles require more
+sampling steps to avoid aliasing artifacts, while perpendicular angles
+need fewer steps.</li>
+<li><strong>Ray Marching:</strong> Incrementally advance both the UV
+coordinates and the current ray depth until the ray passes below the
+height value stored in the height map.</li>
+</ol>
+<h2 id="glsl-fragment-shader-implementation">GLSL Fragment Shader
+Implementation</h2>
+<p>Below is the complete GLSL function implementing the ray intersection
+loop:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">ParallaxOcclusionMapping</span><span class="op">(</span><span class="dt">vec2</span> texCoords<span class="op">,</span> <span class="dt">vec3</span> viewDir<span class="op">,</span> <span class="dt">sampler2D</span> depthMap<span class="op">,</span> <span class="dt">float</span> heightScale<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Dynamic layer allocation based on view angle</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> minLayers <span class="op">=</span> <span class="fl">8.0</span><span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> maxLayers <span class="op">=</span> <span class="fl">32.0</span><span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> numLayers <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>maxLayers<span class="op">,</span> minLayers<span class="op">,</span> <span class="bu">max</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span><span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">),</span> viewDir<span class="op">),</span> <span class="fl">0.0</span><span class="op">));</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Depth step per layer</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> layerDepth <span class="op">=</span> <span class="fl">1.0</span> <span class="op">/</span> numLayers<span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> currentLayerDepth <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Maximum UV displacement vector</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Division by viewDir.z elongates steps at steep angles</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> P <span class="op">=</span> viewDir<span class="op">.</span><span class="fu">xy</span> <span class="op">/</span> viewDir<span class="op">.</span><span class="fu">z</span> <span class="op">*</span> heightScale<span class="op">;</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> deltaTexCoords <span class="op">=</span> P <span class="op">/</span> numLayers<span class="op">;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Initial march states</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> currentTexCoords <span class="op">=</span> texCoords<span class="op">;</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> currentDepthMapValue <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>depthMap<span class="op">,</span> currentTexCoords<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Ray intersection loop</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">while</span><span class="op">(</span>currentLayerDepth <span class="op">&lt;</span> currentDepthMapValue<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>        currentTexCoords <span class="op">-=</span> deltaTexCoords<span class="op">;</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>        currentDepthMapValue <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>depthMap<span class="op">,</span> currentTexCoords<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>        currentLayerDepth <span class="op">+=</span> layerDepth<span class="op">;</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Step before intersection</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> prevTexCoords <span class="op">=</span> currentTexCoords <span class="op">+</span> deltaTexCoords<span class="op">;</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Depths for interpolation</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> afterDepth  <span class="op">=</span> currentDepthMapValue <span class="op">-</span> currentLayerDepth<span class="op">;</span></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> beforeDepth <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>depthMap<span class="op">,</span> prevTexCoords<span class="op">).</span><span class="fu">r</span> <span class="op">-</span> currentLayerDepth <span class="op">+</span> layerDepth<span class="op">;</span></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Weight calculation for linear interpolation</span></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> weight <span class="op">=</span> afterDepth <span class="op">/</span> <span class="op">(</span>afterDepth <span class="op">-</span> beforeDepth<span class="op">);</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> finalTexCoords <span class="op">=</span> prevTexCoords <span class="op">*</span> weight <span class="op">+</span> currentTexCoords <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> weight<span class="op">);</span></span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> finalTexCoords<span class="op">;</span></span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="interpolating-the-intersection-point">Interpolating the
+Intersection Point</h2>
+<p>A simple ray march stops immediately after penetrating the surface,
+leaving discrete banding artifacts known as "pancaking." Parallax
+occlusion mapping eliminates this by interpolating between two
+points:</p>
+<ul>
+<li>The sample point <strong>after</strong> the ray penetrates the
+surface.</li>
+<li>The sample point <strong>before</strong> the penetration
+occurred.</li>
+</ul>
+<p>The algorithm calculates the distance from the ray to the height
+curve at both points (<code>afterDepth</code> and
+<code>beforeDepth</code>) and uses linear interpolation to approximate
+the true analytical intersection point between the steps.</p>
+<h2 id="integrating-displaced-coordinates">Integrating Displaced
+Coordinates</h2>
+<p>To use the calculated UVs in your fragment shader's
+<code>main()</code> function, pass the displaced coordinates into
+standard texture samplers:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> viewDir <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>vViewDirTangent<span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> displacedUV <span class="op">=</span> <span class="fu">ParallaxOcclusionMapping</span><span class="op">(</span>vTexCoords<span class="op">,</span> viewDir<span class="op">,</span> uDepthMap<span class="op">,</span> <span class="fl">0.05</span><span class="op">);</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Discard fragments that extend beyond the UV boundary if necessary</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span><span class="op">(</span>displacedUV<span class="op">.</span><span class="fu">x</span> <span class="op">&gt;</span> <span class="fl">1.0</span> <span class="op">||</span> displacedUV<span class="op">.</span><span class="fu">y</span> <span class="op">&gt;</span> <span class="fl">1.0</span> <span class="op">||</span> displacedUV<span class="op">.</span><span class="fu">x</span> <span class="op">&lt;</span> <span class="fl">0.0</span> <span class="op">||</span> displacedUV<span class="op">.</span><span class="fu">y</span> <span class="op">&lt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="kw">discard</span><span class="op">;</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> albedo <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>uAlbedoMap<span class="op">,</span> displacedUV<span class="op">);</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> normal <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>uNormalMap<span class="op">,</span> displacedUV<span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Continue with standard shading using displacedUV</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> albedo<span class="op">;</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This ray intersection method creates sharp self-occlusion and correct
+motion parallax entirely inside the fragment shader without modifying
+the underlying geometric topology.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

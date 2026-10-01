@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How gl_RayTminEXT Sets the Near Clipping Boundary - glsl</title>
+    <meta name="description" content="In hardware-accelerated GLSL ray tracing, the glRayTminEXT built-in variable defines the minimum parametric distance along a ray where valid intersections can occur. This article explains how glRayTminEXT establishes the near clipping boundary during tra">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-gl-ray-tmin-ext-sets-the-near-clipping-boundary">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How gl_RayTminEXT Sets the Near Clipping Boundary - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-gl-ray-tmin-ext-sets-the-near-clipping-boundary" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In hardware-accelerated GLSL ray tracing, the glRayTminEXT built-in variable defines the minimum parametric distance along a ray where valid intersections can occur. This article explains how glRayTminEXT establishes the near clipping boundary during tra" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-gl_raytminext-sets-the-near-clipping-boundary">How
+gl_RayTminEXT Sets the Near Clipping Boundary</h1>
+<p>In hardware-accelerated GLSL ray tracing, the
+<code>gl_RayTminEXT</code> built-in variable defines the minimum
+parametric distance along a ray where valid intersections can occur.
+This article explains how <code>gl_RayTminEXT</code> establishes the
+near clipping boundary during traversal, its relationship with the
+<code>traceRayEXT</code> invocation, its role in eliminating
+self-intersection artifacts, and how the ray tracing pipeline consumes
+this value across shader stages.</p>
+<h3 id="parametric-ray-formulation-and-boundary-enforcement">Parametric
+Ray Formulation and Boundary Enforcement</h3>
+<p>Ray tracing models a ray as a parametric function:</p>
+<p><span class="math display">\[\mathbf{P}(t) = \mathbf{O} + t \cdot
+\mathbf{D}\]</span></p>
+<p>where <span class="math inline">\(\mathbf{O}\)</span> represents the
+ray origin, <span class="math inline">\(\mathbf{D}\)</span> is the
+normalized ray direction, and <span class="math inline">\(t\)</span>
+represents the distance scalar along the ray.</p>
+<p>The ray tracing hardware traversal engine evaluates geometry hits
+only within a bounded interval defined as <span
+class="math inline">\([t_{\min}, t_{\max}]\)</span>. The
+<code>gl_RayTminEXT</code> variable represents this lower bound (<span
+class="math inline">\(t_{\min}\)</span>). Any geometric intersection
+discovered at a distance <span class="math inline">\(t\)</span> where
+<span class="math inline">\(t &lt; \text{gl\_RayTminEXT}\)</span> is
+automatically discarded by the traversal unit before invoking
+intersection or hit shaders.</p>
+<h3 id="initialization-via-tracerayext">Initialization via
+<code>traceRayEXT</code></h3>
+<p>The value of <code>gl_RayTminEXT</code> originates in the ray
+generation shader, callable shader, or closest-hit shader when
+initiating ray traversal using the built-in <code>traceRayEXT()</code>
+function:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">traceRayEXT</span><span class="op">(</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    accelerationStructureEXT topLevel<span class="op">,</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> rayFlags<span class="op">,</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> cullMask<span class="op">,</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> sbtRecordOffset<span class="op">,</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> sbtRecordStride<span class="op">,</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> missIndex<span class="op">,</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> origin<span class="op">,</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> tMin<span class="op">,</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> direction<span class="op">,</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> tMax<span class="op">,</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> payload</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<p>The float passed into the <code>tMin</code> argument is forwarded
+directly to the hardware traversal pipeline. Once traversal begins, this
+value is exposed as a read-only variable <code>gl_RayTminEXT</code> in
+subsequent pipeline stages, including:</p>
+<ul>
+<li><strong>Intersection Shaders:</strong> Used to validate custom
+primitive intersections.</li>
+<li><strong>Any-Hit Shaders:</strong> Confirms that candidate hits fall
+within the valid range before executing opacity or filtering logic.</li>
+<li><strong>Closest-Hit Shaders:</strong> Available for informational
+purposes or computing secondary rays.</li>
+</ul>
+<h3 id="preventing-self-intersection-ray-acne">Preventing
+Self-Intersection (Ray Acne)</h3>
+<p>The primary practical function of <code>gl_RayTminEXT</code> is
+mitigating numerical floating-point inaccuracies when casting secondary
+rays, such as shadow, reflection, or ambient occlusion rays.</p>
+<p>When a secondary ray originates from a hit surface, floating-point
+rounding errors often place the ray origin slightly beneath or directly
+on the surface geometry. If <code>tMin</code> were set to zero, the
+traversal engine would register an immediate intersection with the
+starting polygon, resulting in visual artifacts known as ray acne.</p>
+<p>By setting a small positive epsilon for <code>tMin</code> in
+<code>traceRayEXT()</code>, the near clipping boundary shifts slightly
+forward along the ray direction vector:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> tMin <span class="op">=</span> <span class="fl">0.001</span><span class="op">;</span> <span class="co">// Epsilon threshold to ignore immediate source surface</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">traceRayEXT</span><span class="op">(</span>topLevelAS<span class="op">,</span> gl_RayFlagsOpaqueEXT<span class="op">,</span> <span class="bn">0xFF</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> hitPoint<span class="op">,</span> tMin<span class="op">,</span> lightDir<span class="op">,</span> maxDistance<span class="op">,</span> <span class="dv">0</span><span class="op">);</span></span></code></pre></div>
+<p>Because traversal explicitly ignores all hits occurring between <span
+class="math inline">\(t = 0\)</span> and <span class="math inline">\(t =
+\text{gl\_RayTminEXT}\)</span>, the originating geometry cannot
+self-intersect.</p>
+<h3 id="custom-intersections-and-reportintersectionext">Custom
+Intersections and <code>reportIntersectionEXT</code></h3>
+<p>In custom intersection shaders, <code>gl_RayTminEXT</code> acts as an
+active execution guardrail. When calculating analytical intersections
+against procedural primitives (such as spheres or bounding volumes),
+developers compare candidate <span class="math inline">\(t\)</span>
+roots against <code>gl_RayTminEXT</code> and
+<code>gl_RayTmaxEXT</code>:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>tHit <span class="op">&gt;=</span> gl_RayTminEXT <span class="op">&amp;&amp;</span> tHit <span class="op">&lt;=</span> gl_RayTmaxEXT<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">reportIntersectionEXT</span><span class="op">(</span>tHit<span class="op">,</span> hitKind<span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>If <code>reportIntersectionEXT</code> is called with a <span
+class="math inline">\(t\)</span> value smaller than
+<code>gl_RayTminEXT</code>, the traversal runtime rejects the
+intersection report, preserving the near clipping boundary across
+procedural primitives.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL rayQueryGetIntersectionWorldToObjectEXT Matrix - glsl</title>
+    <meta name="description" content="In inline GLSL ray tracing using the GLEXTrayquery extension, converting between coordinate spaces is essential for procedural shading, custom intersection tests, and physics calculations. This article details the specific matrix returned by the rayQuery">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-ray-query-get-intersection-world-to-object-ext-matrix">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL rayQueryGetIntersectionWorldToObjectEXT Matrix - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-ray-query-get-intersection-world-to-object-ext-matrix" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In inline GLSL ray tracing using the GLEXTrayquery extension, converting between coordinate spaces is essential for procedural shading, custom intersection tests, and physics calculations. This article details the specific matrix returned by the rayQuery" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-rayquerygetintersectionworldtoobjectext-matrix">GLSL
+rayQueryGetIntersectionWorldToObjectEXT Matrix</h1>
+<p>In inline GLSL ray tracing using the <code>GL_EXT_ray_query</code>
+extension, converting between coordinate spaces is essential for
+procedural shading, custom intersection tests, and physics calculations.
+This article details the specific matrix returned by the
+<code>rayQueryGetIntersectionWorldToObjectEXT</code> function, its
+structural format in GLSL, and how it is applied to transform spatial
+data from world space into an instance's local object space.</p>
+<h3 id="the-returned-matrix">The Returned Matrix</h3>
+<p>The <code>rayQueryGetIntersectionWorldToObjectEXT</code> function
+returns a <strong>4x3 affine transformation matrix</strong> (represented
+by the <code>mat4x3</code> type in GLSL).</p>
+<p>This matrix represents the <strong>World-to-Object
+transformation</strong> for the geometry instance involved in a ray
+intersection. It is the direct inverse of the object-to-world
+transformation matrix defined for the instance inside the top-level
+acceleration structure (TLAS).</p>
+<h3 id="function-signature">Function Signature</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">mat4x3</span> <span class="fu">rayQueryGetIntersectionWorldToObjectEXT</span><span class="op">(</span>rayQueryEXT rayQuery<span class="op">,</span> <span class="dt">bool</span> committed<span class="op">);</span></span></code></pre></div>
+<ul>
+<li><strong><code>rayQuery</code></strong>: The inline ray query object
+holding the traversal state.</li>
+<li><strong><code>committed</code></strong>: A boolean flag specifying
+which intersection to query. Passing <code>true</code> retrieves the
+matrix for the currently committed (confirmed) intersection, while
+<code>false</code> retrieves the matrix for the current candidate
+intersection during traversal.</li>
+</ul>
+<h3 id="matrix-structure-and-glsl-usage">Matrix Structure and GLSL
+Usage</h3>
+<p>In GLSL, a <code>mat4x3</code> consists of 4 columns and 3 rows. This
+non-square compact format accommodates standard 3D affine
+transformations, which combine rotation, scale, and translation without
+allocating an unused fourth row (<code>[0, 0, 0, 1]</code>).</p>
+<p>When multiplying a position vector by this matrix:</p>
+<ol type="1">
+<li>The world-space point must be promoted to a homogeneous 4-component
+vector with <code>w = 1.0</code>.</li>
+<li>The resulting object-space vector is a 3-component vector.</li>
+</ol>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Retrieve the transformation matrix for the committed hit</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">mat4x3</span> worldToObject <span class="op">=</span> <span class="fu">rayQueryGetIntersectionWorldToObjectEXT</span><span class="op">(</span>myRayQuery<span class="op">,</span> <span class="kw">true</span><span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Transform a world-space position into object space</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> worldPos <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>inWorldPosition<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> objectPos <span class="op">=</span> worldToObject <span class="op">*</span> worldPos<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co">// Transform a world-space direction vector (ignoring translation)</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> objectDir <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span>worldToObject<span class="op">)</span> <span class="op">*</span> inWorldDirection<span class="op">;</span></span></code></pre></div>
+<h3 id="primary-use-cases">Primary Use Cases</h3>
+<ul>
+<li><strong>Procedural Intersection and Texturing:</strong> Evaluating
+analytical primitives (such as spheres, boxes, or signed distance
+fields) or mapping local UV coordinates requires ray parameters to be
+expressed relative to the object's origin and orientation.</li>
+<li><strong>Normal Transformations:</strong> Transforming object-space
+geometric normals into world space or converting world-space lights and
+incident rays into local space for microfacet calculations.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

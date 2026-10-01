@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Depth Mip SSGI Evaluation in GLSL - glsl</title>
+    <meta name="description" content="Evaluating Screen-Space Global Illumination (SSGI) across multiple depth mip levels leverages a hierarchical depth buffer (often referred to as Hi-Z) to accelerate ray traversal, reduce self-intersection, and efficiently trace rays across vast screen-spa">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/multi-depth-mip-ssgi-evaluation-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Multi-Depth Mip SSGI Evaluation in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/multi-depth-mip-ssgi-evaluation-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Evaluating Screen-Space Global Illumination (SSGI) across multiple depth mip levels leverages a hierarchical depth buffer (often referred to as Hi-Z) to accelerate ray traversal, reduce self-intersection, and efficiently trace rays across vast screen-spa" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="multi-depth-mip-ssgi-evaluation-in-glsl">Multi-Depth Mip SSGI
+Evaluation in GLSL</h1>
+<p>Evaluating Screen-Space Global Illumination (SSGI) across multiple
+depth mip levels leverages a hierarchical depth buffer (often referred
+to as Hi-Z) to accelerate ray traversal, reduce self-intersection, and
+efficiently trace rays across vast screen-space distances. By storing
+conservative depth bounds in a pyramid of downsampled depth textures,
+shaders can take large ray steps through coarse mips in empty space and
+drop to finer mips only when encountering potential geometry
+intersections. This article details the depth pyramid generation, the
+hierarchical traversal algorithm, and the GLSL implementation necessary
+to evaluate multi-depth mip SSGI.</p>
+<h3 id="hierarchical-depth-hi-z-pyramid-setup">Hierarchical Depth (Hi-Z)
+Pyramid Setup</h3>
+<p>To evaluate SSGI across multiple levels of detail, the raw depth
+buffer must be downsampled into a mip chain. Unlike standard color
+mipmaps that average texels, depth mipmaps must preserve conservative
+bounds to prevent rays from passing through geometry undetected:</p>
+<ul>
+<li><strong>Reversed-Z Buffers (1.0 near, 0.0 far):</strong> Use a
+<code>min</code> operator across the <span class="math inline">\(2
+\times 2\)</span> texels of the parent mip level. The minimum value
+represents the farthest surface in that cell.</li>
+<li><strong>Standard Z Buffers (0.0 near, 1.0 far):</strong> Use a
+<code>max</code> operator across the <span class="math inline">\(2
+\times 2\)</span> texels to represent the farthest surface.</li>
+</ul>
+<p>This downsampling is executed sequentially via compute shaders or
+fragment passes using <code>texelFetch</code> to read the previous mip
+level, storing the result in the next level until reaching a <span
+class="math inline">\(1 \times 1\)</span> texture.</p>
+<h3 id="ray-traversal-mechanics-across-mip-levels">Ray Traversal
+Mechanics Across Mip Levels</h3>
+<p>The hierarchical traversal operates similarly to a 2D Digital
+Differential Analyzer (DDA) coupled with depth testing:</p>
+<ol type="1">
+<li><strong>Cell Intersection:</strong> The ray travels along a vector
+in screen-space coordinates <span class="math inline">\((u, v,
+z)\)</span>. At any point, the ray resides within a discrete cell of the
+current mip level <span class="math inline">\(k\)</span>.</li>
+<li><strong>Conservative Depth Test:</strong> The shader fetches the
+depth value from mip level <span class="math inline">\(k\)</span>
+corresponding to the ray's current position. If the ray's depth is
+behind the conservative cell depth, a potential collision is
+detected.</li>
+<li><strong>Refinement (Descent):</strong> Upon detecting a potential
+collision, the algorithm decreases the mip level (<span
+class="math inline">\(k = k - 1\)</span>) and subdivides the cell into
+smaller bounds to test against higher-resolution geometry.</li>
+<li><strong>Advance (Ascent):</strong> If the ray passes entirely in
+front of the cell's depth bounds, it cannot intersect any geometry
+within that cell. The ray is advanced to the boundary of the current
+cell, and the mip level can be increased (<span class="math inline">\(k
+= \min(k + 1, k_{\max})\)</span>) to skip large empty regions in
+subsequent iterations.</li>
+<li><strong>Termination:</strong> Traversal stops when a hit is
+confirmed at mip level 0, when the ray leaves the <span
+class="math inline">\([0, 1]\)</span> screen-space bounds, or when the
+maximum iteration budget is exhausted.</li>
+</ol>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>Below is a GLSL routine executing hierarchical depth ray marching.
+This example assumes standard normalized device coordinates with
+Reversed-Z depth values:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">sampler2D</span> u_HiZBuffer<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">sampler2D</span> u_ColorBuffer<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> MAX_MIP_LEVEL <span class="op">=</span> <span class="dv">5</span><span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> MAX_ITERATIONS <span class="op">=</span> <span class="dv">64</span><span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Marches through the Hi-Z buffer to locate an intersection</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> <span class="fu">TraceHiZRay</span><span class="op">(</span><span class="dt">vec3</span> rayOrigin<span class="op">,</span> <span class="dt">vec3</span> rayDir<span class="op">,</span> <span class="dt">out</span> <span class="dt">vec2</span> hitPixel<span class="op">,</span> <span class="dt">out</span> <span class="dt">vec3</span> hitPoint<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> currentPos <span class="op">=</span> rayOrigin<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> currentMip <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Scale direction to avoid division by zero</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dPos <span class="op">=</span> rayDir<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> MAX_ITERATIONS<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Sample conservative depth at current mip</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> cellDepth <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>u_HiZBuffer<span class="op">,</span> currentPos<span class="op">.</span><span class="fu">xy</span><span class="op">,</span> <span class="dt">float</span><span class="op">(</span>currentMip<span class="op">)).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Reversed-Z: cellDepth represents the minimum (farthest) point in the cell.</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>        <span class="co">// If ray depth is less than cell depth, the ray is behind the geometry.</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>        <span class="dt">bool</span> isBehind <span class="op">=</span> currentPos<span class="op">.</span><span class="fu">z</span> <span class="op">&lt;=</span> cellDepth<span class="op">;</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>isBehind<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>            <span class="kw">if</span> <span class="op">(</span>currentMip <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>                <span class="co">// Precise intersection found at base level</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>                <span class="co">// Thickness check to avoid false hits on back-facing surfaces</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>                <span class="dt">float</span> thickness <span class="op">=</span> <span class="fl">0.005</span><span class="op">;</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>                <span class="kw">if</span> <span class="op">(</span>cellDepth <span class="op">-</span> currentPos<span class="op">.</span><span class="fu">z</span> <span class="op">&lt;</span> thickness<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>                    hitPixel <span class="op">=</span> currentPos<span class="op">.</span><span class="fu">xy</span><span class="op">;</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>                    hitPoint <span class="op">=</span> currentPos<span class="op">;</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>                    <span class="kw">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>                <span class="op">}</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>                <span class="co">// Step forward if outside thickness tolerance</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>                currentPos <span class="op">+=</span> dPos <span class="op">*</span> <span class="fl">0.01</span><span class="op">;</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>                <span class="co">// Drop to higher resolution mip</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>                currentMip<span class="op">--;</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Find distance to the boundaries of the current cell</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec2</span> mipResolution <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="bu">textureSize</span><span class="op">(</span>u_HiZBuffer<span class="op">,</span> currentMip<span class="op">));</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec2</span> cellIndex <span class="op">=</span> <span class="bu">floor</span><span class="op">(</span>currentPos<span class="op">.</span><span class="fu">xy</span> <span class="op">*</span> mipResolution<span class="op">);</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Calculate entry into adjacent cell based on ray direction</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec2</span> cellBoundary <span class="op">=</span> <span class="op">(</span>cellIndex <span class="op">+</span> <span class="bu">max</span><span class="op">(</span><span class="bu">sign</span><span class="op">(</span>dPos<span class="op">.</span><span class="fu">xy</span><span class="op">),</span> <span class="fl">0.0</span><span class="op">))</span> <span class="op">/</span> mipResolution<span class="op">;</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec2</span> tMax <span class="op">=</span> <span class="op">(</span>cellBoundary <span class="op">-</span> currentPos<span class="op">.</span><span class="fu">xy</span><span class="op">)</span> <span class="op">/</span> dPos<span class="op">.</span><span class="fu">xy</span><span class="op">;</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>            <span class="dt">float</span> tAdvance <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>tMax<span class="op">.</span><span class="fu">x</span><span class="op">,</span> tMax<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Advance ray past the cell boundary with a small epsilon</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>            currentPos <span class="op">+=</span> dPos <span class="op">*</span> <span class="op">(</span>tAdvance <span class="op">+</span> <span class="fl">0.0001</span><span class="op">);</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Advance to a coarser mip level to accelerate traversal</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>            currentMip <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>currentMip <span class="op">+</span> <span class="dv">1</span><span class="op">,</span> MAX_MIP_LEVEL<span class="op">);</span></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Boundary check</span></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span><span class="bu">any</span><span class="op">(</span><span class="bu">lessThan</span><span class="op">(</span>currentPos<span class="op">.</span><span class="fu">xy</span><span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">)))</span> <span class="op">||</span> <span class="bu">any</span><span class="op">(</span><span class="bu">greaterThan</span><span class="op">(</span>currentPos<span class="op">.</span><span class="fu">xy</span><span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">1.0</span><span class="op">))))</span> <span class="op">{</span></span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a>            <span class="kw">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="radiance-gathering-and-shading">Radiance Gathering and
+Shading</h3>
+<p>Once an intersection is verified at mip level 0, indirect radiance
+evaluation proceeds as follows:</p>
+<ol type="1">
+<li><strong>Texture Retrieval:</strong> The hit screen coordinate
+(<code>hitPixel</code>) is used to sample the incoming radiance from the
+previous frame’s resolved HDR color buffer.</li>
+<li><strong>BRDF Calculation:</strong> Retrieve the world-space normal
+at the surface origin and compute the cosine factor (<span
+class="math inline">\(\mathbf{N} \cdot \mathbf{L}\)</span>) between the
+hit vector and the hit texel normal.</li>
+<li><strong>Screen-Edge Attenuation:</strong> Apply a fade factor to
+smooth out intersections near the screen boundaries where screen-space
+data becomes missing:</li>
+</ol>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> edgeFactor <span class="op">=</span> <span class="bu">smoothstep</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.1</span><span class="op">,</span> hitPixel<span class="op">)</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> <span class="bu">smoothstep</span><span class="op">(</span><span class="fl">0.9</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> hitPixel<span class="op">));</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> visibility <span class="op">=</span> edgeFactor<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> edgeFactor<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> indirectIllumination <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_ColorBuffer<span class="op">,</span> hitPixel<span class="op">).</span><span class="fu">rgb</span> <span class="op">*</span> visibility<span class="op">;</span></span></code></pre></div>
+<p>This multi-depth mip method avoids fixed-step artifacts and reduces
+memory bandwidth overhead by evaluating coarse bounds before reading
+high-frequency depth data.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

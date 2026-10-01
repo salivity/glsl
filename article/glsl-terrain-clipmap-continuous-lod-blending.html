@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Terrain Clipmap Continuous LOD Blending - glsl</title>
+    <meta name="description" content="Rendering large-scale terrain without visual popping requires a combination of geometry clipmaps and continuous level-of-detail (LOD) blending, known as geomorphing. In GLSL, this algorithm calculates a transition parameter per vertex based on the distan">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-terrain-clipmap-continuous-lod-blending">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Terrain Clipmap Continuous LOD Blending - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-terrain-clipmap-continuous-lod-blending" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Rendering large-scale terrain without visual popping requires a combination of geometry clipmaps and continuous level-of-detail (LOD) blending, known as geomorphing. In GLSL, this algorithm calculates a transition parameter per vertex based on the distan" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-terrain-clipmap-continuous-lod-blending">GLSL Terrain
+Clipmap Continuous LOD Blending</h1>
+<p>Rendering large-scale terrain without visual popping requires a
+combination of geometry clipmaps and continuous level-of-detail (LOD)
+blending, known as geomorphing. In GLSL, this algorithm calculates a
+transition parameter per vertex based on the distance from the clipmap
+ring's center, morphing the vertex's spatial position and heightmap
+sampling coordinates between the current level and the next coarser
+level. This technique preserves continuous surface topology, prevents
+T-junction cracks, and completely eliminates popping artifacts between
+nested terrain rings.</p>
+<h3 id="the-geometry-clipmap-algorithm">The Geometry Clipmap
+Algorithm</h3>
+<p>Geometry clipmaps organize terrain into a set of <span
+class="math inline">\(N\)</span> concentric, nested grid rings centered
+on the viewer. Each ring shares an identical vertex resolution
+(typically <span class="math inline">\(255 \times 255\)</span> or <span
+class="math inline">\(511 \times 511\)</span>) but doubles the grid
+spacing of the inner ring:</p>
+<p><span class="math display">\[\text{spacing}_L = \text{spacing}_0
+\times 2^L\]</span></p>
+<p>Where <span class="math inline">\(L\)</span> is the clipmap level
+index. Because the outer edge of level <span
+class="math inline">\(L\)</span> has twice the vertex density of the
+inner edge of level <span class="math inline">\(L+1\)</span>, stitching
+them directly causes cracks and temporal popping as the camera
+moves.</p>
+<p>To solve this, the transition algorithm applies <strong>vertex
+geomorphing</strong> across a defined blend region (typically the outer
+20% to 30% of each ring).</p>
+<h3 id="geomorphing-transition-parameter">Geomorphing Transition
+Parameter</h3>
+<p>Inside the vertex shader, each vertex evaluates its distance from the
+ring center. Because clipmap rings are square, the algorithm uses a
+Chebyshev metric (maximum norm) rather than Euclidean distance to match
+the square boundary of the clipmap ring:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Calculate normalized distance in the range [0, 1] relative to the ring&#39;s extent</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> coordFromCenter <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span>vertexGridPos <span class="op">-</span> ringCenterGridPos<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> maxDist <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>coordFromCenter<span class="op">.</span><span class="fu">x</span><span class="op">,</span> coordFromCenter<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Define transition boundaries (e.g., transition occurs between 70% and 100% of ring radius)</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> blendStart <span class="op">=</span> ringRadius <span class="op">*</span> <span class="fl">0.70</span><span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> blendEnd   <span class="op">=</span> ringRadius<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Morph factor: 0.0 = fully current LOD, 1.0 = fully morphed to next coarser LOD</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> morphFactor <span class="op">=</span> <span class="bu">clamp</span><span class="op">((</span>maxDist <span class="op">-</span> blendStart<span class="op">)</span> <span class="op">/</span> <span class="op">(</span>blendEnd <span class="op">-</span> blendStart<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span></code></pre></div>
+<h3 id="vertex-snapping-and-position-morphing">Vertex Snapping and
+Position Morphing</h3>
+<p>Before sampling the heightmap, the horizontal coordinates of vertices
+with odd grid indices are shifted toward their even neighbors. At <span
+class="math inline">\(\text{morphFactor} = 1.0\)</span>, the vertex
+position perfectly coincides with the coarser grid of level <span
+class="math inline">\(L+1\)</span>:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Identify odd vertices along both axes</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> gridStep <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span>currentGridSpacing<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> coarserStep <span class="op">=</span> gridStep <span class="op">*</span> <span class="fl">2.0</span><span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Determine target coarser grid position</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> morphedWorldXZ <span class="op">=</span> <span class="bu">floor</span><span class="op">((</span>worldPos<span class="op">.</span><span class="fu">xz</span> <span class="op">+</span> gridStep <span class="op">*</span> <span class="fl">0.5</span><span class="op">)</span> <span class="op">/</span> coarserStep<span class="op">)</span> <span class="op">*</span> coarserStep<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co">// Linearly blend the planar coordinates</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>worldPos<span class="op">.</span><span class="fu">xz</span> <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>worldPos<span class="op">.</span><span class="fu">xz</span><span class="op">,</span> morphedWorldXZ<span class="op">,</span> morphFactor<span class="op">);</span></span></code></pre></div>
+<h3 id="height-sampling-and-blending">Height Sampling and Blending</h3>
+<p>To prevent vertical popping, height values are blended alongside
+horizontal coordinates. Two height samples are taken from the heightmap
+texture: one using the current level's UV coordinates and one
+corresponding to the coarser level's sampling footprint.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Current level height sample</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> hFine <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>uHeightMap<span class="op">,</span> uvFine<span class="op">,</span> <span class="fl">0.0</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Coarser level height sample (mimics filtered lower-resolution representation)</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> hCoarse <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>uHeightMap<span class="op">,</span> uvCoarse<span class="op">,</span> <span class="fl">0.0</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Blend the final elevation</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>worldPos<span class="op">.</span><span class="fu">y</span> <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>hFine<span class="op">,</span> hCoarse<span class="op">,</span> morphFactor<span class="op">)</span> <span class="op">*</span> uTerrainHeightScale<span class="op">;</span></span></code></pre></div>
+<p>Alternatively, if a single high-resolution texture or virtual texture
+is used, sampling <span class="math inline">\(h_{\text{coarse}}\)</span>
+can be performed by snapping the texture coordinate to the coarse texel
+footprint:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> texelSize <span class="op">=</span> <span class="fl">1.0</span> <span class="op">/</span> uTextureResolution<span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> coarseUV <span class="op">=</span> <span class="bu">floor</span><span class="op">(</span>uvFine <span class="op">/</span> <span class="op">(</span>texelSize <span class="op">*</span> <span class="fl">2.0</span><span class="op">))</span> <span class="op">*</span> <span class="op">(</span>texelSize <span class="op">*</span> <span class="fl">2.0</span><span class="op">)</span> <span class="op">+</span> texelSize<span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> hCoarse <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>uHeightMap<span class="op">,</span> coarseUV<span class="op">,</span> <span class="fl">0.0</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>worldPos<span class="op">.</span><span class="fu">y</span> <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>hFine<span class="op">,</span> hCoarse<span class="op">,</span> morphFactor<span class="op">)</span> <span class="op">*</span> uTerrainHeightScale<span class="op">;</span></span></code></pre></div>
+<h3 id="eliminating-cracks-and-t-junctions">Eliminating Cracks and
+T-Junctions</h3>
+<p>By applying this continuous interpolation, every vertex along the
+outer border reaches <span class="math inline">\(\text{morphFactor} =
+1.0\)</span> precisely where it meets the inner boundary of ring <span
+class="math inline">\(L+1\)</span>. The geometric positions and
+elevations of the finer mesh align identically with the vertices of the
+coarser mesh, eliminating T-junction cracks entirely in screen-space
+without requiring dynamic mesh stitching or degenerated triangles.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

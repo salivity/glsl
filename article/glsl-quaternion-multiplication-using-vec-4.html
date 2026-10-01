@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Quaternion Multiplication Using vec4 - glsl</title>
+    <meta name="description" content="This article explains how to implement quaternion multiplication in the OpenGL Shading Language (GLSL) using native four-component vectors (vec4). It covers the mathematical formulation of the Hamilton product, breaks down the vector and scalar component">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-quaternion-multiplication-using-vec-4">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Quaternion Multiplication Using vec4 - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-quaternion-multiplication-using-vec-4" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to implement quaternion multiplication in the OpenGL Shading Language (GLSL) using native four-component vectors (vec4). It covers the mathematical formulation of the Hamilton product, breaks down the vector and scalar component" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-quaternion-multiplication-using-vec4">GLSL Quaternion
+Multiplication Using vec4</h1>
+<p>This article explains how to implement quaternion multiplication in
+the OpenGL Shading Language (GLSL) using native four-component vectors
+(<code>vec4</code>). It covers the mathematical formulation of the
+Hamilton product, breaks down the vector and scalar components, and
+provides an optimized GLSL function utilizing built-in vector operations
+like <code>dot</code> and <code>cross</code>.</p>
+<h3 id="quaternion-representation-in-glsl">Quaternion Representation in
+GLSL</h3>
+<p>In 3D graphics, a quaternion <span class="math inline">\(q\)</span>
+is typically represented as a combination of a 3D vector part <span
+class="math inline">\(\mathbf{v} = (x, y, z)\)</span> and a scalar real
+part <span class="math inline">\(w\)</span>:</p>
+<p><span class="math display">\[q = (\mathbf{v}, w) = (x, y, z,
+w)\]</span></p>
+<p>In GLSL, a <code>vec4</code> natively maps to this representation,
+where the <code>.xyz</code> swizzle corresponds to the vector part <span
+class="math inline">\(\mathbf{v}\)</span>, and the <code>.w</code>
+component corresponds to the scalar <span
+class="math inline">\(w\)</span>.</p>
+<h3 id="mathematical-formulation">Mathematical Formulation</h3>
+<p>The product of two quaternions <span class="math inline">\(q_1 =
+(\mathbf{v}_1, w_1)\)</span> and <span class="math inline">\(q_2 =
+(\mathbf{v}_2, w_2)\)</span> is defined by the Hamilton product:</p>
+<p><span class="math display">\[\mathbf{v}_{\text{result}} = w_1
+\mathbf{v}_2 + w_2 \mathbf{v}_1 + (\mathbf{v}_1 \times
+\mathbf{v}_2)\]</span> <span class="math display">\[w_{\text{result}} =
+w_1 w_2 - (\mathbf{v}_1 \cdot \mathbf{v}_2)\]</span></p>
+<p>This formulation is ideal for GLSL because it maps directly to
+built-in vector instructions: scalar multiplication, addition, the cross
+product (<code>cross</code>), and the dot product
+(<code>dot</code>).</p>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>Below is the standard, vector-optimized GLSL function to multiply two
+quaternions stored in <code>vec4</code>:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> <span class="fu">quatMult</span><span class="op">(</span><span class="dt">vec4</span> q1<span class="op">,</span> <span class="dt">vec4</span> q2<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec4</span><span class="op">(</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>        q1<span class="op">.</span><span class="fu">w</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">xyz</span> <span class="op">+</span> q2<span class="op">.</span><span class="fu">w</span> <span class="op">*</span> q1<span class="op">.</span><span class="fu">xyz</span> <span class="op">+</span> <span class="bu">cross</span><span class="op">(</span>q1<span class="op">.</span><span class="fu">xyz</span><span class="op">,</span> q2<span class="op">.</span><span class="fu">xyz</span><span class="op">),</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>        q1<span class="op">.</span><span class="fu">w</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">w</span> <span class="op">-</span> <span class="bu">dot</span><span class="op">(</span>q1<span class="op">.</span><span class="fu">xyz</span><span class="op">,</span> q2<span class="op">.</span><span class="fu">xyz</span><span class="op">)</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="how-the-code-works">How the Code Works</h3>
+<ol type="1">
+<li><p><strong>Vector Component Calculation
+(<code>.xyz</code>):</strong></p>
+<ul>
+<li><code>q1.w * q2.xyz</code>: Scales the vector part of <span
+class="math inline">\(q_2\)</span> by the scalar part of <span
+class="math inline">\(q_1\)</span>.</li>
+<li><code>q2.w * q1.xyz</code>: Scales the vector part of <span
+class="math inline">\(q_1\)</span> by the scalar part of <span
+class="math inline">\(q_2\)</span>.</li>
+<li><code>cross(q1.xyz, q2.xyz)</code>: Computes the 3D cross product of
+both vector parts, handling the non-commutative rotational
+interaction.</li>
+<li>Adding these three together yields the directional vector component
+of the resulting quaternion.</li>
+</ul></li>
+<li><p><strong>Scalar Component Calculation
+(<code>.w</code>):</strong></p>
+<ul>
+<li><code>q1.w * q2.w</code>: Multiplies the two scalar components.</li>
+<li><code>dot(q1.xyz, q2.xyz)</code>: Computes the Euclidean dot product
+of the vector parts.</li>
+<li>Subtracting the dot product from the scalar product yields the final
+scalar real component.</li>
+</ul></li>
+</ol>
+<h3 id="component-wise-alternative">Component-Wise Alternative</h3>
+<p>If you need to avoid the <code>cross</code> function or want to
+inspect individual algebra steps, the fully expanded component-wise
+formulation can be used:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> <span class="fu">quatMultExpanded</span><span class="op">(</span><span class="dt">vec4</span> q1<span class="op">,</span> <span class="dt">vec4</span> q2<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec4</span><span class="op">(</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        q1<span class="op">.</span><span class="fu">w</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> q1<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">w</span> <span class="op">+</span> q1<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">z</span> <span class="op">-</span> q1<span class="op">.</span><span class="fu">z</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">y</span><span class="op">,</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        q1<span class="op">.</span><span class="fu">w</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">y</span> <span class="op">-</span> q1<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">z</span> <span class="op">+</span> q1<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">w</span> <span class="op">+</span> q1<span class="op">.</span><span class="fu">z</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">x</span><span class="op">,</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        q1<span class="op">.</span><span class="fu">w</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">z</span> <span class="op">+</span> q1<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">y</span> <span class="op">-</span> q1<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> q1<span class="op">.</span><span class="fu">z</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">w</span><span class="op">,</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        q1<span class="op">.</span><span class="fu">w</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">w</span> <span class="op">-</span> q1<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">x</span> <span class="op">-</span> q1<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">y</span> <span class="op">-</span> q1<span class="op">.</span><span class="fu">z</span> <span class="op">*</span> q2<span class="op">.</span><span class="fu">z</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The vector-based version using <code>cross()</code> and
+<code>dot()</code> is generally preferred for readability and leverages
+dedicated hardware vector units efficiently on modern GPUs.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

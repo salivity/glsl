@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Role of uvec2 Handles in GLSL Bindless Textures - glsl</title>
+    <meta name="description" content="Bindless texturing in OpenGL eliminates the CPU overhead of binding state to fixed texture units by representing textures directly through unique 64-bit integer handles. In GLSL, the uvec2 type serves as a fundamental, cross-platform container used to st">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/role-of-uvec-2-handles-in-glsl-bindless-textures">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Role of uvec2 Handles in GLSL Bindless Textures - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/role-of-uvec-2-handles-in-glsl-bindless-textures" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Bindless texturing in OpenGL eliminates the CPU overhead of binding state to fixed texture units by representing textures directly through unique 64-bit integer handles. In GLSL, the uvec2 type serves as a fundamental, cross-platform container used to st" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="role-of-uvec2-handles-in-glsl-bindless-textures">Role of uvec2
+Handles in GLSL Bindless Textures</h1>
+<p>Bindless texturing in OpenGL eliminates the CPU overhead of binding
+state to fixed texture units by representing textures directly through
+unique 64-bit integer handles. In GLSL, the <code>uvec2</code> type
+serves as a fundamental, cross-platform container used to store, pass,
+and unpack these 64-bit handles, especially when native 64-bit integer
+support is absent or restricted. This article breaks down why the
+two-component 32-bit unsigned integer vector is utilized, how it
+interfaces with buffer layouts, and the methods used to cast it back
+into usable texture samplers.</p>
+<h2 id="the-need-for-64-bit-handles">The Need for 64-Bit Handles</h2>
+<p>Standard OpenGL texturing requires binding a texture to an active
+texture image unit before a draw call. The
+<code>GL_ARB_bindless_texture</code> extension bypasses this bottleneck.
+Instead of binding to a slot, the driver generates a globally unique
+64-bit handle using <code>glGetTextureHandleARB()</code>. This handle
+contains all internal metadata required by the GPU to sample the
+texture, allowing applications to store arrays of thousands of texture
+pointers in buffers.</p>
+<p>Because these handles are 64 bits wide, the shader needs a
+representation that accommodates this memory footprint.</p>
+<h2 id="why-uvec2-represents-64-bit-handles">Why <code>uvec2</code>
+Represents 64-Bit Handles</h2>
+<p>In standard GLSL, native 64-bit integers (<code>uint64_t</code>) are
+not part of the core language and require the
+<code>GL_ARB_gpu_shader_int64</code> extension. Not all hardware or
+driver implementations support 64-bit integer arithmetic in shaders,
+even if they support bindless texturing.</p>
+<p>The <code>uvec2</code> type (a two-component vector of standard
+32-bit unsigned integers) provides a universal solution:</p>
+<ul>
+<li><strong>Bit-Width Matching:</strong> A <code>uvec2</code> consists
+of two 32-bit integers, totaling exactly 64 bits (8 bytes), which
+matches the width of a <code>GLuint64</code> handle.</li>
+<li><strong>Buffer Alignment:</strong> Under standard GLSL layout rules
+(such as <code>std140</code> and <code>std430</code>), a
+<code>uvec2</code> is 8-byte aligned. This matches the native 8-byte
+alignment of 64-bit pointers on modern GPU architectures, preventing
+padding and alignment mismatches in Uniform Buffer Objects (UBOs) and
+Shader Storage Buffer Objects (SSBOs).</li>
+<li><strong>Portability:</strong> Shaders can ingest handles through
+buffers as <code>uvec2</code> arrays across virtually all modern
+hardware without declaring optional 64-bit integer extensions.</li>
+</ul>
+<h2 id="unpacking-and-sampler-reconstruction">Unpacking and Sampler
+Reconstruction</h2>
+<p>The <code>GL_ARB_bindless_texture</code> extension overloads GLSL
+sampler constructors to accept <code>uvec2</code> representations
+directly, as well as <code>uint64_t</code> values.</p>
+<p>When a handle is stored in a buffer as a <code>uvec2</code>, the
+lower 32 bits typically reside in the <code>.x</code> component and the
+upper 32 bits in the <code>.y</code> component (depending on system
+endianness). The GLSL extension provides explicit constructor functions
+that interpret this layout:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_ARB_bindless_texture : require</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> MaterialData <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uvec2</span> textureHandles<span class="op">[];</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec2</span> v_TexCoord<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> o_Color<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Retrieve the 64-bit handle as a uvec2</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uvec2</span> handle <span class="op">=</span> textureHandles<span class="op">[</span>gl_DrawID<span class="op">];</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Reconstruct the sampler directly from the uvec2 handle</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">sampler2D</span> mySampler <span class="op">=</span> <span class="dt">sampler2D</span><span class="op">(</span>handle<span class="op">);</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Sample the texture normally</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    o_Color <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>mySampler<span class="op">,</span> v_TexCoord<span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>If <code>GL_ARB_gpu_shader_int64</code> is also enabled, functions
+such as <code>packUint2x32(uvec2)</code> and
+<code>unpackUint2x32(uint64_t)</code> can convert between a single
+<code>uint64_t</code> and <code>uvec2</code>, but direct construction of
+sampler types via <code>sampler2D(uvec2)</code> removes the need for
+explicit arithmetic packing.</p>
+<h2 id="summary">Summary</h2>
+<p>The <code>uvec2</code> type acts as a universal 64-bit payload in
+GLSL. It guarantees correct 8-byte memory layout in memory buffers,
+circumvents the hardware requirement for native 64-bit integer math
+pipelines, and directly feeds the sampler conversion constructors
+defined by bindless texturing extensions.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

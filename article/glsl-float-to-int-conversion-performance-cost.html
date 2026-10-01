@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Float to Int Conversion Performance Cost - glsl</title>
+    <meta name="description" content="Converting between floating-point and integer types in GLSL introduces a measurable performance cost that varies from negligible to severe depending on shader complexity and target GPU architecture. While modern graphics hardware includes dedicated hardw">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-float-to-int-conversion-performance-cost">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Float to Int Conversion Performance Cost - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-float-to-int-conversion-performance-cost" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Converting between floating-point and integer types in GLSL introduces a measurable performance cost that varies from negligible to severe depending on shader complexity and target GPU architecture. While modern graphics hardware includes dedicated hardw" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-float-to-int-conversion-performance-cost">GLSL Float to Int
+Conversion Performance Cost</h1>
+<p>Converting between floating-point and integer types in GLSL
+introduces a measurable performance cost that varies from negligible to
+severe depending on shader complexity and target GPU architecture. While
+modern graphics hardware includes dedicated hardware support for format
+conversions, executing cast operations consumes Arithmetic Logic Unit
+(ALU) cycles, increases register pressure, and can stall instruction
+pipelines. This article breaks down how type conversion operates at the
+hardware level, its impact on instruction throughput across desktop and
+mobile architectures, and how to minimize conversion overhead in shader
+pipelines.</p>
+<h3 id="hardware-mechanics-of-glsl-type-conversion">Hardware Mechanics
+of GLSL Type Conversion</h3>
+<p>In GLSL, conversions between <code>float</code>, <code>int</code>,
+and <code>uint</code> are never purely syntactic; they require physical
+data translation at the instruction set architecture (ISA) level.
+Floating-point values conform to the IEEE 754 standard (sign bit,
+exponent, mantissa), whereas signed integers use two's complement
+representation.</p>
+<p>Because the bit arrangements represent entirely different
+mathematical constructs, the GPU must actively recalculate the
+value:</p>
+<ul>
+<li><strong>Float-to-Integer (<code>int(val)</code> or
+<code>uint(val)</code>):</strong> The ALU extracts the mantissa, shifts
+it based on the exponent, truncates fractional values, applies sign
+adjustments, and clamps the result to prevent integer overflow. At the
+ISA level, this is dispatched as instructions like <code>F2I</code> or
+<code>F2U</code> (NVIDIA) or <code>V_CVT_I32_F32</code> (AMD).</li>
+<li><strong>Integer-to-Float (<code>float(val)</code>):</strong> The ALU
+normalizes the integer value into a fraction and computes the
+corresponding exponent. This maps to instructions like <code>I2F</code>
+or <code>V_CVT_F32_I32</code>.</li>
+</ul>
+<p>Both operations require full ALU processing stages. They are not
+zero-cost bit reinterpretations. For direct bitwise manipulation without
+mathematical conversion, GLSL provides functions like
+<code>floatBitsToInt()</code> and <code>intBitsToFloat()</code>, which
+frequently compile down to zero-cost register moves or simple aliasing
+on modern unified architectures.</p>
+<h3 id="throughput-and-cycle-latency">Throughput and Cycle Latency</h3>
+<p>On modern desktop GPUs (NVIDIA Turing/Ampere/Ada, AMD RDNA 2/3),
+format conversion instructions generally run on the primary
+single-precision floating-point (FP32) or integer (INT32) execution
+pipelines:</p>
+<ul>
+<li><strong>Instruction Throughput:</strong> On most unified
+architectures, a conversion instruction (<code>F2I</code> /
+<code>I2F</code>) has the same throughput as a standard FP32 addition or
+multiplication (typically 1 instruction per clock cycle per execution
+lane). However, using a conversion operation consumes an issue slot that
+could have executed a functional mathematical operation, effectively
+halving the arithmetic efficiency of that cycle.</li>
+<li><strong>Vectorized Conversions:</strong> GLSL operations such as
+<code>ivec4(myVec4)</code> convert four scalar values. Because modern
+GPUs utilize scalar ALUs inside a SIMD/SIMT warp or wavefront,
+converting a <code>vec4</code> to an <code>ivec4</code> dispatches four
+individual conversion instructions per thread, scaling the cycle
+overhead linearly.</li>
+<li><strong>Dependent Texture Fetches:</strong> Converting a computed
+floating-point coordinate to an integer for <code>texelFetch()</code>
+creates an instruction dependency. If the conversion latency cannot be
+hidden by other independent math instructions in the shader, the warp
+stalls while awaiting the integer result.</li>
+</ul>
+<h3 id="architectural-discrepancies-desktop-vs-mobile">Architectural
+Discrepancies: Desktop vs. Mobile</h3>
+<p>The performance penalty of ALU conversions is significantly more
+pronounced on mobile and embedded chipsets (such as ARM Mali, Qualcomm
+Adreno, and Imagination PowerVR) compared to desktop hardware:</p>
+<ol type="1">
+<li><strong>Dedicated vs. Shared Datapaths:</strong> Desktop
+architectures feature deep execution pipelines that hide conversion
+latencies via massive thread-level parallelism. Mobile architectures
+often have asymmetric ALUs where conversion instructions must execute on
+specific sub-pipes, creating resource contention.</li>
+<li><strong>Precision Qualifiers:</strong> Mobile GPUs heavily optimize
+for half-precision (<code>mediump float</code> and
+<code>mediump int</code>). Converting between a full-precision
+<code>highp float</code> (32-bit) and a <code>mediump int</code>
+(16-bit) triggers both a format conversion and a precision-packing step,
+incurring higher cycle penalties than homogeneous 32-bit
+operations.</li>
+</ol>
+<h3 id="best-practices-to-mitigate-conversion-costs">Best Practices to
+Mitigate Conversion Costs</h3>
+<ul>
+<li><strong>Domain Consistency:</strong> Maintain calculations in a
+single domain as long as possible. If an algorithm relies heavily on
+integer operations (e.g., bitwise hash generation, procedural voxel
+traversal), compute the logic entirely using <code>uint</code> or
+<code>int</code> rather than switching back and forth between
+<code>float</code> and <code>int</code>.</li>
+<li><strong>Bit-Casting for Raw Storage:</strong> When packing arbitrary
+data into textures or buffers, use <code>floatBitsToUint()</code> and
+<code>uintBitsToFloat()</code> instead of explicit arithmetic casts.
+Bit-casts preserve raw bits without driving arithmetic transformation
+logic.</li>
+<li><strong>Pre-computation:</strong> Hoist conversions out of
+high-frequency loops and fragment shaders. Uniform data or vertex
+attributes should be uploaded in the exact numerical format expected by
+the core computation rather than converted dynamically per-vertex or
+per-fragment.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

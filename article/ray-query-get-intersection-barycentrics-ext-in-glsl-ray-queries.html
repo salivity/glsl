@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rayQueryGetIntersectionBarycentricsEXT in GLSL Ray Queries - glsl</title>
+    <meta name="description" content="This article explains how the rayQueryGetIntersectionBarycentricsEXT intrinsic retrieves triangle barycentric coordinates within inline GLSL ray queries using the GLEXTrayquery extension. It covers the function's signature, how the returned two-dimension">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/ray-query-get-intersection-barycentrics-ext-in-glsl-ray-queries">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="rayQueryGetIntersectionBarycentricsEXT in GLSL Ray Queries - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/ray-query-get-intersection-barycentrics-ext-in-glsl-ray-queries" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the rayQueryGetIntersectionBarycentricsEXT intrinsic retrieves triangle barycentric coordinates within inline GLSL ray queries using the GLEXTrayquery extension. It covers the function's signature, how the returned two-dimension" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="rayquerygetintersectionbarycentricsext-in-glsl-ray-queries">rayQueryGetIntersectionBarycentricsEXT
+in GLSL Ray Queries</h1>
+<p>This article explains how the
+<code>rayQueryGetIntersectionBarycentricsEXT</code> intrinsic retrieves
+triangle barycentric coordinates within inline GLSL ray queries using
+the <code>GL_EXT_ray_query</code> extension. It covers the function's
+signature, how the returned two-dimensional floating-point vector maps
+to a 3D triangle, the distinction between candidate and committed
+intersections, and how to use these coordinates to interpolate
+per-vertex attributes accurately.</p>
+<h2 id="function-signature-and-parameters">Function Signature and
+Parameters</h2>
+<p>The <code>rayQueryGetIntersectionBarycentricsEXT</code> function is
+provided by the <code>GL_EXT_ray_query</code> SPIR-V extension for
+Vulkan. It extracts the hit location on a triangle primitive directly
+from a ray query object. Its signature is:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">rayQueryGetIntersectionBarycentricsEXT</span><span class="op">(</span>rayQueryEXT rayQuery<span class="op">,</span> <span class="dt">bool</span> committed<span class="op">);</span></span></code></pre></div>
+<p>The function takes two arguments:</p>
+<ol type="1">
+<li><strong><code>rayQuery</code></strong>: The initialized
+<code>rayQueryEXT</code> object handling the traversal.</li>
+<li><strong><code>committed</code></strong>: A boolean flag determining
+which intersection state to read. Passing <code>false</code> inspects
+the current <em>candidate</em> intersection while traversing. Passing
+<code>true</code> inspects the final <em>committed</em> intersection
+after traversal concludes or when accepting a hit.</li>
+</ol>
+<h2 id="the-returned-barycentric-format">The Returned Barycentric
+Format</h2>
+<p>The function returns a <code>vec2</code> rather than a
+<code>vec3</code>. Ray tracing hardware and low-level APIs (such as
+Vulkan and DirectX Raytracing) follow standard normalized barycentric
+conventions for triangles:</p>
+<ul>
+<li>The returned <code>x</code> component corresponds to the weight of
+vertex 1 (<span class="math inline">\(u\)</span>).</li>
+<li>The returned <code>y</code> component corresponds to the weight of
+vertex 2 (<span class="math inline">\(v\)</span>).</li>
+<li>The weight of vertex 0 (<span class="math inline">\(w\)</span>) is
+implicit, calculated as <span class="math inline">\(1.0 - u -
+v\)</span>.</li>
+</ul>
+<p>The sum of all three barycentric weights always equals
+<code>1.0</code>:</p>
+<p><span class="math display">\[w = 1.0 - uv.x - uv.y\]</span></p>
+<h2 id="retrieving-and-interpolating-attributes">Retrieving and
+Interpolating Attributes</h2>
+<p>To interpolate vertex attributes such as texture coordinates,
+normals, or colors, you must fetch the corresponding vertex data from
+storage buffers using the primitive index and multiply them by their
+respective barycentric weights.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Ensure the hit is a triangle</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span><span class="fu">rayQueryGetIntersectionTypeEXT</span><span class="op">(</span>rq<span class="op">,</span> <span class="kw">true</span><span class="op">)</span> <span class="op">==</span> gl_RayQueryCommittedIntersectionTriangleEXT<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 1. Retrieve the two barycentric coordinates</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> bary <span class="op">=</span> <span class="fu">rayQueryGetIntersectionBarycentricsEXT</span><span class="op">(</span>rq<span class="op">,</span> <span class="kw">true</span><span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 2. Compute the third coordinate</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> w <span class="op">=</span> <span class="fl">1.0</span> <span class="op">-</span> bary<span class="op">.</span><span class="fu">x</span> <span class="op">-</span> bary<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> weights <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span>w<span class="op">,</span> bary<span class="op">.</span><span class="fu">x</span><span class="op">,</span> bary<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 3. Fetch vertex attributes (e.g., UV coordinates from a buffer)</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> primID <span class="op">=</span> <span class="fu">rayQueryGetIntersectionPrimitiveIndexEXT</span><span class="op">(</span>rq<span class="op">,</span> <span class="kw">true</span><span class="op">);</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> uv0 <span class="op">=</span> <span class="dt">vertices</span><span class="op">[</span>indices<span class="op">[</span>primID <span class="op">*</span> <span class="dv">3</span> <span class="op">+</span> <span class="dv">0</span><span class="op">]].</span><span class="fu">uv</span><span class="op">;</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> uv1 <span class="op">=</span> <span class="dt">vertices</span><span class="op">[</span>indices<span class="op">[</span>primID <span class="op">*</span> <span class="dv">3</span> <span class="op">+</span> <span class="dv">1</span><span class="op">]].</span><span class="fu">uv</span><span class="op">;</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> uv2 <span class="op">=</span> <span class="dt">vertices</span><span class="op">[</span>indices<span class="op">[</span>primID <span class="op">*</span> <span class="dv">3</span> <span class="op">+</span> <span class="dv">2</span><span class="op">]].</span><span class="fu">uv</span><span class="op">;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 4. Interpolate across the triangle surface</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> hitUV <span class="op">=</span> uv0 <span class="op">*</span> weights<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> uv1 <span class="op">*</span> weights<span class="op">.</span><span class="fu">y</span> <span class="op">+</span> uv2 <span class="op">*</span> weights<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="candidate-vs-committed-intersections">Candidate vs. Committed
+Intersections</h2>
+<p>The behavior of <code>rayQueryGetIntersectionBarycentricsEXT</code>
+depends on the traversal stage:</p>
+<ul>
+<li><strong>Candidate Intersections
+(<code>committed = false</code>)</strong>: Used inside the
+<code>while(rayQueryProceedEXT(rayQuery))</code> loop when handling
+non-opaque triangles. If custom alpha testing or any-hit logic is
+required, you can query candidate barycentrics to sample alpha textures
+before deciding whether to call
+<code>rayQueryConfirmIntersectionEXT(rayQuery)</code>.</li>
+<li><strong>Committed Intersections
+(<code>committed = true</code>)</strong>: Used after
+<code>rayQueryProceedEXT</code> returns <code>false</code> (meaning
+traversal is complete) or immediately after an intersection is
+confirmed. This yields the barycentrics of the closest confirmed hit
+along the ray.</li>
+</ul>
+<p>Calling this function on an intersection type that is not a triangle
+(such as an AABB procedural primitive or a miss) produces undefined
+results. Always verify the intersection type with
+<code>rayQueryGetIntersectionTypeEXT</code> before reading barycentric
+data.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Precision Loss in Deep-Space Transformations - glsl</title>
+    <meta name="description" content="Rendering vast astronomical environments in real-time graphics engines frequently causes visual artifacts such as vertex jitter, geometry tearing, and severe Z-fighting. This article examines the technical causes of floating-point precision loss during d">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-precision-loss-in-deep-space-transformations">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Precision Loss in Deep-Space Transformations - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-precision-loss-in-deep-space-transformations" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Rendering vast astronomical environments in real-time graphics engines frequently causes visual artifacts such as vertex jitter, geometry tearing, and severe Z-fighting. This article examines the technical causes of floating-point precision loss during d" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-precision-loss-in-deep-space-transformations">GLSL
+Precision Loss in Deep-Space Transformations</h1>
+<p>Rendering vast astronomical environments in real-time graphics
+engines frequently causes visual artifacts such as vertex jitter,
+geometry tearing, and severe Z-fighting. This article examines the
+technical causes of floating-point precision loss during deep-space
+camera transformations in GLSL. It covers how the limitations of 32-bit
+IEEE 754 floating-point representations, large coordinate ranges,
+catastrophic cancellation in matrix multiplications, and non-linear
+depth buffer distribution combine to degrade rendering quality at cosmic
+scales.</p>
+<h3 id="the-limits-of-ieee-754-single-precision-floats">The Limits of
+IEEE 754 Single-Precision Floats</h3>
+<p>Standard GLSL shaders typically rely on 32-bit floating-point numbers
+(<code>float</code> or <code>highp float</code>). An IEEE 754
+single-precision float uses:</p>
+<ul>
+<li>1 sign bit</li>
+<li>8 exponent bits</li>
+<li>23 mantissa (significand) bits</li>
+</ul>
+<p>This layout delivers approximately 6 to 9 significant decimal digits
+of precision. In deep-space environments, coordinates often span
+millions or billions of meters (or kilometers). Because floating-point
+numbers distribute precision relative to their magnitude, the absolute
+distance between representable numbers increases as coordinates grow
+larger. For example, at a distance of <span
+class="math inline">\(10^7\)</span> units from the origin, the spacing
+between consecutive representable numbers is roughly 1 unit. Any
+movement, animation, or vertex offset smaller than that spacing is
+rounded off, leading to distinct stair-stepping and vertex
+jittering.</p>
+<h3
+id="catastrophic-cancellation-during-matrix-transformations">Catastrophic
+Cancellation During Matrix Transformations</h3>
+<p>Camera transformations commonly compute local-to-clip coordinates
+using a unified Model-View-Projection (MVP) matrix:</p>
+<p><span class="math display">\[\text{Clip Position} = P \times V \times
+M \times \text{Position}_{\text{local}}\]</span></p>
+<p>In standard pipelines, the View matrix (<span
+class="math inline">\(V\)</span>) translates the scene by the negative
+of the camera position. When both the camera and the rendered object are
+located far from the world origin, the GPU must subtract two
+extraordinarily large floating-point numbers to calculate a relatively
+small camera-relative distance:</p>
+<p><span class="math display">\[\mathbf{p}_{\text{eye}} =
+\mathbf{p}_{\text{world}} - \mathbf{c}_{\text{world}}\]</span></p>
+<p>Because the low-order bits were discarded when the original large
+world coordinates were stored, the subtraction results in catastrophic
+cancellation. The remaining value loses significant digits, causing the
+geometry to distort, wobble, and tear relative to the camera frame.</p>
+<h3 id="dynamic-range-mismatch-in-the-depth-buffer">Dynamic Range
+Mismatch in the Depth Buffer</h3>
+<p>Deep-space simulations require an extreme ratio between the near
+clipping plane (<span class="math inline">\(z_{near}\)</span>) and the
+far clipping plane (<span class="math inline">\(z_{far}\)</span>).
+Standard perspective projection matrices map view-space depth to
+Normalized Device Coordinates (NDC) non-linearly:</p>
+<p><span class="math display">\[z_{ndc} = \frac{f + n}{f - n} +
+\frac{2fn}{f - n} \cdot \frac{1}{z_{eye}}\]</span></p>
+<p>Most of the available floating-point depth precision is concentrated
+near <span class="math inline">\(z_{near}\)</span>. As the distance
+between <span class="math inline">\(z_{near}\)</span> and <span
+class="math inline">\(z_{far}\)</span> spans orders of magnitude (e.g.,
+from 1 meter to <span class="math inline">\(10^{11}\)</span> meters for
+celestial bodies), the depth buffer rapidly runs out of distinct bit
+patterns for distant objects. Multiple polygons occupying different
+physical positions map to the exact same depth value in the hardware
+depth buffer, resulting in persistent Z-fighting.</p>
+<h3 id="interpolation-inaccuracies-in-the-rasterizer">Interpolation
+Inaccuracies in the Rasterizer</h3>
+<p>Precision loss is not confined to the vertex shader. When world-space
+or view-space positions are passed as <code>varying</code> (or
+<code>out</code>) vectors to the fragment shader, the GPU's
+fixed-function rasterizer interpolates these values across triangle
+faces. When a triangle spans a vast coordinate range or is positioned
+far from the coordinate origin, the barycentric interpolation operates
+on imprecise 32-bit vertex values. This introduces micro-deviations
+across the primitive surface, which impairs lighting calculations,
+normal mapping, and atmospheric scattering algorithms that rely on
+smooth world-space positions.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

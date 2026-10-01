@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Const Expression Rules for Array Sizing - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), fixed-size arrays require their boundaries to be determinable during compilation to allow the graphics pipeline to allocate memory predictably. This article examines how GLSL's constant expression evaluation rules e">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-const-expression-rules-for-array-sizing">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Const Expression Rules for Array Sizing - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-const-expression-rules-for-array-sizing" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), fixed-size arrays require their boundaries to be determinable during compilation to allow the graphics pipeline to allocate memory predictably. This article examines how GLSL's constant expression evaluation rules e" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-const-expression-rules-for-array-sizing">GLSL Const
+Expression Rules for Array Sizing</h1>
+<p>In the OpenGL Shading Language (GLSL), fixed-size arrays require
+their boundaries to be determinable during compilation to allow the
+graphics pipeline to allocate memory predictably. This article examines
+how GLSL's constant expression evaluation rules enforce compile-time
+array sizing, the criteria defining a valid constant expression, the
+compiler mechanics behind static resolution, and why this constraint is
+fundamental to GPU architectures.</p>
+<h3 id="the-requirement-for-static-array-boundaries">The Requirement for
+Static Array Boundaries</h3>
+<p>Unlike general-purpose CPU languages that support runtime
+variable-length stack allocations, GLSL requires fixed-size array
+boundaries to be known before shader execution. Array declarations such
+as <code>float data[size];</code> depend on <code>size</code> being an
+integral constant expression. This rule ensures that the shader compiler
+can determine exact register requirements, local storage allocations,
+and memory layouts prior to generating machine code for the target
+GPU.</p>
+<h3 id="definition-of-a-constant-expression-in-glsl">Definition of a
+Constant Expression in GLSL</h3>
+<p>The GLSL specification defines a constant expression as an expression
+that evaluates to a constant scalar or vector at compile time. To
+qualify as a valid array size, the expression must evaluate to an
+integer greater than zero and be composed strictly of:</p>
+<ul>
+<li><strong>Literal values:</strong> Integer literals such as
+<code>4</code>, <code>16</code>, or <code>0x20</code>.</li>
+<li><strong>Const-qualified variables:</strong> Explicitly defined
+variables using the <code>const</code> storage qualifier that are
+themselves initialized with constant expressions (e.g.,
+<code>const int SIZE = 8;</code>).</li>
+<li><strong>Constant operations:</strong> Arithmetic, bitwise, or
+logical operators applied exclusively to other constant expressions
+(e.g., <code>SIZE * 2 + 1</code>).</li>
+<li><strong>Built-in functions:</strong> Certain deterministic built-in
+functions evaluated with constant parameters, allowing mathematical
+expressions like <code>int(pow(2.0, 4.0))</code> to be computed at
+compile time.</li>
+<li><strong>Constructors:</strong> Array, vector, or matrix constructors
+composed exclusively of constant expressions.</li>
+</ul>
+<p>Any expression depending on non-constant values—such as
+<code>uniform</code>, <code>in</code> (varying/attribute), or standard
+mutable local variables—violates these rules and cannot be used to size
+a fixed array.</p>
+<h3 id="compiler-enforcement-through-constant-folding">Compiler
+Enforcement Through Constant Folding</h3>
+<p>The enforcement mechanism occurs during the semantic analysis and
+abstract syntax tree (AST) construction phases of the GLSL compiler.
+When the parser encounters an array declaration:</p>
+<ol type="1">
+<li><strong>AST Validation:</strong> The compiler traverses the sub-tree
+representing the array dimension.</li>
+<li><strong>Attribute Verification:</strong> It checks every node within
+the dimension sub-tree. If a node references an identifier without the
+<code>const</code> qualifier, or an operation that depends on dynamic
+state, the node is flagged as non-constant.</li>
+<li><strong>Constant Folding:</strong> If all nodes conform to the
+constant expression rules, the compiler applies constant folding,
+reducing the complex expression tree down to a single scalar
+integer.</li>
+<li><strong>Boundary Validation:</strong> The resulting integer is
+verified to be strictly greater than zero. If the evaluation encounters
+a non-constant node or yields a non-positive integer, compilation halts
+immediately with a fatal error, such as "array size must be a constant
+expression."</li>
+</ol>
+<h3 id="hardware-and-architectural-rationale">Hardware and Architectural
+Rationale</h3>
+<p>GPUs achieve high throughput by scheduling thousands of threads
+across wide execution units (SIMD/SIMT). Dynamic stack allocation
+disrupts this model because the driver must pre-allocate private memory,
+register files, and thread stack space before launching thread
+groups.</p>
+<p>By enforcing strict constant expression evaluation for array
+boundaries, the GLSL compiler can:</p>
+<ul>
+<li>Map array elements directly to physical registers, maximizing access
+speed.</li>
+<li>Prevent register spillage into slower local device memory.</li>
+<li>Unroll loops containing indexed array accesses where indices are
+also constant.</li>
+<li>Generate deterministic memory layouts required by uniform buffer
+objects (UBOs) and shader storage blocks.</li>
+</ul>
+<p>While modern GLSL supports runtime-sized arrays at the tail end of
+Shader Storage Buffer Objects (SSBOs), standard local, global, and
+uniform arrays remain strictly governed by constant expression
+evaluation to maintain execution efficiency on GPU hardware.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

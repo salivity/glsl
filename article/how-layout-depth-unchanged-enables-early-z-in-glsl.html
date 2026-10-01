@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How layout(depth_unchanged) Enables Early-Z in GLSL - glsl</title>
+    <meta name="description" content="This article explores how the GLSL layout(depthunchanged) in; qualifier preserves hardware early depth testing (Early-Z) when fragment shaders interact with depth values. Normally, modifying or writing to the built-in depth variable forces modern GPUs to">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-layout-depth-unchanged-enables-early-z-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How layout(depth_unchanged) Enables Early-Z in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-layout-depth-unchanged-enables-early-z-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores how the GLSL layout(depthunchanged) in; qualifier preserves hardware early depth testing (Early-Z) when fragment shaders interact with depth values. Normally, modifying or writing to the built-in depth variable forces modern GPUs to" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-layoutdepth_unchanged-enables-early-z-in-glsl">How
+layout(depth_unchanged) Enables Early-Z in GLSL</h1>
+<p>This article explores how the GLSL
+<code>layout(depth_unchanged) in;</code> qualifier preserves hardware
+early depth testing (Early-Z) when fragment shaders interact with depth
+values. Normally, modifying or writing to the built-in depth variable
+forces modern GPUs to disable Early-Z optimizations, causing significant
+performance drops due to executing redundant fragment shaders on
+occluded geometry. By asserting that any depth modification leaves the
+fixed-function depth value identical to the hardware-calculated value,
+this layout qualifier allows the GPU to safely discard hidden fragments
+before running the shader.</p>
+<h3 id="the-mechanism-of-early-z-and-the-depth-write-problem">The
+Mechanism of Early-Z and the Depth Write Problem</h3>
+<p>Under standard rasterization pipelines, fixed-function hardware
+calculates a fragment's depth value (<span
+class="math inline">\(z/w\)</span>) via interpolation across triangle
+vertices before fragment execution. Modern GPUs leverage Early-Z (and
+hierarchical depth/HiZ culling) to test this interpolated depth against
+the depth buffer <em>prior</em> to running the fragment shader. If a
+fragment fails the depth test, the GPU discards it immediately, avoiding
+expensive memory lookups, lighting calculations, and texture
+sampling.</p>
+<p>When a shader writes to <code>gl_FragDepth</code>, it introduces an
+unknown variable into the pipeline. Because the GPU cannot predict what
+value the shader will output until the shader has finished executing, it
+cannot evaluate the depth test in advance. Consequently, the hardware is
+forced to disable Early-Z, execute the fragment shader for every
+rasterized fragment, and perform a late depth test immediately before
+the pixel is written to the framebuffer.</p>
+<h3 id="the-role-of-layoutdepth_unchanged-in">The Role of
+<code>layout(depth_unchanged) in;</code></h3>
+<p>Introduced as part of the <code>ARB_conservative_depth</code>
+extension and integrated into core GLSL, conservative depth qualifiers
+establish an explicit contract between the shader and the GPU
+driver.</p>
+<p>Declaring <code>layout(depth_unchanged) in;</code> informs the
+hardware of a specific guarantee: even if the shader accesses or writes
+to <code>gl_FragDepth</code>, the written value will always be equal to
+the fixed-function depth value generated by the rasterizer:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 430 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Inform the pipeline that gl_FragDepth will match fixed-function depth</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>depth_unchanged<span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> fragColor<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Hardware can still perform early-Z rejection before this executes</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_FragDepth</span> <span class="op">=</span> <span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">z</span><span class="op">;</span> </span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="how-the-hardware-uses-the-qualifier">How the Hardware Uses the
+Qualifier</h3>
+<p>When the GPU compiler encounters
+<code>layout(depth_unchanged) in;</code>, it configures the
+rasterization pipeline to keep Early-Z and HiZ stages fully active:</p>
+<ol type="1">
+<li><strong>Pre-Shader Culling:</strong> The GPU uses the rasterizer's
+interpolated depth to query the depth buffer. Fragments occluded by
+previously rendered closer geometry are discarded immediately.</li>
+<li><strong>Elimination of Redundant Invocations:</strong> The fragment
+shader only executes for fragments that pass the early depth test,
+preserving fill rate and compute resources.</li>
+<li><strong>Deterministic Depth Write:</strong> When surviving fragments
+finish execution, the hardware writes the depth value without pipeline
+stalls, knowing that no race conditions or discrepancies occurred
+between the early test and the final buffer state.</li>
+</ol>
+<h3 id="practical-implications">Practical Implications</h3>
+<p>In complex rendering engines, uber-shaders or shared shader code
+paths may include logic that writes to <code>gl_FragDepth</code> under
+certain conditional branches or configurations. Without depth layout
+qualifiers, the mere presence of <code>gl_FragDepth</code> writes in the
+compiled shader binary forces the driver to deactivate Early-Z globally
+for that draw call.</p>
+<p>Using <code>layout(depth_unchanged) in;</code> guarantees that
+shaders retaining the original depth calculation do not forfeit early
+depth rejection, allowing engines to maintain unified shader
+architectures without sacrificing rasterization performance.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linearly Transformed Cosines for Polygonal Lights in GLSL - glsl</title>
+    <meta name="description" content="This article provides a mathematical breakdown and GLSL shader implementation of Linearly Transformed Cosines (LTC) for real-time polygonal area lights. It explains how spherical BRDF distributions are mapped to clamped cosine distributions through linea">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/linearly-transformed-cosines-for-polygonal-lights-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Linearly Transformed Cosines for Polygonal Lights in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/linearly-transformed-cosines-for-polygonal-lights-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a mathematical breakdown and GLSL shader implementation of Linearly Transformed Cosines (LTC) for real-time polygonal area lights. It explains how spherical BRDF distributions are mapped to clamped cosine distributions through linea" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="linearly-transformed-cosines-for-polygonal-lights-in-glsl">Linearly
+Transformed Cosines for Polygonal Lights in GLSL</h1>
+<p>This article provides a mathematical breakdown and GLSL shader
+implementation of Linearly Transformed Cosines (LTC) for real-time
+polygonal area lights. It explains how spherical BRDF distributions are
+mapped to clamped cosine distributions through linear transformations,
+covers the application of Stokes' theorem to reduce surface integrals to
+analytical edge evaluations, and presents the corresponding GLSL code
+for horizon clipping and lighting evaluation.</p>
+<hr />
+<h2 id="core-mathematical-formulation">Core Mathematical
+Formulation</h2>
+<p>Linearly Transformed Cosines (LTC) approximate complex BRDF lobes by
+applying a linear transformation matrix <span
+class="math inline">\(M\)</span> to a standard clamped cosine
+distribution <span class="math inline">\(D_0\)</span>:</p>
+<p><span class="math display">\[D(\omega) = \frac{D_0(M^{-1}
+\omega)}{\det(M) \| M^{-1} \omega \|^3}\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(D_0(\omega_0) = \frac{1}{\pi} \max(0,
+\cos\theta_0)\)</span> is the clamped cosine distribution.</li>
+<li><span class="math inline">\(M\)</span> is a <span
+class="math inline">\(3 \times 3\)</span> matrix representing roughness,
+anisotropy, and view angle.</li>
+<li><span class="math inline">\(\omega\)</span> is the incoming light
+direction.</li>
+</ul>
+<p>Evaluating the reflected radiance <span
+class="math inline">\(L_o\)</span> over an arbitrary polygonal domain
+<span class="math inline">\(P\)</span> involves computing:</p>
+<p><span class="math display">\[E = \int_P D(\omega) (\mathbf{n} \cdot
+\omega) \, d\omega\]</span></p>
+<p>By substituting the transformed integration domain, the integral
+simplifies to evaluating the clamped cosine distribution <span
+class="math inline">\(D_0\)</span> over a transformed polygon <span
+class="math inline">\(P&#39; = M^{-1} P\)</span>:</p>
+<p><span class="math display">\[E = \int_{P&#39;} D_0(\omega_0)
+(\mathbf{n}_0 \cdot \omega_0) \, d\omega_0\]</span></p>
+<p>This operation shifts the complexity from evaluating an intricate
+BRDF profile to computing the geometric form factor of a transformed
+polygon under a simple Lambertian distribution.</p>
+<hr />
+<h2 id="analytical-evaluation-via-stokes-theorem">Analytical Evaluation
+via Stokes' Theorem</h2>
+<p>By applying Stokes' theorem, the area integral over the spherical
+polygon <span class="math inline">\(P&#39;\)</span> projects down to a
+boundary line integral along the polygon’s directed edges:</p>
+<p><span class="math display">\[\mathbf{F} = \frac{1}{2\pi}
+\sum_{i=1}^{N} \mathbf{v}_i \times \mathbf{v}_{i+1}
+\frac{\theta_i}{\|\mathbf{v}_i \times \mathbf{v}_{i+1}\|}\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(\mathbf{v}_i\)</span> are the normalized
+vertices of the transformed polygon projected onto the unit sphere:
+<span class="math inline">\(\mathbf{v}_i = \frac{M^{-1}(P_i -
+X)}{\|M^{-1}(P_i - X)\|}\)</span> for shading point <span
+class="math inline">\(X\)</span>.</li>
+<li><span class="math inline">\(\theta_i = \arccos(\mathbf{v}_i \cdot
+\mathbf{v}_{i+1})\)</span> is the angle subtended by edge <span
+class="math inline">\((\mathbf{v}_i, \mathbf{v}_{i+1})\)</span> at the
+origin.</li>
+<li>The scalar irradiance is the component aligned with the local normal
+<span class="math inline">\(\mathbf{n}_0 = (0, 0, 1)\)</span>:</li>
+</ul>
+<p><span class="math display">\[E = \max(0, \mathbf{F}_z)\]</span></p>
+<hr />
+<h2 id="horizon-clipping">Horizon Clipping</h2>
+<p>Vertices of the transformed polygon located below the local tangent
+horizon (<span class="math inline">\(z &lt; 0\)</span>) cause erroneous
+back-facing illumination. To avoid integration over the lower
+hemisphere, edges crossing the <span class="math inline">\(z =
+0\)</span> plane must be clipped.</p>
+<p>If an edge transitions between <span class="math inline">\(z_i \ge
+0\)</span> and <span class="math inline">\(z_{i+1} &lt; 0\)</span>, a
+replacement boundary vertex is interpolated:</p>
+<p><span class="math display">\[\mathbf{v}_{clip} = \mathbf{v}_i +
+\frac{-z_i}{z_{i+1} - z_i} (\mathbf{v}_{i+1} -
+\mathbf{v}_i)\]</span></p>
+<p>Clipping a quad can yield a polygon with three, four, or five
+vertices.</p>
+<hr />
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<h3 id="1-edge-integration-function">1. Edge Integration Function</h3>
+<p>This function evaluates the line integral for a single directed edge
+between two normalized points on the unit sphere:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">IntegrateEdge</span><span class="op">(</span><span class="dt">vec3</span> v1<span class="op">,</span> <span class="dt">vec3</span> v2<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosTheta <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>v1<span class="op">,</span> v2<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    cosTheta <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>cosTheta<span class="op">,</span> <span class="op">-</span><span class="fl">0.9999</span><span class="op">,</span> <span class="fl">0.9999</span><span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> theta <span class="op">=</span> <span class="bu">acos</span><span class="op">(</span>cosTheta<span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> crossVec <span class="op">=</span> <span class="bu">cross</span><span class="op">(</span>v1<span class="op">,</span> v2<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> len <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>crossVec<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>len <span class="op">&lt;</span> <span class="fl">1e-6</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> crossVec <span class="op">*</span> <span class="op">(</span>theta <span class="op">/</span> len<span class="op">);</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="2-horizon-clipping-implementation">2. Horizon Clipping
+Implementation</h3>
+<p>This routine clips an arbitrary quad against the horizon plane <span
+class="math inline">\(z = 0\)</span>:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> <span class="fu">ClipPolygonToHorizon</span><span class="op">(</span><span class="dt">vec3</span> L<span class="op">[</span><span class="dv">4</span><span class="op">],</span> <span class="dt">out</span> <span class="dt">vec3</span> L_clipped<span class="op">[</span><span class="dv">5</span><span class="op">])</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> n <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">4</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> p1 <span class="op">=</span> L<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> p2 <span class="op">=</span> L<span class="op">[(</span>i <span class="op">+</span> <span class="dv">1</span><span class="op">)</span> <span class="op">%</span> <span class="dv">4</span><span class="op">];</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>p1<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;=</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>            L_clipped<span class="op">[</span>n<span class="op">++]</span> <span class="op">=</span> p1<span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">((</span>p1<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;=</span> <span class="fl">0.0</span> <span class="op">&amp;&amp;</span> p2<span class="op">.</span><span class="fu">z</span> <span class="op">&lt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">||</span> <span class="op">(</span>p1<span class="op">.</span><span class="fu">z</span> <span class="op">&lt;</span> <span class="fl">0.0</span> <span class="op">&amp;&amp;</span> p2<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;=</span> <span class="fl">0.0</span><span class="op">))</span> <span class="op">{</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>            <span class="dt">float</span> t <span class="op">=</span> <span class="op">-</span>p1<span class="op">.</span><span class="fu">z</span> <span class="op">/</span> <span class="op">(</span>p2<span class="op">.</span><span class="fu">z</span> <span class="op">-</span> p1<span class="op">.</span><span class="fu">z</span><span class="op">);</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>            L_clipped<span class="op">[</span>n<span class="op">++]</span> <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>p1<span class="op">,</span> p2<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> n<span class="op">;</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="3-evaluating-irradiance">3. Evaluating Irradiance</h3>
+<p>The complete shading function accepts the transformed polygon,
+executes clipping, projects points to the unit sphere, and calculates
+the total vector irradiance:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">EvaluateLTC</span><span class="op">(</span><span class="dt">mat3</span> Minv<span class="op">,</span> <span class="dt">vec3</span> <span class="dt">points</span><span class="op">[</span><span class="dv">4</span><span class="op">],</span> <span class="dt">vec3</span> P<span class="op">,</span> <span class="dt">vec3</span> N<span class="op">,</span> <span class="dt">vec3</span> V<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Construct local tangent space (T, B, N)</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> T <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>V <span class="op">-</span> N <span class="op">*</span> <span class="bu">dot</span><span class="op">(</span>V<span class="op">,</span> N<span class="op">));</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> B <span class="op">=</span> <span class="bu">cross</span><span class="op">(</span>N<span class="op">,</span> T<span class="op">);</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat3</span> tangentToWorld <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span>T<span class="op">,</span> B<span class="op">,</span> N<span class="op">);</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat3</span> worldToTangent <span class="op">=</span> <span class="bu">transpose</span><span class="op">(</span>tangentToWorld<span class="op">);</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Transform polygon vertices into local LTC space</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat3</span> M <span class="op">=</span> Minv <span class="op">*</span> worldToTangent<span class="op">;</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> L<span class="op">[</span><span class="dv">4</span><span class="op">];</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">4</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        L<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> M <span class="op">*</span> <span class="op">(</span><span class="dt">points</span><span class="op">[</span>i<span class="op">]</span> <span class="op">-</span> P<span class="op">);</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Clip against horizon</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> L_clipped<span class="op">[</span><span class="dv">5</span><span class="op">];</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> n <span class="op">=</span> <span class="fu">ClipPolygonToHorizon</span><span class="op">(</span>L<span class="op">,</span> L_clipped<span class="op">);</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>n <span class="op">&lt;</span> <span class="dv">3</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Normalize clipped vertices onto unit sphere</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>        L_clipped<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>L_clipped<span class="op">[</span>i<span class="op">]);</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Integrate edges using Stokes&#39; theorem</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> vectorIrradiance <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> next <span class="op">=</span> <span class="op">(</span>i <span class="op">+</span> <span class="dv">1</span><span class="op">)</span> <span class="op">%</span> n<span class="op">;</span></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>        vectorIrradiance <span class="op">+=</span> <span class="fu">IntegrateEdge</span><span class="op">(</span>L_clipped<span class="op">[</span>i<span class="op">],</span> L_clipped<span class="op">[</span>next<span class="op">]);</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Scalar irradiance over the clamped cosine (divided by 2*PI)</span></span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> scalarIrradiance <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> vectorIrradiance<span class="op">.</span><span class="fu">z</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">/</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">*</span> <span class="fl">3.14159265</span><span class="op">)));</span></span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span>scalarIrradiance<span class="op">);</span></span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="4-sampling-luts-for-the-ltc-matrix">4. Sampling LUTs for the LTC
+Matrix</h3>
+<p>The inverse transformation matrix <span
+class="math inline">\(M^{-1}\)</span> and the directional Fresnel
+magnitude are retrieved from precomputed lookup tables (LUTs)
+parametrized by the roughness <span
+class="math inline">\(\alpha\)</span> and the view angle <span
+class="math inline">\(\cos\theta = \mathbf{n} \cdot
+\mathbf{v}\)</span>:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> ltcMatTexture<span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> ltcAmpTexture<span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotV <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>normal<span class="op">,</span> viewDir<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> uv <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span>roughness<span class="op">,</span> <span class="bu">sqrt</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> NdotV<span class="op">));</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    uv <span class="op">=</span> uv <span class="op">*</span> <span class="op">(</span><span class="fl">63.0</span> <span class="op">/</span> <span class="fl">64.0</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">0.5</span> <span class="op">/</span> <span class="fl">64.0</span><span class="op">);</span> <span class="co">// Texture coordinate bias</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> t1 <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>ltcMatTexture<span class="op">,</span> uv<span class="op">);</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> t2 <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>ltcAmpTexture<span class="op">,</span> uv<span class="op">);</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Reconstruct M^-1</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat3</span> Minv <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span><span class="op">(</span>t1<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span>  t1<span class="op">.</span><span class="fu">y</span><span class="op">),</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span>  <span class="fl">1.0</span><span class="op">,</span>  <span class="fl">0.0</span><span class="op">),</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span><span class="op">(</span>t1<span class="op">.</span><span class="fu">z</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span>  t1<span class="op">.</span><span class="fu">w</span><span class="op">)</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> specularColor <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span><span class="dt">vec3</span><span class="op">(</span><span class="fl">0.04</span><span class="op">),</span> albedo<span class="op">,</span> metallic<span class="op">);</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> specularFactor <span class="op">=</span> specularColor <span class="op">*</span> t2<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> specularColor<span class="op">)</span> <span class="op">*</span> t2<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> spec <span class="op">=</span> <span class="fu">EvaluateLTC</span><span class="op">(</span>Minv<span class="op">,</span> quadVertices<span class="op">,</span> worldPos<span class="op">,</span> normal<span class="op">,</span> viewDir<span class="op">)</span> <span class="op">*</span> specularFactor<span class="op">;</span></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> diff <span class="op">=</span> <span class="fu">EvaluateLTC</span><span class="op">(</span><span class="dt">mat3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">),</span> quadVertices<span class="op">,</span> worldPos<span class="op">,</span> normal<span class="op">,</span> viewDir<span class="op">)</span> <span class="op">*</span> albedo<span class="op">;</span></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> finalRadiance <span class="op">=</span> lightRadiance <span class="op">*</span> <span class="op">(</span>spec <span class="op">+</span> diff<span class="op">);</span></span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

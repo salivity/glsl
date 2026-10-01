@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding subgroupMax in GLSL Subgroups - glsl</title>
+    <meta name="description" content="In GLSL, the subgroupMax intrinsic computes the highest numerical value of a specified expression across all currently active invocations in a single execution subgroup. This article explains how subgroupMax functions within the execution model, how it h">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-subgroup-max-in-glsl-subgroups">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding subgroupMax in GLSL Subgroups - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-subgroup-max-in-glsl-subgroups" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL, the subgroupMax intrinsic computes the highest numerical value of a specified expression across all currently active invocations in a single execution subgroup. This article explains how subgroupMax functions within the execution model, how it h" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-subgroupmax-in-glsl-subgroups">Understanding
+subgroupMax in GLSL Subgroups</h1>
+<p>In GLSL, the <code>subgroupMax</code> intrinsic computes the highest
+numerical value of a specified expression across all currently active
+invocations in a single execution subgroup. This article explains how
+<code>subgroupMax</code> functions within the execution model, how it
+handles active versus inactive invocations, its data type support, and
+its performance advantages in modern GPU programming.</p>
+<h2 id="core-evaluation-behavior">Core Evaluation Behavior</h2>
+<p>The <code>subgroupMax</code> function is defined as part of the
+<code>GL_KHR_shader_subgroup_arithmetic</code> extension and modern
+Vulkan/OpenGL subgroup operations. When an invocation calls
+<code>subgroupMax(value)</code>, the GPU evaluates the
+<code>value</code> passed by each invocation within the subgroup, finds
+the maximum among them, and returns this identical maximum result to all
+participating invocations.</p>
+<p>A subgroup corresponds directly to the underlying hardware execution
+unit, such as an AMD wavefront or an NVIDIA warp. Because the operation
+is executed in lockstep at the hardware level, it does not require
+explicit synchronization barriers or shared memory (<code>shared</code>
+variables) to share data across invocations.</p>
+<h2 id="active-vs-inactive-invocations">Active vs. Inactive
+Invocations</h2>
+<p>The critical operational detail of <code>subgroupMax</code> is that
+it evaluates <strong>only</strong> across active invocations:</p>
+<ul>
+<li><strong>Active Invocations:</strong> An invocation is active if it
+is currently executing the instruction stream containing the
+<code>subgroupMax</code> call. If an invocation reaches the function,
+its local argument is included in the reduction.</li>
+<li><strong>Inactive Invocations:</strong> Invocations that are masked
+out due to control flow divergence (such as an <code>if</code> branch
+that only some threads take) or invocations that have already exited do
+not participate. The values from these inactive invocations are
+completely ignored and do not affect the calculated maximum.</li>
+<li><strong>Uniform Results:</strong> All active invocations in the
+subgroup receive the exact same maximum value. Inactive invocations do
+not receive a result because they are not actively executing the
+instruction.</li>
+</ul>
+<p>If a subgroup contains invocations with values
+<code>[2, 8, 14, 5]</code> and the invocation holding <code>14</code> is
+inactive due to branching, <code>subgroupMax</code> evaluates only
+<code>[2, 8, 5]</code> and returns <code>8</code> to the three active
+invocations.</p>
+<h2 id="supported-types-and-vector-operations">Supported Types and
+Vector Operations</h2>
+<p>The <code>subgroupMax</code> function supports basic numerical
+types:</p>
+<ul>
+<li><strong>Scalars:</strong> Signed integers (<code>int</code>),
+unsigned integers (<code>uint</code>), and floating-point values
+(<code>float</code>, <code>double</code>, and 16-bit floats where
+supported).</li>
+<li><strong>Vectors:</strong> Vector equivalents of supported scalar
+types (such as <code>vec2</code>, <code>ivec4</code>,
+<code>uvec3</code>).</li>
+</ul>
+<p>When invoked on vector types, <code>subgroupMax</code> operates
+<strong>component-wise</strong>. For example, when evaluating a
+<code>vec2</code>, the maximum <code>x</code> component across all
+active invocations is determined independently of the maximum
+<code>y</code> component across those same invocations.</p>
+<h2 id="floating-point-and-edge-cases">Floating-Point and Edge
+Cases</h2>
+<p>For floating-point values, <code>subgroupMax</code> generally adheres
+to IEEE-754 semantics as implemented by the underlying GPU hardware:</p>
+<ul>
+<li>If comparing positive and negative zero (<code>+0.0</code> and
+<code>-0.0</code>), implementations generally treat them as equal,
+though returning <code>+0.0</code> is standard.</li>
+<li>Handling of <code>NaN</code> (Not a Number) depends on the hardware
+target and SPIR-V execution modes, but standard graphics rules typically
+treat <code>NaN</code> inputs such that if one operand is
+<code>NaN</code>, the non-<code>NaN</code> value is preferred,
+preventing an invalid result from polluting the active subgroup.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

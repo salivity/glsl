@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL subgroupQuadSwapVertical Explained - glsl</title>
+    <meta name="description" content="The subgroupQuadSwapVertical function in GLSL allows threads within a subgroup to exchange data directly across vertical neighbors within a 2x2 quad without using shared memory. By understanding the quad layout and invocation mapping, developers can use">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-subgroup-quad-swap-vertical-explained">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL subgroupQuadSwapVertical Explained - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-subgroup-quad-swap-vertical-explained" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The subgroupQuadSwapVertical function in GLSL allows threads within a subgroup to exchange data directly across vertical neighbors within a 2x2 quad without using shared memory. By understanding the quad layout and invocation mapping, developers can use" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-subgroupquadswapvertical-explained">GLSL
+subgroupQuadSwapVertical Explained</h1>
+<p>The <code>subgroupQuadSwapVertical</code> function in GLSL allows
+threads within a subgroup to exchange data directly across vertical
+neighbors within a 2x2 quad without using shared memory. By
+understanding the quad layout and invocation mapping, developers can use
+this built-in operation for efficient local spatial calculations,
+texture filtering, and image-processing kernels.</p>
+<h3 id="quad-layout-and-thread-organization">Quad Layout and Thread
+Organization</h3>
+<p>In GLSL subgroup quad operations (typically enabled via the
+<code>GL_KHR_shader_subgroup_quad</code> extension or Vulkan 1.1+
+subgroup features), invocations within a subgroup are partitioned into
+localized 2x2 grids called quads. Each quad consists of four invocations
+indexed relative to the quad:</p>
+<ul>
+<li><strong>Lane 0</strong>: Top-left <code>(x=0, y=0)</code></li>
+<li><strong>Lane 1</strong>: Top-right <code>(x=1, y=0)</code></li>
+<li><strong>Lane 2</strong>: Bottom-left <code>(x=0, y=1)</code></li>
+<li><strong>Lane 3</strong>: Bottom-right <code>(x=1, y=1)</code></li>
+</ul>
+<h3 id="what-subgroupquadswapvertical-does">What
+subgroupQuadSwapVertical Does</h3>
+<p>The <code>subgroupQuadSwapVertical</code> intrinsic swaps data along
+the vertical axis of the quad. When called, each invocation reads the
+passed value from its vertical counterpart:</p>
+<ul>
+<li><strong>Invocation 0</strong> swaps with <strong>Invocation
+2</strong></li>
+<li><strong>Invocation 1</strong> swaps with <strong>Invocation
+3</strong></li>
+<li><strong>Invocation 2</strong> swaps with <strong>Invocation
+0</strong></li>
+<li><strong>Invocation 3</strong> swaps with <strong>Invocation
+1</strong></li>
+</ul>
+<p>If invocation 0 passes value <span class="math inline">\(A\)</span>
+and invocation 2 passes value <span class="math inline">\(C\)</span>,
+invocation 0 will receive <span class="math inline">\(C\)</span> and
+invocation 2 will receive <span class="math inline">\(A\)</span>.
+Simultaneously, invocation 1 (passing <span
+class="math inline">\(B\)</span>) and invocation 3 (passing <span
+class="math inline">\(D\)</span>) exchange their values so that
+invocation 1 receives <span class="math inline">\(D\)</span> and
+invocation 3 receives <span class="math inline">\(B\)</span>.</p>
+<h3 id="use-cases-and-significance">Use Cases and Significance</h3>
+<p><code>subgroupQuadSwapVertical</code> operates at hardware register
+speed, bypassing memory writes and thread barriers. Typical use cases
+include:</p>
+<ul>
+<li><strong>Finite Difference and Derivatives</strong>: Calculating
+vertical derivatives (<span class="math inline">\(dF/dy\)</span>)
+manually in compute shaders where standard texture gradient instructions
+like <code>dFdy</code> might not be available.</li>
+<li><strong>Image Filtering</strong>: Implementing small convolution
+kernels (such as Sobel or vertical blur filters) by sharing neighboring
+pixel values across rows.</li>
+<li><strong>Quad-Level Reductions</strong>: Pairing vertical swaps with
+horizontal swaps (<code>subgroupQuadSwapHorizontal</code>) to broadcast
+or reduce data across all four threads in the quad in two
+operations.</li>
+</ul>
+<h3 id="execution-requirements">Execution Requirements</h3>
+<p>For <code>subgroupQuadSwapVertical</code> to return defined results,
+all invocations within the quad must be active and execute the
+instruction in uniform control flow. If a thread within the quad is
+inactive due to divergent branching or bounds checks, the value read
+from that lane is undefined.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

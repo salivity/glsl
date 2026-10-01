@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Are Uniform Buffer Objects (UBOs) in GLSL? - glsl</title>
+    <meta name="description" content="Uniform Buffer Objects (UBOs) are buffer objects in OpenGL and GLSL designed to store and share read-only uniform data across multiple shader stages and draw calls. This article explains what UBOs are, their advantages over traditional individual uniform">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-are-uniform-buffer-objects-ub-os-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Are Uniform Buffer Objects (UBOs) in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-are-uniform-buffer-objects-ub-os-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Uniform Buffer Objects (UBOs) are buffer objects in OpenGL and GLSL designed to store and share read-only uniform data across multiple shader stages and draw calls. This article explains what UBOs are, their advantages over traditional individual uniform" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-are-uniform-buffer-objects-ubos-in-glsl">What Are Uniform
+Buffer Objects (UBOs) in GLSL?</h1>
+<p>Uniform Buffer Objects (UBOs) are buffer objects in OpenGL and GLSL
+designed to store and share read-only uniform data across multiple
+shader stages and draw calls. This article explains what UBOs are, their
+advantages over traditional individual uniforms, how to declare and
+configure them inside GLSL shaders, and how to handle alignment rules
+using memory layout qualifiers.</p>
+<h2 id="understanding-uniform-buffer-objects">Understanding Uniform
+Buffer Objects</h2>
+<p>In legacy OpenGL pipelines, passing uniform values (such as matrices,
+lighting parameters, and material properties) required uploading data
+independently to each shader program using functions like
+<code>glUniform*</code>. When multiple shaders need access to the same
+dataset—such as a camera's view and projection matrices—this approach
+forces redundant API calls and updates.</p>
+<p>A Uniform Buffer Object solves this bottleneck by storing uniform
+data inside a GPU buffer object. Once written, multiple shader programs
+can read from the exact same buffer without re-uploading the data
+between program switches. This decouples global state from individual
+shader instances, significantly reducing CPU-to-GPU overhead and draw
+call latency.</p>
+<h2 id="declaring-a-ubo-in-glsl">Declaring a UBO in GLSL</h2>
+<p>Uniform blocks are defined in GLSL using the <code>layout</code>
+qualifier followed by the <code>uniform</code> keyword and a block name.
+The syntax resembles a C-style structure.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Declare a uniform block named CameraData</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std140</span><span class="op">)</span> <span class="kw">uniform</span> CameraData <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> view<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> projection<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> cameraPosition<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Members are directly accessible in global scope</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> clipSpacePos <span class="op">=</span> projection <span class="op">*</span> view <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>cameraPosition<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="instance-names">Instance Names</h3>
+<p>An instance name can optionally be specified after the closing brace.
+When an instance name is present, access to the block members must be
+scoped through that identifier:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std140</span><span class="op">)</span> <span class="kw">uniform</span> LightingData <span class="op">{</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> lightDirection<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> lightColor<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lightIntensity<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> lights<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> ambient <span class="op">=</span> lights<span class="op">.</span><span class="fu">lightColor</span> <span class="op">*</span> lights<span class="op">.</span><span class="fu">lightIntensity</span><span class="op">;</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="memory-layout-qualifiers">Memory Layout Qualifiers</h2>
+<p>Unlike CPU structs, GPU memory hardware requires strict data
+alignment. GLSL provides several memory layout qualifiers to control how
+variables are packed within the buffer block:</p>
+<ul>
+<li><strong><code>std140</code></strong>: The standard, cross-platform
+layout specification for UBOs. It defines explicit, deterministic
+alignment and padding rules (e.g., all <code>vec3</code> and
+<code>vec4</code> types are 16-byte aligned, and <code>mat4</code>
+consists of four 16-byte columns). Because offsets are strictly
+standardized, both the CPU and GPU can reliably reference the same
+memory layout.</li>
+<li><strong><code>shared</code></strong>: The default layout if none is
+specified. The compiler may pack variables in an
+implementation-dependent way, requiring the host application to query
+member offsets dynamically using the OpenGL API before writing
+data.</li>
+<li><strong><code>packed</code></strong>: Allows the compiler to
+aggressively minimize padding. Variables cannot be shared across
+different shader programs because packing strategies can vary between
+compilations.</li>
+</ul>
+<p>Due to portability and ease of CPU-side buffer writing,
+<code>std140</code> is the standard choice for UBO definitions.</p>
+<h2 id="explicit-binding-points">Explicit Binding Points</h2>
+<p>Modern GLSL versions (OpenGL 4.2+ or via the
+<code>GL_ARB_shading_language_420pack</code> extension) allow setting
+binding points directly in the shader declaration using the
+<code>binding</code> specifier:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 420 core</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std140</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> GlobalMatrices <span class="op">{</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> model<span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> view<span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> projection<span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>This removes the need to call <code>glGetUniformBlockIndex</code> and
+<code>glUniformBlockBinding</code> from the host application, as the
+shader is explicitly tied to binding index <code>0</code>.</p>
+<h2 id="key-benefits-of-using-ubos">Key Benefits of Using UBOs</h2>
+<ul>
+<li><strong>Batch Updates</strong>: Updating hundreds of transform or
+material variables requires only a single <code>glBufferSubData</code>
+or memory mapping call on the CPU.</li>
+<li><strong>Cross-Shader Sharing</strong>: Common scene data (camera
+matrices, fog parameters, lighting rigs) can remain permanently bound to
+dedicated binding points across every active pipeline.</li>
+<li><strong>Capacity</strong>: UBOs offer significantly higher storage
+limits than standard uniform registers, allowing large parameter arrays
+to reside directly on GPU memory.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

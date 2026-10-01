@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Loop Unrolling and Instruction Cache Pressure - glsl</title>
+    <meta name="description" content="Loop unrolling with the [[unroll]] attribute in GLSL optimizes performance by eliminating branch conditions and loop counter increments, but it can negatively impact performance if overused. By duplicating the loop's body inline for every iteration, the">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-loop-unrolling-and-instruction-cache-pressure">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Loop Unrolling and Instruction Cache Pressure - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-loop-unrolling-and-instruction-cache-pressure" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Loop unrolling with the [[unroll]] attribute in GLSL optimizes performance by eliminating branch conditions and loop counter increments, but it can negatively impact performance if overused. By duplicating the loop's body inline for every iteration, the" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-loop-unrolling-and-instruction-cache-pressure">GLSL Loop
+Unrolling and Instruction Cache Pressure</h1>
+<p>Loop unrolling with the <code>[[unroll]]</code> attribute in GLSL
+optimizes performance by eliminating branch conditions and loop counter
+increments, but it can negatively impact performance if overused. By
+duplicating the loop's body inline for every iteration, the compiler
+significantly expands the compiled binary size of the shader. When this
+generated code exceeds the capacity of the GPU’s instruction cache, it
+introduces cache misses and latency penalties that can degrade overall
+execution speed.</p>
+<h3 id="how-unroll-modifies-shader-code">How <code>[[unroll]]</code>
+Modifies Shader Code</h3>
+<p>When you place <code>[[unroll]]</code> before a <code>for</code> or
+<code>while</code> loop, the GLSL compiler flattens the loop structure.
+Instead of jumping back to the beginning of the block and evaluating an
+exit condition on every iteration, the compiler copies the loop's
+internal instructions sequentially for <span
+class="math inline">\(N\)</span> iterations.</p>
+<p>While this eliminates branch instructions and allows the compiler to
+perform optimizations like constant folding and instruction scheduling
+across iterations, it linearly multiplies the total number of assembly
+instructions within that shader program.</p>
+<h3 id="the-constraint-of-gpu-instruction-caches">The Constraint of GPU
+Instruction Caches</h3>
+<p>Unlike modern CPUs with large, multi-megabyte instruction caches,
+GPUs allocate very limited hardware space to instruction storage. GPU
+architectures prioritize arithmetic logic units (ALUs) and wide register
+files over deep cache hierarchies.</p>
+<p>Most GPU Streaming Multiprocessors (SMs) or Compute Units (CUs) share
+a dedicated L1 instruction cache (L1I) that is often only 16 KB to 64 KB
+in size. This cache must serve dozens of concurrent warps or wavefronts
+executing on the same hardware block.</p>
+<h3 id="the-mechanism-of-instruction-cache-pressure">The Mechanism of
+Instruction Cache Pressure</h3>
+<p>When a loop with a large body or high iteration count is
+unrolled:</p>
+<ol type="1">
+<li><strong>Footprint Inflation:</strong> The compiled shader program
+size inflates. If a 40-instruction loop runs 32 times, unrolling
+converts it into roughly 1,280 sequential instructions, drastically
+consuming available cache lines.</li>
+<li><strong>L1I Eviction and Thrashing:</strong> As the execution
+pipeline moves through the long sequence of instructions, older parts of
+the shader code are evicted from the L1 instruction cache. If multiple
+execution units on the same core execute different shaders or different
+parts of an unrolled loop, they continuously overwrite the cache lines,
+resulting in instruction cache thrashing.</li>
+<li><strong>Memory Latency Stalls:</strong> When an instruction fetch
+misses the L1I, the GPU must fetch code from the shared L2 cache or
+high-bandwidth device memory (VRAM). This introduces significant
+pipeline stalls. Although GPUs hide latency by switching between active
+warps, when the instruction cache misses across all active threads, no
+warps are ready to execute, leaving compute units idle.</li>
+</ol>
+<h3 id="best-practices-for-minimizing-pressure">Best Practices for
+Minimizing Pressure</h3>
+<ul>
+<li><strong>Unroll Small Iteration Counts Only:</strong> Use
+<code>[[unroll]]</code> primarily on loops with small, fixed iteration
+counts (e.g., 2 to 4 iterations) or loops with extremely small bodies
+(e.g., 1 to 3 instructions).</li>
+<li><strong>Use Partial Unrolling:</strong> Instead of fully unrolling a
+large loop, unroll a fraction of it using bounded loop structures,
+allowing branch overhead reduction without generating thousands of lines
+of machine code.</li>
+<li><strong>Trust Compiler Heuristics:</strong> Modern GPU drivers (such
+as those from NVIDIA, AMD, and Intel) feature sophisticated optimizers.
+Omitting <code>[[unroll]]</code> allows the driver to evaluate register
+usage, instruction size, and hardware limits to decide whether unrolling
+provides a net benefit.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

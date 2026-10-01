@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Mesh Shaders Stop Vertex Cache Thrashing - glsl</title>
+    <meta name="description" content="Traditional graphics pipelines rely on fixed-function input assembly and small, hardware-managed post-transform caches to reuse shaded vertices, which frequently thrash when processing complex or poorly sorted geometry. Mesh shaders eliminate this bottle">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-mesh-shaders-stop-vertex-cache-thrashing">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Mesh Shaders Stop Vertex Cache Thrashing - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-mesh-shaders-stop-vertex-cache-thrashing" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Traditional graphics pipelines rely on fixed-function input assembly and small, hardware-managed post-transform caches to reuse shaded vertices, which frequently thrash when processing complex or poorly sorted geometry. Mesh shaders eliminate this bottle" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-mesh-shaders-stop-vertex-cache-thrashing">How Mesh Shaders
+Stop Vertex Cache Thrashing</h1>
+<p>Traditional graphics pipelines rely on fixed-function input assembly
+and small, hardware-managed post-transform caches to reuse shaded
+vertices, which frequently thrash when processing complex or poorly
+sorted geometry. Mesh shaders eliminate this bottleneck by restructuring
+geometry processing into self-contained, cooperative threadgroups called
+meshlets. By shifting vertex reuse from an unpredictable hardware cache
+to predictable, on-chip shared memory, mesh shaders prevent redundant
+vertex shading and bypass the cache thrashing inherent to standard
+index-buffer rendering.</p>
+<h3
+id="the-traditional-bottleneck-fixed-function-indexing-and-cache-thrashing">The
+Traditional Bottleneck: Fixed-Function Indexing and Cache Thrashing</h3>
+<p>In the classic GLSL vertex pipeline, geometry is drawn using indexed
+primitives via calls like <code>glDrawElements</code>. The GPU's
+hardware Input Assembler reads an index buffer to fetch vertex
+attributes and assemble triangles.</p>
+<p>To prevent shading the same vertex multiple times when shared across
+adjacent triangles, GPUs employ an on-chip Post-Transform Cache
+(typically a small FIFO or LRU cache holding between 16 to 64 vertices).
+If a vertex index is encountered that still resides in this cache, the
+hardware reuses the cached output rather than running the vertex shader
+again.</p>
+<p>However, this mechanism creates severe performance pitfalls:</p>
+<ul>
+<li><strong>Capacity Limits:</strong> If mesh topology is dense or
+irregular, the distance between index references (the reuse distance)
+often exceeds the cache size, evicting vertices before their next
+use.</li>
+<li><strong>Order Dependence:</strong> The efficiency of the cache
+relies heavily on offline index-buffer optimization tools (such as
+Forsyth or Tipsify algorithms). Unoptimized or dynamically generated
+geometry causes cache misses.</li>
+<li><strong>Cache Thrashing:</strong> When indices continually evict
+entries that are needed immediately afterward, the pipeline experiences
+cache thrashing. This forces the GPU to re-evaluate vertex shaders
+multiple times for the identical vertex, multiplying shading cost and
+saturating memory bandwidth.</li>
+</ul>
+<h3 id="the-mesh-shader-paradigm-cluster-based-geometry">The Mesh Shader
+Paradigm: Cluster-Based Geometry</h3>
+<p>Mesh shaders replace the fixed-function Input Assembler, Vertex
+Shader, and Geometry Shader with a flexible, compute-like execution
+model. Geometry is partitioned ahead of time into small sub-graphs
+called <strong>meshlets</strong> (or clusters), typically bounded to a
+maximum of 64 vertices and 126 primitives.</p>
+<p>Instead of processing a continuous stream of indices through a rigid
+pipeline, a mesh shader workgroup processes an entire meshlet
+cooperatively.</p>
+<h3 id="how-mesh-shaders-bypass-cache-thrashing">How Mesh Shaders Bypass
+Cache Thrashing</h3>
+<ol type="1">
+<li><p><strong>Cooperative, Thread-Per-Vertex Execution</strong><br />
+Within a mesh shader workgroup, invocations correspond directly to the
+vertices and primitives defined in the meshlet. If a meshlet contains 64
+unique vertices, exactly 64 threads are launched to process them. Each
+vertex is shaded exactly once, regardless of how many triangles within
+the meshlet reference it. This guarantees zero redundant vertex shading
+without relying on any hardware eviction heuristic.</p></li>
+<li><p><strong>Explicit Shared Memory Over Implicit
+Caches</strong><br />
+Rather than relying on a black-box, fixed-size post-transform cache, the
+mesh shader writes transformed vertex data directly to on-chip Local
+Data Share (LDS) or High-Speed Shared Memory. The connectivity of the
+meshlet is defined via micro-indices that refer strictly to this local,
+on-chip array. Because all shared vertex data is stored in fast,
+addressable local memory for the duration of the workgroup, it cannot be
+prematurely evicted or thrashed by distant geometry.</p></li>
+<li><p><strong>Elimination of Global Index Buffer Reads</strong><br />
+In the traditional pipeline, index lookups are scattered across a global
+buffer, causing non-coalesced memory reads that further degrade cache
+efficiency. Mesh shaders fetch compact, localized data streams. The
+relationship between vertices and primitives is localized entirely
+within the meshlet payload, decoupling primitive assembly from global
+memory state.</p></li>
+<li><p><strong>Guaranteed Local Topology</strong><br />
+Because meshlets are bounded by definition, the vertex reuse distance is
+physically constrained to the maximum size of the meshlet. Topological
+complexity cannot blow out a hardware cache because the geometry never
+exceeds the localized footprint assigned to the computing
+workgroup.</p></li>
+</ol>
+<p>By moving from a streaming, index-driven model to a localized,
+compute-driven cluster model, mesh shaders replace probabilistic
+hardware caching with deterministic algorithmic reuse, entirely
+bypassing the mechanics that cause vertex index cache thrashing.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Implementing Tetrahedral 3D LUT Interpolation in GLSL - glsl</title>
+    <meta name="description" content="Tetrahedral interpolation is an advanced sampling technique for 3D color lookup tables (LUTs) that divides each cubic cell of the color lattice into six tetrahedra to preserve color saturation and maintain neutral gray tones better than standard trilinea">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/implementing-tetrahedral-3-d-lut-interpolation-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Implementing Tetrahedral 3D LUT Interpolation in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/implementing-tetrahedral-3-d-lut-interpolation-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Tetrahedral interpolation is an advanced sampling technique for 3D color lookup tables (LUTs) that divides each cubic cell of the color lattice into six tetrahedra to preserve color saturation and maintain neutral gray tones better than standard trilinea" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="implementing-tetrahedral-3d-lut-interpolation-in-glsl">Implementing
+Tetrahedral 3D LUT Interpolation in GLSL</h1>
+<p>Tetrahedral interpolation is an advanced sampling technique for 3D
+color lookup tables (LUTs) that divides each cubic cell of the color
+lattice into six tetrahedra to preserve color saturation and maintain
+neutral gray tones better than standard trilinear interpolation. By
+identifying which specific simplex contains the input color, GLSL
+shaders can interpolate values using only four texel fetches and
+barycentric weights rather than eight. This article details the
+mathematical principles behind tetrahedral decomposition and provides a
+practical, high-performance GLSL implementation.</p>
+<h3 id="mathematical-foundation">Mathematical Foundation</h3>
+<p>A standard 3D LUT arranges color transformations in a regular cubic
+grid defined by red, green, and blue coordinates. Trilinear
+interpolation treats axes independently, which often causes clipping,
+loss of saturation, or hue shifts along diagonals.</p>
+<p>Tetrahedral interpolation splits each cubic cell along its primary
+diagonal (where <span class="math inline">\(R = G = B\)</span>). Because
+the neutral gray axis aligns with this diagonal, achromatic values are
+preserved with higher fidelity. Within any unit cube, the fractional
+position <span class="math inline">\((f_r, f_g, f_b)\)</span> dictates
+membership in one of six possible tetrahedra based on the relative
+magnitudes of the fractional components:</p>
+<ol type="1">
+<li><span class="math inline">\(f_r \ge f_g \ge f_b\)</span></li>
+<li><span class="math inline">\(f_r \ge f_b &gt; f_g\)</span></li>
+<li><span class="math inline">\(f_g &gt; f_r \ge f_b\)</span></li>
+<li><span class="math inline">\(f_g \ge f_b &gt; f_r\)</span></li>
+<li><span class="math inline">\(f_b &gt; f_r \ge f_g\)</span></li>
+<li><span class="math inline">\(f_b \ge f_g &gt; f_r\)</span></li>
+</ol>
+<p>Once the correct tetrahedron is selected, the output color is
+reconstructed via barycentric weights computed directly from the sorted
+fractional values.</p>
+<h3 id="algorithmic-breakdown">Algorithmic Breakdown</h3>
+<ol type="1">
+<li><strong>Coordinate Transformation:</strong> Scale the normalized
+input color <span class="math inline">\([0.0, 1.0]\)</span> to the grid
+coordinate space <span class="math inline">\([0.0, \text{LUT\_SIZE} -
+1.0]\)</span>.</li>
+<li><strong>Lattice Snapping:</strong> Separate the grid coordinate into
+its base integer index (<code>ivec3 base</code>) and fractional offset
+(<code>vec3 f</code>).</li>
+<li><strong>Simplex Selection:</strong> Compare <span
+class="math inline">\(f_r\)</span>, <span
+class="math inline">\(f_g\)</span>, and <span
+class="math inline">\(f_b\)</span> to determine the traversal path from
+<span class="math inline">\((0,0,0)\)</span> to <span
+class="math inline">\((1,1,1)\)</span>.</li>
+<li><strong>Texel Fetching:</strong> Fetch the four corners of the
+chosen tetrahedron using <code>texelFetch</code> to bypass hardware
+trilinear filtering.</li>
+<li><strong>Blending:</strong> Weight the four sampled colors by their
+barycentric areas and sum them.</li>
+</ol>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>Below is a complete GLSL function designed to sample a
+<code>sampler3D</code> LUT using tetrahedral interpolation.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">sampleLUTTetrahedral</span><span class="op">(</span><span class="dt">sampler3D</span> lut<span class="op">,</span> <span class="dt">vec3</span> color<span class="op">,</span> <span class="dt">float</span> lutSize<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Clamp input color to the valid range</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>color<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Scale to LUT index space</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> coord <span class="op">=</span> color <span class="op">*</span> <span class="op">(</span>lutSize <span class="op">-</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> i0 <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="bu">floor</span><span class="op">(</span>coord<span class="op">));</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> f <span class="op">=</span> <span class="bu">fract</span><span class="op">(</span>coord<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Boundary protection for max edge</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    i0 <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>i0<span class="op">,</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dt">int</span><span class="op">(</span>lutSize<span class="op">)</span> <span class="op">-</span> <span class="dv">2</span><span class="op">));</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> i1<span class="op">,</span> i2<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> weights<span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Determine the enclosing tetrahedron and calculate barycentric weights</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>f<span class="op">.</span><span class="fu">r</span> <span class="op">&gt;=</span> f<span class="op">.</span><span class="fu">g</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>f<span class="op">.</span><span class="fu">g</span> <span class="op">&gt;=</span> f<span class="op">.</span><span class="fu">b</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Case 1: r &gt;= g &gt;= b</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>            i1 <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>            i2 <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>            weights <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">r</span><span class="op">,</span> f<span class="op">.</span><span class="fu">r</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">g</span><span class="op">,</span> f<span class="op">.</span><span class="fu">g</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">b</span><span class="op">,</span> f<span class="op">.</span><span class="fu">b</span><span class="op">);</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span>f<span class="op">.</span><span class="fu">r</span> <span class="op">&gt;=</span> f<span class="op">.</span><span class="fu">b</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Case 2: r &gt;= b &gt; g</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>            i1 <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>            i2 <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>            weights <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">r</span><span class="op">,</span> f<span class="op">.</span><span class="fu">r</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">b</span><span class="op">,</span> f<span class="op">.</span><span class="fu">b</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">g</span><span class="op">,</span> f<span class="op">.</span><span class="fu">g</span><span class="op">);</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Case 3: b &gt; r &gt;= g</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>            i1 <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>            i2 <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>            weights <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">b</span><span class="op">,</span> f<span class="op">.</span><span class="fu">b</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">r</span><span class="op">,</span> f<span class="op">.</span><span class="fu">r</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">g</span><span class="op">,</span> f<span class="op">.</span><span class="fu">g</span><span class="op">);</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>f<span class="op">.</span><span class="fu">b</span> <span class="op">&gt;</span> f<span class="op">.</span><span class="fu">g</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Case 4: b &gt; g &gt; r</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>            i1 <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>            i2 <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>            weights <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">b</span><span class="op">,</span> f<span class="op">.</span><span class="fu">b</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">g</span><span class="op">,</span> f<span class="op">.</span><span class="fu">g</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">r</span><span class="op">,</span> f<span class="op">.</span><span class="fu">r</span><span class="op">);</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span>f<span class="op">.</span><span class="fu">b</span> <span class="op">&gt;</span> f<span class="op">.</span><span class="fu">r</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Case 5: g &gt;= b &gt; r</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>            i1 <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>            i2 <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>            weights <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">g</span><span class="op">,</span> f<span class="op">.</span><span class="fu">g</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">b</span><span class="op">,</span> f<span class="op">.</span><span class="fu">b</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">r</span><span class="op">,</span> f<span class="op">.</span><span class="fu">r</span><span class="op">);</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Case 6: g &gt; r &gt;= b</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>            i1 <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>            i2 <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>            weights <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">g</span><span class="op">,</span> f<span class="op">.</span><span class="fu">g</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">r</span><span class="op">,</span> f<span class="op">.</span><span class="fu">r</span> <span class="op">-</span> f<span class="op">.</span><span class="fu">b</span><span class="op">,</span> f<span class="op">.</span><span class="fu">b</span><span class="op">);</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Four vertices of the tetrahedron</span></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> c000 <span class="op">=</span> i0<span class="op">;</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> c001 <span class="op">=</span> i0 <span class="op">+</span> i1<span class="op">;</span></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> c011 <span class="op">=</span> i0 <span class="op">+</span> i2<span class="op">;</span></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> c111 <span class="op">=</span> i0 <span class="op">+</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Fetch samples</span></span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> s0 <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>lut<span class="op">,</span> c000<span class="op">,</span> <span class="dv">0</span><span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> s1 <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>lut<span class="op">,</span> c001<span class="op">,</span> <span class="dv">0</span><span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> s2 <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>lut<span class="op">,</span> c011<span class="op">,</span> <span class="dv">0</span><span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> s3 <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>lut<span class="op">,</span> c111<span class="op">,</span> <span class="dv">0</span><span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Interpolate</span></span>
+<span id="cb1-66"><a href="#cb1-66" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> weights<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> s0 <span class="op">+</span> weights<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> s1 <span class="op">+</span> weights<span class="op">.</span><span class="fu">z</span> <span class="op">*</span> s2 <span class="op">+</span> weights<span class="op">.</span><span class="fu">w</span> <span class="op">*</span> s3<span class="op">;</span></span>
+<span id="cb1-67"><a href="#cb1-67" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="performance-and-pipeline-considerations">Performance and
+Pipeline Considerations</h3>
+<ul>
+<li><strong>Memory Bandwidth:</strong> Standard hardware filtering on a
+3D texture reads eight texels per query. Tetrahedral interpolation
+relies on only four explicit <code>texelFetch</code> instructions,
+reducing total bandwidth consumption per fragment.</li>
+<li><strong>Branching Costs:</strong> Modern GPU architectures execute
+conditional branches efficiently when fragments within the same warp
+process similar colors. In scenes with extreme color noise, branch
+divergence can occur; however, the instruction count remains low enough
+that performance is typically bound by memory latency rather than ALU
+overhead.</li>
+<li><strong>Precision:</strong> Tetrahedral sampling reduces
+interpolation banding in highly saturated, non-linear color spaces (such
+as ACEScc, LogC, or Rec.2020), making it standard practice in color
+grading pipelines where visual fidelity is critical.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

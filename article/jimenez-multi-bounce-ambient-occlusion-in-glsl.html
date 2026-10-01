@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jimenez Multi-Bounce Ambient Occlusion in GLSL - glsl</title>
+    <meta name="description" content="This article provides an overview and technical breakdown of Jorge Jimenez’s multi-bounce ambient occlusion (AO) approximation, detailing its mathematical formulation and GLSL implementation. Standard single-bounce screen-space ambient occlusion algori">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/jimenez-multi-bounce-ambient-occlusion-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Jimenez Multi-Bounce Ambient Occlusion in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/jimenez-multi-bounce-ambient-occlusion-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview and technical breakdown of Jorge Jimenez’s multi-bounce ambient occlusion (AO) approximation, detailing its mathematical formulation and GLSL implementation. Standard single-bounce screen-space ambient occlusion algori" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="jimenez-multi-bounce-ambient-occlusion-in-glsl">Jimenez
+Multi-Bounce Ambient Occlusion in GLSL</h1>
+<p>This article provides an overview and technical breakdown of Jorge
+Jimenez’s multi-bounce ambient occlusion (AO) approximation, detailing
+its mathematical formulation and GLSL implementation. Standard
+single-bounce screen-space ambient occlusion algorithms often yield
+overly dark and desaturated contact shadows because they neglect
+secondary light bounces within cavities. Jimenez’s analytical
+approximation models these interreflections directly from single-bounce
+visibility and surface albedo, restoring realistic color saturation and
+energy conservation to ambient lighting with negligible computational
+overhead.</p>
+<h2 id="the-core-problem">The Core Problem</h2>
+<p>Standard ambient occlusion calculates the visibility factor <span
+class="math inline">\(V \in [0, 1]\)</span> representing the fraction of
+the hemisphere unoccluded by geometry:</p>
+<p><span class="math display">\[I = I_{\text{ambient}} \cdot \rho \cdot
+V\]</span></p>
+<p>where <span class="math inline">\(\rho\)</span> is the surface
+albedo. This formulation assumes light that hits occluding surfaces is
+completely absorbed. In reality, light bounces repeatedly within concave
+geometric features, scattering colored irradiance back onto nearby
+surfaces. Assuming zero bounces causes cavities to appear excessively
+dark and grey, completely stripping away the chrominance of the
+material.</p>
+<h2 id="mathematical-formulation">Mathematical Formulation</h2>
+<p>To solve this without expensive stochastic ray tracing, Jorge Jimenez
+fitted a cubic polynomial to ground-truth path-traced interreflections
+inside spherical cavities across varying albedo values.</p>
+<p>The multi-bounce factor <span
+class="math inline">\(V_{\text{multi}}\)</span> is computed as a
+function of the single-bounce visibility <span
+class="math inline">\(V\)</span> (the scalar ambient occlusion value)
+and the surface albedo vector <span class="math inline">\(\rho \in [0,
+1]^3\)</span>.</p>
+<h3 id="1-polynomial-coefficients">1. Polynomial Coefficients</h3>
+<p>The coefficients <span class="math inline">\(a\)</span>, <span
+class="math inline">\(b\)</span>, and <span
+class="math inline">\(c\)</span> are linear functions of the surface
+albedo <span class="math inline">\(\rho\)</span>:</p>
+<p><span class="math display">\[a = 2.0404 \cdot \rho -
+0.3324\]</span></p>
+<p><span class="math display">\[b = -4.7951 \cdot \rho +
+0.6417\]</span></p>
+<p><span class="math display">\[c = 2.7552 \cdot \rho +
+0.6903\]</span></p>
+<p>Because <span class="math inline">\(\rho\)</span> is a
+three-component color vector (RGB), <span
+class="math inline">\(a\)</span>, <span
+class="math inline">\(b\)</span>, and <span
+class="math inline">\(c\)</span> evaluate to three-component vectors,
+allowing each color channel to reflect light according to its respective
+wavelength reflectance.</p>
+<h3 id="2-cubic-evaluation">2. Cubic Evaluation</h3>
+<p>The multi-bounce visibility factor is evaluated via Horner's
+method:</p>
+<p><span class="math display">\[f(V, \rho) = ((a \cdot V + b) \cdot V +
+c) \cdot V\]</span></p>
+<p>Expanded, this represents:</p>
+<p><span class="math display">\[f(V, \rho) = a V^3 + b V^2 + c
+V\]</span></p>
+<h3 id="3-lower-bound-enforcement">3. Lower Bound Enforcement</h3>
+<p>To prevent numerical artifacts or cases where dark albedos cause the
+multi-bounce value to drop below the initial single-bounce occlusion,
+the final multi-bounce visibility is clamped using a component-wise
+maximum:</p>
+<p><span class="math display">\[V_{\text{multi}} = \max(V, f(V,
+\rho))\]</span></p>
+<p>The resulting vector <span
+class="math inline">\(V_{\text{multi}}\)</span> replaces the scalar
+<span class="math inline">\(V\)</span> in your diffuse ambient lighting
+calculation:</p>
+<p><span class="math display">\[I = I_{\text{ambient}} \cdot
+V_{\text{multi}}\]</span></p>
+<p>Notice that the albedo term is already folded into this multi-bounce
+approximation when evaluating total ambient irradiance, though some
+pipelines multiply <span class="math inline">\(V_{\text{multi}}\)</span>
+against existing diffuse ambient terms depending on their formulation.
+In Jimenez's standard formulation, <span
+class="math inline">\(V_{\text{multi}}\)</span> acts as an ambient
+occlusion multiplier that colors and brightens occluded areas.</p>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>Below is the optimized GLSL function for modern rendering
+pipelines:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">/**</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co"> * Approximates multi-bounce ambient occlusion.</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param visibility Single-bounce AO factor in the range [0.0, 1.0].</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param albedo     Surface diffuse albedo (base color) in linear RGB space.</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"> * @return           Multi-bounce visibility color modifier (vec3).</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"> */</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">JimenezMultiBounceAO</span><span class="op">(</span><span class="dt">float</span> visibility<span class="op">,</span> <span class="dt">vec3</span> albedo<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> a <span class="op">=</span> <span class="fl">2.0404</span> <span class="op">*</span> albedo <span class="op">-</span> <span class="fl">0.3324</span><span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> b <span class="op">=</span> <span class="op">-</span><span class="fl">4.7951</span> <span class="op">*</span> albedo <span class="op">+</span> <span class="fl">0.6417</span><span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> c <span class="op">=</span> <span class="fl">2.7552</span> <span class="op">*</span> albedo <span class="op">+</span> <span class="fl">0.6903</span><span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> multiBounce <span class="op">=</span> <span class="op">((</span>a <span class="op">*</span> visibility <span class="op">+</span> b<span class="op">)</span> <span class="op">*</span> visibility <span class="op">+</span> c<span class="op">)</span> <span class="op">*</span> visibility<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">max</span><span class="op">(</span><span class="dt">vec3</span><span class="op">(</span>visibility<span class="op">),</span> multiBounce<span class="op">);</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="integration-in-shading-passes">Integration in Shading
+Passes</h3>
+<p>To integrate this into a deferred or forward lighting shader:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Sample or compute single-bounce AO (e.g., from GTAO, SSAO, or an AO map)</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> rawAO <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>aoTexture<span class="op">,</span> texCoord<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Surface diffuse color (must be in linear color space)</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> diffuseAlbedo <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>albedoTexture<span class="op">,</span> texCoord<span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Evaluate multi-bounce ambient occlusion</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> multiBounceAO <span class="op">=</span> <span class="fu">JimenezMultiBounceAO</span><span class="op">(</span>rawAO<span class="op">,</span> diffuseAlbedo<span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co">// Apply to ambient indirect diffuse lighting</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> ambientLighting <span class="op">=</span> indirectDiffuseLight <span class="op">*</span> multiBounceAO<span class="op">;</span></span></code></pre></div>
+<p>When albedo is near zero (absorbing surfaces), <span
+class="math inline">\(V_{\text{multi}}\)</span> smoothly defaults back
+to the single-bounce scalar <span class="math inline">\(V\)</span>. When
+albedo is high and saturated (such as bright skin, foliage, or painted
+surfaces), the higher-order terms preserve irradiance inside geometric
+crevices while tinting the occluded regions with the natural bounce
+color of the surface.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

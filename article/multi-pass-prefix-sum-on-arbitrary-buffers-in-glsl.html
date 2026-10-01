@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Pass Prefix Sum on Arbitrary Buffers in GLSL - glsl</title>
+    <meta name="description" content="This article explains how to compute a parallel prefix sum (scan) over arbitrarily sized buffers using multi-pass GLSL compute shader dispatches. While a single compute workgroup can efficiently scan data within its local memory limits, larger buffers re">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/multi-pass-prefix-sum-on-arbitrary-buffers-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Multi-Pass Prefix Sum on Arbitrary Buffers in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/multi-pass-prefix-sum-on-arbitrary-buffers-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to compute a parallel prefix sum (scan) over arbitrarily sized buffers using multi-pass GLSL compute shader dispatches. While a single compute workgroup can efficiently scan data within its local memory limits, larger buffers re" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="multi-pass-prefix-sum-on-arbitrary-buffers-in-glsl">Multi-Pass
+Prefix Sum on Arbitrary Buffers in GLSL</h1>
+<p>This article explains how to compute a parallel prefix sum (scan)
+over arbitrarily sized buffers using multi-pass GLSL compute shader
+dispatches. While a single compute workgroup can efficiently scan data
+within its local memory limits, larger buffers require a hierarchical
+reduce-then-scan strategy. By breaking data into blocks, scanning
+intermediate block sums across consecutive dispatches, and propagating
+offsets back to the source elements, GPU compute pipelines can process
+inputs of any size while maintaining <span
+class="math inline">\(O(N)\)</span> work efficiency and accommodating
+non-power-of-two lengths.</p>
+<hr />
+<h3 id="the-workgroup-limit-challenge">The Workgroup Limit
+Challenge</h3>
+<p>In modern graphics APIs like OpenGL or Vulkan, a single compute
+shader workgroup is bounded by hardware limits—typically 1024
+invocations—and local shared memory capacity. Algorithms such as the
+Blelloch or Hillis-Steele scan can achieve high throughput inside a
+workgroup using <code>shared</code> memory and <code>barrier()</code>
+synchronization. However, hardware cannot synchronize across distinct
+workgroups within a single dispatch.</p>
+<p>To process an arbitrary buffer size <span
+class="math inline">\(N\)</span> that exceeds the capacity of a single
+workgroup, the computation must be split across multiple compute shader
+dispatches. The CPU host orchestrates these dispatches, using execution
+boundaries and global memory barriers to ensure correct data
+dependencies.</p>
+<hr />
+<h3 id="the-three-pass-hierarchical-pipeline">The Three-Pass
+Hierarchical Pipeline</h3>
+<p>A standard multi-pass scan relies on a block-wise divide-and-conquer
+strategy, generally requiring three distinct phases:</p>
+<pre><code>Pass 1: Local Scan &amp; Reduction -&gt; Pass 2: Block Sum Scan -&gt; Pass 3: Uniform Add</code></pre>
+<h4 id="pass-1-local-scan-and-block-reduction">Pass 1: Local Scan and
+Block Reduction</h4>
+<p>The primary buffer of size <span class="math inline">\(N\)</span> is
+divided into uniform blocks of size <span
+class="math inline">\(B\)</span> (where <span
+class="math inline">\(B\)</span> is typically <span
+class="math inline">\(2 \times \text{workgroup size}\)</span> to
+maximize per-thread throughput).</p>
+<ul>
+<li>Each workgroup loads its assigned block from a Shader Storage Buffer
+Object (SSBO) into shared memory.</li>
+<li>The workgroup performs an inclusive or exclusive scan locally.</li>
+<li>The scanned values are written back to the primary buffer.</li>
+<li>The total sum of each block is written to an auxiliary "block sums"
+buffer of size <span class="math inline">\(M = \lceil N / B
+\rceil\)</span>.</li>
+</ul>
+<h4 id="pass-2-recursive-scan-of-block-sums">Pass 2: Recursive Scan of
+Block Sums</h4>
+<p>The auxiliary buffer containing <span
+class="math inline">\(M\)</span> elements represents the aggregate sums
+of each block.</p>
+<ul>
+<li>If <span class="math inline">\(M \le B\)</span>, a single workgroup
+dispatches to perform a local scan directly on this auxiliary
+buffer.</li>
+<li>If <span class="math inline">\(M &gt; B\)</span>, Pass 1 and Pass 2
+are applied recursively: the auxiliary buffer is partitioned into
+blocks, its intermediate block sums are stored in a second auxiliary
+buffer, and so on, until the reduced size fits within a single
+workgroup.</li>
+<li>Once the top of this hierarchy is reached and scanned, the scanned
+offsets bubble back down.</li>
+</ul>
+<h4 id="pass-3-uniform-add-distribution">Pass 3: Uniform Add
+(Distribution)</h4>
+<p>Once the auxiliary buffer holds the prefix sums of all preceding
+blocks, a final dispatch adds each block’s base offset to its
+corresponding elements in the primary buffer.</p>
+<ul>
+<li>Workgroup <span class="math inline">\(i\)</span> loads the scalar
+prefix sum from index <span class="math inline">\(i\)</span> of the
+auxiliary buffer.</li>
+<li>Every thread in workgroup <span class="math inline">\(i\)</span>
+adds this scalar value to its corresponding elements in the primary
+buffer.</li>
+<li>Element <span class="math inline">\(0\)</span> of the first block
+requires no offset (or <span class="math inline">\(0\)</span>).</li>
+</ul>
+<hr />
+<h3 id="handling-arbitrary-buffer-sizes">Handling Arbitrary Buffer
+Sizes</h3>
+<p>Arbitrary buffer sizes introduce elements that do not cleanly divide
+by the block size <span class="math inline">\(B\)</span>. To manage
+non-power-of-two sizes and arbitrary element counts without allocating
+padded memory buffers, the shader implementations utilize runtime
+boundary clamping:</p>
+<ol type="1">
+<li><p><strong>Grid Dispatch Calculation:</strong><br />
+The number of workgroups dispatched for a buffer of size <span
+class="math inline">\(N\)</span> with a block capacity of <span
+class="math inline">\(B\)</span> elements per workgroup is: <span
+class="math display">\[\text{numWorkgroups} = \left\lfloor \frac{N + B -
+1}{B} \right\rfloor\]</span></p></li>
+<li><p><strong>Inactive Element Neutralization:</strong><br />
+When elements are loaded from the SSBO into shared memory, invocations
+check whether their global index exceeds <span
+class="math inline">\(N\)</span>:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> globalIdx <span class="op">=</span> workgroupID <span class="op">*</span> blockSize <span class="op">+</span> localThreadID<span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>globalIdx <span class="op">&lt;</span> u_TotalElements<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    sharedData<span class="op">[</span>localThreadID<span class="op">]</span> <span class="op">=</span> inputData<span class="op">[</span>globalIdx<span class="op">];</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    sharedData<span class="op">[</span>localThreadID<span class="op">]</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> <span class="co">// Identity element for addition</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Padding inactive elements with the identity value (<span
+class="math inline">\(0\)</span> for addition) ensures that
+out-of-bounds lanes do not corrupt the scan or the resulting block
+sums.</p></li>
+<li><p><strong>Guarded Writes:</strong><br />
+When writing the locally scanned results back to the primary SSBO in
+Pass 1 and applying the base offsets in Pass 3, threads must check
+bounds again:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>globalIdx <span class="op">&lt;</span> u_TotalElements<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    outputData<span class="op">[</span>globalIdx<span class="op">]</span> <span class="op">=</span> sharedData<span class="op">[</span>localThreadID<span class="op">]</span> <span class="op">+</span> blockOffset<span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></li>
+</ol>
+<hr />
+<h3 id="cpu-side-synchronization">CPU-Side Synchronization</h3>
+<p>Because workgroups write to global SSBO memory in one phase that is
+required as input in the next, memory coherence must be enforced between
+dispatches.</p>
+<p>In OpenGL, this requires invoking memory barriers on the host:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Pass 1: Local Scan</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>glDispatchCompute<span class="op">(</span>numWorkgroups<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>glMemoryBarrier<span class="op">(</span>GL_SHADER_STORAGE_BARRIER_BIT<span class="op">);</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Pass 2: Scan Block Sums</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>glDispatchCompute<span class="op">(</span>auxWorkgroups<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>glMemoryBarrier<span class="op">(</span>GL_SHADER_STORAGE_BARRIER_BIT<span class="op">);</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Pass 3: Distribute Offsets</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>glDispatchCompute<span class="op">(</span>numWorkgroups<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>glMemoryBarrier<span class="op">(</span>GL_SHADER_STORAGE_BARRIER_BIT<span class="op">);</span></span></code></pre></div>
+<p>In Vulkan, pipeline barriers with
+<code>srcStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT</code> and
+<code>dstStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT</code> paired
+with matching <code>VK_ACCESS_SHADER_WRITE_BIT</code> to
+<code>VK_ACCESS_SHADER_READ_BIT</code> access masks are placed between
+each dispatch command within the command buffer.</p>
+<p>By combining conditional data-loading with the three-pass
+hierarchical structure and host-side synchronization, GLSL compute
+pipelines can execute parallel prefix sums across multi-gigabyte buffers
+of arbitrary size while maintaining numerical correctness.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

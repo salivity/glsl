@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding std430 vs std140 Layout in GLSL - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), memory layouts dictate how data inside Uniform Buffer Objects (UBOs) and Shader Storage Buffer Objects (SSBOs) is aligned in GPU memory. This article explains how the std430 layout specification optimizes memory usage c">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-std-430-vs-std-140-layout-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding std430 vs std140 Layout in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-std-430-vs-std-140-layout-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), memory layouts dictate how data inside Uniform Buffer Objects (UBOs) and Shader Storage Buffer Objects (SSBOs) is aligned in GPU memory. This article explains how the std430 layout specification optimizes memory usage c" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-std430-vs-std140-layout-in-glsl">Understanding
+std430 vs std140 Layout in GLSL</h1>
+<p>In OpenGL Shading Language (GLSL), memory layouts dictate how data
+inside Uniform Buffer Objects (UBOs) and Shader Storage Buffer Objects
+(SSBOs) is aligned in GPU memory. This article explains how the
+<code>std430</code> layout specification optimizes memory usage compared
+to <code>std140</code>, specifically focusing on how it eliminates
+aggressive 16-byte structure and array padding to allow tighter, more
+CPU-friendly memory packing.</p>
+<h2 id="the-std140-padding-problem">The std140 Padding Problem</h2>
+<p>The <code>std140</code> standard was introduced primarily for Uniform
+Buffer Objects to ensure hardware-agnostic cross-platform alignment. To
+guarantee efficient access across diverse GPU architectures,
+<code>std140</code> enforces a strict 16-byte (<code>vec4</code>) base
+alignment rule on arrays and nested structures:</p>
+<ol type="1">
+<li><strong>Array Element Alignment</strong>: Every element in an
+array—even an array of simple scalars like <code>float</code> or
+<code>int</code>—has its base alignment and array stride rounded up to
+the base alignment of a <code>vec4</code> (16 bytes).</li>
+<li><strong>Structure Alignment</strong>: The size of any structure, as
+well as the stride between elements in an array of structures, is
+rounded up to a multiple of 16 bytes.</li>
+</ol>
+<p>Under <code>std140</code>, an array declared as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std140</span><span class="op">)</span> <span class="kw">buffer</span> DataBuffer <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> values<span class="op">[</span><span class="dv">4</span><span class="op">];</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>requires 64 bytes of memory instead of 16 bytes. Each
+<code>float</code> takes 4 bytes of data followed by 12 bytes of dead
+padding.</p>
+<p>Similarly, an array of structures containing two floats:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Particle <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> mass<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lifetime<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std140</span><span class="op">)</span> <span class="kw">buffer</span> ParticleBuffer <span class="op">{</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    Particle particles<span class="op">[</span><span class="dv">2</span><span class="op">];</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>requires 32 bytes total. Even though <code>Particle</code> only
+contains 8 bytes of actual data, <code>std140</code> pads each instance
+to 16 bytes to satisfy the <code>vec4</code> minimum stride
+requirement.</p>
+<h2 id="how-std430-eliminates-structure-and-array-padding">How std430
+Eliminates Structure and Array Padding</h2>
+<p>The <code>std430</code> layout qualifier, available exclusively for
+Shader Storage Buffer Objects (SSBOs), eliminates the mandatory 16-byte
+round-up rule. Instead, it adopts alignment rules that closely mirror
+standard C and C++ data structure alignment.</p>
+<h3 id="1-natural-alignment-for-scalar-and-vector-arrays">1. Natural
+Alignment for Scalar and Vector Arrays</h3>
+<p>In <code>std430</code>, the base alignment and array stride of an
+array are set directly to the natural base alignment of the underlying
+type, rather than rounding up to a <code>vec4</code>:</p>
+<ul>
+<li>An array of <code>float</code> or <code>int</code> values has an
+alignment and stride of 4 bytes.</li>
+<li>An array of <code>vec2</code> values has an alignment and stride of
+8 bytes.</li>
+<li>An array of <code>vec3</code> or <code>vec4</code> values has an
+alignment and stride of 16 bytes.</li>
+</ul>
+<p>Because the stride of <code>float values[4]</code> is 4 bytes in
+<code>std430</code>, the array occupies exactly 16 contiguous bytes
+without unused padding between elements.</p>
+<h3 id="2-tighter-structure-stride">2. Tighter Structure Stride</h3>
+<p>Under <code>std430</code>, the base alignment of a structure is equal
+to the largest base alignment of any of its members, rather than being
+forced to a minimum of 16 bytes. The size of the structure (and thus its
+stride in an array) is simply rounded up to a multiple of its own base
+alignment.</p>
+<p>Using the previous <code>Particle</code> structure:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Particle <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> mass<span class="op">;</span>     <span class="co">// offset: 0, size: 4</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lifetime<span class="op">;</span> <span class="co">// offset: 4, size: 4</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">)</span> <span class="kw">buffer</span> ParticleBuffer <span class="op">{</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    Particle particles<span class="op">[</span><span class="dv">2</span><span class="op">];</span> <span class="co">// stride: 8 bytes</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<ol type="1">
+<li>The largest member in <code>Particle</code> is a <code>float</code>
+(4-byte alignment).</li>
+<li>The structure's base alignment becomes 4 bytes.</li>
+<li>The total size is 8 bytes, which is already a multiple of 4.</li>
+<li>The array stride becomes 8 bytes instead of being inflated to 16
+bytes.</li>
+</ol>
+<h2 id="practical-advantages-of-std430">Practical Advantages of
+std430</h2>
+<ul>
+<li><strong>Reduced Memory Footprint</strong>: Eliminating redundant
+padding can reduce buffer memory consumption by up to 75% for scalar
+arrays and compact structures.</li>
+<li><strong>Direct CPU-to-GPU Serialization</strong>: In C and C++,
+tightly packed structs match the <code>std430</code> memory layout
+natively. Developers can map or upload standard CPU structs directly via
+<code>glBufferData</code> or <code>glBufferSubData</code> without
+writing custom serialization layers or inserting manual dummy padding
+fields.</li>
+<li><strong>Cache Efficiency</strong>: Packaged data improves GPU cache
+locality by preventing unused padding bytes from occupying cache lines
+during shader read and write operations.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

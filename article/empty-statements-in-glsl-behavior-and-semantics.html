@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Empty Statements in GLSL: Behavior and Semantics - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), an empty statement consisting solely of a semicolon is a syntactically valid construct that produces no operation. This article examines the semantic rules governing these null statements inside shader bodies, how G">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/empty-statements-in-glsl-behavior-and-semantics">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Empty Statements in GLSL: Behavior and Semantics - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/empty-statements-in-glsl-behavior-and-semantics" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), an empty statement consisting solely of a semicolon is a syntactically valid construct that produces no operation. This article examines the semantic rules governing these null statements inside shader bodies, how G" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="empty-statements-in-glsl-behavior-and-semantics">Empty
+Statements in GLSL: Behavior and Semantics</h1>
+<p>In the OpenGL Shading Language (GLSL), an empty statement consisting
+solely of a semicolon is a syntactically valid construct that produces
+no operation. This article examines the semantic rules governing these
+null statements inside shader bodies, how GLSL compilers handle them
+during optimization, standard use cases such as side-effect-driven
+loops, and common logic bugs caused by stray semicolons in control
+flow.</p>
+<h3 id="definition-and-core-semantics">Definition and Core
+Semantics</h3>
+<p>In GLSL, a statement can consist solely of a semicolon
+(<code>;</code>). Formally known as an empty statement or null
+statement, it satisfies the grammar requirement wherever a statement is
+expected, but it specifies no action. When the GPU executes an empty
+statement, control flow passes immediately to the subsequent statement
+without modifying state, variables, or execution registers.</p>
+<p>GLSL inherits this behavior directly from C and C++. Because the
+statement contains no expressions, side effects, or operations, modern
+GLSL compilers eliminate empty statements entirely during the dead-code
+elimination and optimization phases. They incur zero runtime overhead
+and generate no instructions in the underlying GPU bytecode or SPIR-V
+intermediate representation.</p>
+<h3 id="legitimate-use-cases">Legitimate Use Cases</h3>
+<p>The most common intentional use of an empty statement is to provide a
+body for control loops where all computation occurs within the loop
+header:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Advancing an index until a condition is met</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">for</span> <span class="op">(;</span> data<span class="op">[</span>i<span class="op">]</span> <span class="op">&lt;</span> threshold<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">;</span></span></code></pre></div>
+<p>In this construct, the empty statement acts as the placeholder body
+for the <code>for</code> loop. The state updates occur entirely within
+the increment and conditional expressions.</p>
+<h3 id="common-pitfalls-and-logic-errors">Common Pitfalls and Logic
+Errors</h3>
+<p>Because empty statements are syntactically valid, unintended
+semicolons can introduce silent logic bugs without triggering compiler
+errors. A frequent example occurs when a developer inadvertently places
+a semicolon immediately after a conditional or loop statement:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>intensity <span class="op">&gt;</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>In this case, the <code>if</code> condition binds directly to the
+empty statement, rendering the condition effectively useless. The
+subsequent block enclosed in braces <code>{ ... }</code> becomes an
+independent compound statement that executes unconditionally, regardless
+of the value of <code>intensity</code>.</p>
+<p>Similarly, placing a semicolon after a <code>while</code> header can
+cause an infinite loop if the termination condition relies on state
+changes inside the intended block:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">while</span> <span class="op">(</span>iterations <span class="op">&lt;</span> maxIterations<span class="op">);</span> <span class="co">// Infinite loop if iterations is not modified in a volatile external context</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    iterations<span class="op">++;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="scope-and-context-nuances">Scope and Context Nuances</h3>
+<p>GLSL distinguishes between statement context and declaration
+context:</p>
+<ul>
+<li><strong>Inside functions:</strong> A lone semicolon is an empty
+statement. Consecutive semicolons (e.g., <code>;;</code>) simply
+represent multiple empty statements and are discarded harmlessly by the
+compiler.</li>
+<li><strong>At global (file) scope:</strong> Statements are not
+permitted outside of function definitions. A lone semicolon at file
+scope is treated as an empty declaration rather than an empty statement.
+Most GLSL compilers accept extraneous semicolons at the global level to
+accommodate macro expansions and C-style coding patterns without issuing
+errors.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

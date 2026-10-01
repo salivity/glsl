@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lattice Boltzmann Method in GLSL Compute Shaders - glsl</title>
+    <meta name="description" content="This article provides a comprehensive breakdown of formulating and implementing the Lattice Boltzmann Method (LBM) for fluid flow simulation using OpenGL Shading Language (GLSL) compute shaders. It covers the core mathematical formulation of the standard">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/lattice-boltzmann-method-in-glsl-compute-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Lattice Boltzmann Method in GLSL Compute Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/lattice-boltzmann-method-in-glsl-compute-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a comprehensive breakdown of formulating and implementing the Lattice Boltzmann Method (LBM) for fluid flow simulation using OpenGL Shading Language (GLSL) compute shaders. It covers the core mathematical formulation of the standard" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="lattice-boltzmann-method-in-glsl-compute-shaders">Lattice
+Boltzmann Method in GLSL Compute Shaders</h1>
+<p>This article provides a comprehensive breakdown of formulating and
+implementing the Lattice Boltzmann Method (LBM) for fluid flow
+simulation using OpenGL Shading Language (GLSL) compute shaders. It
+covers the core mathematical formulation of the standard D2Q9 lattice
+and Bhatnagar-Gross-Krook (BGK) collision operator, details the mapping
+of particle distribution functions to GPU memory, explains the
+pull-streaming paradigm essential for compute execution, and
+demonstrates how to handle macroscopic moment reconstruction and
+boundary conditions natively in shader code.</p>
+<hr />
+<h2 id="1-mathematical-formulation-the-d2q9-lbm-model">1. Mathematical
+Formulation: The D2Q9 LBM Model</h2>
+<p>The Lattice Boltzmann Method models fluid dynamics at a mesoscopic
+scale by tracking discrete velocity distribution functions <span
+class="math inline">\(f_i(\mathbf{x}, t)\)</span>, representing the
+probability of finding a fluid particle at position <span
+class="math inline">\(\mathbf{x}\)</span> and time <span
+class="math inline">\(t\)</span> moving with lattice velocity <span
+class="math inline">\(\mathbf{c}_i\)</span>.</p>
+<p>In a standard two-dimensional, nine-velocity model (D2Q9), space is
+discretized into a square Cartesian grid, and particles move along nine
+discrete directions:</p>
+<p><span class="math display">\[\mathbf{c}_0 = (0, 0)\]</span> <span
+class="math display">\[\mathbf{c}_{1,2,3,4} = (\pm 1, 0), (0, \pm
+1)\]</span> <span class="math display">\[\mathbf{c}_{5,6,7,8} = (\pm 1,
+\pm 1)\]</span></p>
+<p>Each direction has an associated lattice weight <span
+class="math inline">\(w_i\)</span>:</p>
+<ul>
+<li><span class="math inline">\(w_0 = \frac{4}{9}\)</span></li>
+<li><span class="math inline">\(w_{1..4} = \frac{1}{9}\)</span></li>
+<li><span class="math inline">\(w_{5..8} = \frac{1}{36}\)</span></li>
+</ul>
+<p>The speed of sound on this lattice is defined as <span
+class="math inline">\(c_s = \frac{1}{\sqrt{3}}\)</span>, making <span
+class="math inline">\(c_s^2 = \frac{1}{3}\)</span>.</p>
+<h3 id="the-bgk-collision-and-streaming-equations">The BGK Collision and
+Streaming Equations</h3>
+<p>The discrete Boltzmann equation with the Bhatnagar-Gross-Krook (BGK)
+approximation splits the evolution into two continuous steps:
+<strong>collision</strong> and <strong>streaming</strong>.</p>
+<p><span class="math display">\[f_i(\mathbf{x} + \mathbf{c}_i \Delta t,
+t + \Delta t) = f_i(\mathbf{x}, t) - \frac{1}{\tau} \left(
+f_i(\mathbf{x}, t) - f_i^{\text{eq}}(\mathbf{x}, t) \right)\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(\tau\)</span> is the dimensionless
+relaxation time, directly related to the kinematic shear viscosity <span
+class="math inline">\(\nu\)</span> by <span class="math inline">\(\nu =
+c_s^2 \left(\tau - \frac{1}{2}\right)\)</span>.</li>
+<li><span class="math inline">\(f_i^{\text{eq}}\)</span> is the
+Maxwell-Boltzmann equilibrium distribution function, truncated to second
+order:</li>
+</ul>
+<p><span class="math display">\[f_i^{\text{eq}}(\rho, \mathbf{u}) = w_i
+\rho \left( 1 + \frac{\mathbf{c}_i \cdot \mathbf{u}}{c_s^2} +
+\frac{(\mathbf{c}_i \cdot \mathbf{u})^2}{2 c_s^4} - \frac{\mathbf{u}
+\cdot \mathbf{u}}{2 c_s^2} \right)\]</span></p>
+<h3 id="macroscopic-quantities">Macroscopic Quantities</h3>
+<p>The fluid macroscopic density <span
+class="math inline">\(\rho\)</span> and momentum density <span
+class="math inline">\(\rho \mathbf{u}\)</span> are recovered through the
+velocity moments of the distributions:</p>
+<p><span class="math display">\[\rho = \sum_{i=0}^{8} f_i\]</span></p>
+<p><span class="math display">\[\mathbf{u} = \frac{1}{\rho}
+\sum_{i=0}^{8} f_i \mathbf{c}_i\]</span></p>
+<hr />
+<h2 id="2-adapting-lbm-for-glsl-compute-shaders">2. Adapting LBM for
+GLSL Compute Shaders</h2>
+<p>Translating LBM to GLSL requires mapping the lattice structures to
+GPU memory layout and restructuring memory operations to avoid race
+conditions.</p>
+<h3 id="memory-layout-textures-vs-ssbos">Memory Layout: Textures vs.
+SSBOs</h3>
+<p>For D2Q9, nine scalar distribution values must be stored per grid
+cell:</p>
+<ul>
+<li><strong>2D Texture Arrays (<code>sampler2DArray</code> /
+<code>image2DArray</code>):</strong> Allocate an array of nine layers of
+size <span class="math inline">\(W \times H\)</span> using
+<code>R32F</code> format.</li>
+<li><strong>Shader Storage Buffer Objects (SSBOs):</strong> Flat arrays
+where index calculations follow
+<code>index = (y * Width + x) * 9 + i</code> (Array of Structures) or
+<code>index = i * (Width * Height) + (y * Width + x)</code> (Structure
+of Arrays).</li>
+</ul>
+<p>Structure of Arrays (SoA) is preferred on GPUs because it ensures
+coalesced global memory access. Using three <code>RGBA32F</code>
+textures (storing 12 channels total, leaving 3 unused) or a 9-layer
+<code>image2DArray</code> of format <code>R32F</code> provides optimal
+cache locality for 2D setups.</p>
+<h3 id="pull-vs-push-streaming">Pull vs. Push Streaming</h3>
+<p>Standard LBM defines streaming as a <strong>push</strong> operation:
+a cell computes post-collision states and writes them out to its
+neighbors (<span class="math inline">\(\mathbf{x} +
+\mathbf{c}_i\)</span>). In parallel compute shaders, pushing leads to
+write hazards where multiple threads attempt to write to the same memory
+cell.</p>
+<p>To make the algorithm embarrassingly parallel, the formulation is
+inverted to a <strong>pull</strong> streaming scheme:</p>
+<ol type="1">
+<li>A compute thread is dispatched for every grid coordinate <span
+class="math inline">\(\mathbf{x}\)</span>.</li>
+<li>The thread identifies its neighbors along the incoming velocity
+directions (<span class="math inline">\(\mathbf{x} -
+\mathbf{c}_i\)</span>).</li>
+<li>It fetches the distributions from those neighbors (Streaming).</li>
+<li>It performs the collision locally and writes the result directly to
+its own cell coordinate <span
+class="math inline">\(\mathbf{x}\)</span>.</li>
+</ol>
+<p>This requires a <strong>ping-pong buffer</strong> strategy: reading
+from buffer <span class="math inline">\(A\)</span> at step <span
+class="math inline">\(t\)</span> and writing to buffer <span
+class="math inline">\(B\)</span> for step <span
+class="math inline">\(t+1\)</span>.</p>
+<hr />
+<h2 id="3-glsl-compute-shader-implementation">3. GLSL Compute Shader
+Implementation</h2>
+<p>Below is the complete algorithmic implementation of a combined
+pull-stream and BGK collision step inside a GLSL compute shader.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">16</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">16</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Ping-Pong image arrays for D2Q9 distributions (Layer 0 to 8)</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span>r32f<span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">readonly</span>  <span class="dt">image2DArray</span> u_DistributionsIn<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span>r32f<span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">writeonly</span> <span class="dt">image2DArray</span> u_DistributionsOut<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co">// Flag image: 0 = Fluid, 1 = Solid Boundary</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span>r8ui<span class="op">,</span>  <span class="dt">binding</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">readonly</span>  <span class="dt">uimage2D</span>      u_Geometry<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co">// Simulation parameters</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_Tau<span class="op">;</span> <span class="co">// Relaxation time</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="co">// D2Q9 Constants</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">ivec2</span> c<span class="op">[</span><span class="dv">9</span><span class="op">]</span> <span class="op">=</span> <span class="dt">ivec2</span><span class="op">[](</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span><span class="op">(</span> <span class="dv">0</span><span class="op">,</span>  <span class="dv">0</span><span class="op">),</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span><span class="op">(</span> <span class="dv">1</span><span class="op">,</span>  <span class="dv">0</span><span class="op">),</span> <span class="dt">ivec2</span><span class="op">(</span> <span class="dv">0</span><span class="op">,</span>  <span class="dv">1</span><span class="op">),</span> <span class="dt">ivec2</span><span class="op">(-</span><span class="dv">1</span><span class="op">,</span>  <span class="dv">0</span><span class="op">),</span> <span class="dt">ivec2</span><span class="op">(</span> <span class="dv">0</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span><span class="op">(</span> <span class="dv">1</span><span class="op">,</span>  <span class="dv">1</span><span class="op">),</span> <span class="dt">ivec2</span><span class="op">(-</span><span class="dv">1</span><span class="op">,</span>  <span class="dv">1</span><span class="op">),</span> <span class="dt">ivec2</span><span class="op">(-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="dt">ivec2</span><span class="op">(</span> <span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">)</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> w<span class="op">[</span><span class="dv">9</span><span class="op">]</span> <span class="op">=</span> <span class="dt">float</span><span class="op">[](</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="fl">4.0</span> <span class="op">/</span> <span class="fl">9.0</span><span class="op">,</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="fl">1.0</span> <span class="op">/</span> <span class="fl">9.0</span><span class="op">,</span> <span class="fl">1.0</span> <span class="op">/</span> <span class="fl">9.0</span><span class="op">,</span> <span class="fl">1.0</span> <span class="op">/</span> <span class="fl">9.0</span><span class="op">,</span> <span class="fl">1.0</span> <span class="op">/</span> <span class="fl">9.0</span><span class="op">,</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="fl">1.0</span> <span class="op">/</span> <span class="fl">36.0</span><span class="op">,</span> <span class="fl">1.0</span> <span class="op">/</span> <span class="fl">36.0</span><span class="op">,</span> <span class="fl">1.0</span> <span class="op">/</span> <span class="fl">36.0</span><span class="op">,</span> <span class="fl">1.0</span> <span class="op">/</span> <span class="fl">36.0</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> opposite<span class="op">[</span><span class="dv">9</span><span class="op">]</span> <span class="op">=</span> <span class="dt">int</span><span class="op">[](</span><span class="dv">0</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">7</span><span class="op">,</span> <span class="dv">8</span><span class="op">,</span> <span class="dv">5</span><span class="op">,</span> <span class="dv">6</span><span class="op">);</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span> coords <span class="op">=</span> <span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">xy</span><span class="op">);</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span> size <span class="op">=</span> <span class="bu">imageSize</span><span class="op">(</span>u_Geometry<span class="op">);</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>coords<span class="op">.</span><span class="fu">x</span> <span class="op">&gt;=</span> size<span class="op">.</span><span class="fu">x</span> <span class="op">||</span> coords<span class="op">.</span><span class="fu">y</span> <span class="op">&gt;=</span> size<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> cellType <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>u_Geometry<span class="op">,</span> coords<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Solid cells do not compute collisions</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>cellType <span class="op">==</span> <span class="dv">1</span>u<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> f<span class="op">[</span><span class="dv">9</span><span class="op">];</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> rho <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> momentum <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 1. Pull Streaming Step</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">9</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>        <span class="dt">ivec2</span> sourceCoords <span class="op">=</span> coords <span class="op">-</span> c<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Check if the source location is a solid wall</span></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>        <span class="dt">uint</span> sourceCell <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>u_Geometry<span class="op">,</span> sourceCoords<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>sourceCell <span class="op">==</span> <span class="dv">1</span>u<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Half-way bounce-back: reflect from boundary</span></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>            f<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>u_DistributionsIn<span class="op">,</span> <span class="dt">ivec3</span><span class="op">(</span>coords<span class="op">,</span> opposite<span class="op">[</span>i<span class="op">])).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Stream distribution from neighboring fluid cell</span></span>
+<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a>            f<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>u_DistributionsIn<span class="op">,</span> <span class="dt">ivec3</span><span class="op">(</span>sourceCoords<span class="op">,</span> i<span class="op">)).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Compute zero-th and first moments</span></span>
+<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a>        rho <span class="op">+=</span> f<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb1-66"><a href="#cb1-66" aria-hidden="true" tabindex="-1"></a>        momentum <span class="op">+=</span> f<span class="op">[</span>i<span class="op">]</span> <span class="op">*</span> <span class="dt">vec2</span><span class="op">(</span>c<span class="op">[</span>i<span class="op">]);</span></span>
+<span id="cb1-67"><a href="#cb1-67" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-68"><a href="#cb1-68" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-69"><a href="#cb1-69" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 2. Macroscopic velocity</span></span>
+<span id="cb1-70"><a href="#cb1-70" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> u <span class="op">=</span> momentum <span class="op">/</span> rho<span class="op">;</span></span>
+<span id="cb1-71"><a href="#cb1-71" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-72"><a href="#cb1-72" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 3. Collision Step (BGK)</span></span>
+<span id="cb1-73"><a href="#cb1-73" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> omega <span class="op">=</span> <span class="fl">1.0</span> <span class="op">/</span> u_Tau<span class="op">;</span></span>
+<span id="cb1-74"><a href="#cb1-74" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> uSq <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>u<span class="op">,</span> u<span class="op">);</span></span>
+<span id="cb1-75"><a href="#cb1-75" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-76"><a href="#cb1-76" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">9</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-77"><a href="#cb1-77" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> c_dot_u <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span><span class="dt">vec2</span><span class="op">(</span>c<span class="op">[</span>i<span class="op">]),</span> u<span class="op">);</span></span>
+<span id="cb1-78"><a href="#cb1-78" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb1-79"><a href="#cb1-79" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Maxwell-Boltzmann equilibrium</span></span>
+<span id="cb1-80"><a href="#cb1-80" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> feq <span class="op">=</span> w<span class="op">[</span>i<span class="op">]</span> <span class="op">*</span> rho <span class="op">*</span> <span class="op">(</span></span>
+<span id="cb1-81"><a href="#cb1-81" aria-hidden="true" tabindex="-1"></a>            <span class="fl">1.0</span> <span class="op">+</span> </span>
+<span id="cb1-82"><a href="#cb1-82" aria-hidden="true" tabindex="-1"></a>            <span class="fl">3.0</span> <span class="op">*</span> c_dot_u <span class="op">+</span> </span>
+<span id="cb1-83"><a href="#cb1-83" aria-hidden="true" tabindex="-1"></a>            <span class="fl">4.5</span> <span class="op">*</span> <span class="op">(</span>c_dot_u <span class="op">*</span> c_dot_u<span class="op">)</span> <span class="op">-</span> </span>
+<span id="cb1-84"><a href="#cb1-84" aria-hidden="true" tabindex="-1"></a>            <span class="fl">1.5</span> <span class="op">*</span> uSq</span>
+<span id="cb1-85"><a href="#cb1-85" aria-hidden="true" tabindex="-1"></a>        <span class="op">);</span></span>
+<span id="cb1-86"><a href="#cb1-86" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-87"><a href="#cb1-87" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Relax toward equilibrium and save to output buffer</span></span>
+<span id="cb1-88"><a href="#cb1-88" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> f_collided <span class="op">=</span> f<span class="op">[</span>i<span class="op">]</span> <span class="op">-</span> omega <span class="op">*</span> <span class="op">(</span>f<span class="op">[</span>i<span class="op">]</span> <span class="op">-</span> feq<span class="op">);</span></span>
+<span id="cb1-89"><a href="#cb1-89" aria-hidden="true" tabindex="-1"></a>        <span class="bu">imageStore</span><span class="op">(</span>u_DistributionsOut<span class="op">,</span> <span class="dt">ivec3</span><span class="op">(</span>coords<span class="op">,</span> i<span class="op">),</span> <span class="dt">vec4</span><span class="op">(</span>f_collided<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">));</span></span>
+<span id="cb1-90"><a href="#cb1-90" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-91"><a href="#cb1-91" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<hr />
+<h2 id="4-boundary-handling-and-numerical-stability">4. Boundary
+Handling and Numerical Stability</h2>
+<h3 id="bounce-back-scheme">Bounce-Back Scheme</h3>
+<p>Rigid no-slip boundaries are handled via the standard half-way
+bounce-back scheme. When a streaming path crosses an obstacle node, the
+incoming momentum vector is flipped:</p>
+<p><span class="math display">\[f_{\text{opposite}(i)}(\mathbf{x}, t +
+\Delta t) = f_i^*(\mathbf{x}, t)\]</span></p>
+<p>In the pull scheme above, this translates to setting the incoming
+stream <span class="math inline">\(f_i\)</span> equal to the current
+cell's pre-collision distribution along the opposite trajectory (<span
+class="math inline">\(f_{\text{opposite}(i)}\)</span>) if the source
+cell is a solid node.</p>
+<h3 id="maintaining-stability-in-glsl">Maintaining Stability in
+GLSL</h3>
+<ol type="1">
+<li><strong>Relaxation Parameter Limits:</strong> The numerical scheme
+requires <span class="math inline">\(\tau &gt; 0.5\)</span>. In
+single-precision floating-point (standard <code>fp32</code> on GPUs),
+running <span class="math inline">\(\tau\)</span> values near <span
+class="math inline">\(0.5\)</span> (low viscosity) quickly triggers
+numerical instabilities and non-physical negative distributions.
+Typically, <span class="math inline">\(\tau \in [0.51, 1.2]\)</span>
+preserves stability.</li>
+<li><strong>Mach Number Constraint:</strong> LBM operates under the
+weakly compressible Navier-Stokes assumption. Grid velocities must
+satisfy <span class="math inline">\(|\mathbf{u}| &lt; 0.1 c_s\)</span>
+to ensure negligible compressibility error and prevent divergence in the
+equilibrium distribution calculation.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

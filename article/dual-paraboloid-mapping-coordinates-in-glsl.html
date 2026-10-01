@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dual-Paraboloid Mapping Coordinates in GLSL - glsl</title>
+    <meta name="description" content="Dual-paraboloid environment mapping encodes a full 360-degree panoramic view into two parabolic textures: one for the forward hemisphere and one for the backward hemisphere. This article provides the mathematical derivation for transforming a 3D directio">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/dual-paraboloid-mapping-coordinates-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Dual-Paraboloid Mapping Coordinates in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/dual-paraboloid-mapping-coordinates-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Dual-paraboloid environment mapping encodes a full 360-degree panoramic view into two parabolic textures: one for the forward hemisphere and one for the backward hemisphere. This article provides the mathematical derivation for transforming a 3D directio" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="dual-paraboloid-mapping-coordinates-in-glsl">Dual-Paraboloid
+Mapping Coordinates in GLSL</h1>
+<p>Dual-paraboloid environment mapping encodes a full 360-degree
+panoramic view into two parabolic textures: one for the forward
+hemisphere and one for the backward hemisphere. This article provides
+the mathematical derivation for transforming a 3D direction or
+reflection vector into 2D texture coordinates <span
+class="math inline">\((u, v)\)</span> for both paraboloids, followed by
+an efficient implementation in OpenGL Shading Language (GLSL).</p>
+<h3 id="geometric-principles-of-the-paraboloid">Geometric Principles of
+the Paraboloid</h3>
+<p>A paraboloid with its focus at the origin and opening towards the
+negative <span class="math inline">\(z\)</span>-axis can be defined
+implicitly by:</p>
+<p><span class="math display">\[z = \frac{1}{2} - \frac{1}{2}(x^2 +
+y^2)\]</span></p>
+<p>The key optical property of a paraboloid is that any ray originating
+from the focus <span class="math inline">\((0, 0, 0)\)</span> reflects
+off the inner surface parallel to the principal axis—in this case, along
+the vector <span class="math inline">\(\vec{d} = (0, 0, 1)\)</span>.</p>
+<p>To find the surface normal <span
+class="math inline">\(\vec{n}\)</span> at a given point <span
+class="math inline">\((x, y, z)\)</span> on this surface, express the
+paraboloid as the zero level-set of a function <span
+class="math inline">\(F(x, y, z)\)</span>:</p>
+<p><span class="math display">\[F(x, y, z) = \frac{1}{2}(x^2 + y^2) + z
+- \frac{1}{2} = 0\]</span></p>
+<p>The gradient <span class="math inline">\(\nabla F\)</span> gives an
+unnormalized normal vector:</p>
+<p><span class="math display">\[\nabla F = (x, y, 1)\]</span></p>
+<p>Normalizing this vector yields the unit surface normal <span
+class="math inline">\(\vec{N}\)</span>:</p>
+<p><span class="math display">\[\vec{N} = \frac{(x, y, 1)}{\sqrt{x^2 +
+y^2 + 1}}\]</span></p>
+<h3
+id="forward-derivation-relating-the-ray-to-surface-coordinates">Forward
+Derivation: Relating the Ray to Surface Coordinates</h3>
+<p>When a ray leaves the origin in direction <span
+class="math inline">\(\vec{R} = (R_x, R_y, R_z)\)</span> (where <span
+class="math inline">\(\|\vec{R}\| = 1\)</span>), it strikes the
+paraboloid at <span class="math inline">\((x, y, z)\)</span> and
+reflects along the direction <span class="math inline">\(\vec{V} = (0,
+0, 1)\)</span>. By the law of specular reflection:</p>
+<p><span class="math display">\[\vec{R} = 2(\vec{N} \cdot
+\vec{V})\vec{N} - \vec{V}\]</span></p>
+<p>Substitute <span class="math inline">\(\vec{V} = (0, 0, 1)\)</span>
+and <span class="math inline">\(\vec{N} = \frac{(x, y, 1)}{\sqrt{x^2 +
+y^2 + 1}}\)</span>:</p>
+<p><span class="math display">\[\vec{N} \cdot \vec{V} =
+\frac{1}{\sqrt{x^2 + y^2 + 1}}\]</span></p>
+<p>Now substitute this dot product back into the reflection
+equation:</p>
+<p><span class="math display">\[\vec{R} = 2\left(\frac{1}{\sqrt{x^2 +
+y^2 + 1}}\right) \left(\frac{(x, y, 1)}{\sqrt{x^2 + y^2 + 1}}\right) -
+(0, 0, 1)\]</span></p>
+<p><span class="math display">\[\vec{R} = \frac{2}{x^2 + y^2 + 1}(x, y,
+1) - (0, 0, 1)\]</span></p>
+<p>Breaking this into vector components:</p>
+<p><span class="math display">\[R_x = \frac{2x}{x^2 + y^2 +
+1}\]</span></p>
+<p><span class="math display">\[R_y = \frac{2y}{x^2 + y^2 +
+1}\]</span></p>
+<p><span class="math display">\[R_z = \frac{2}{x^2 + y^2 + 1} - 1 =
+\frac{1 - (x^2 + y^2)}{x^2 + y^2 + 1}\]</span></p>
+<h3 id="inverting-to-solve-for-x-y">Inverting to Solve for <span
+class="math inline">\((x, y)\)</span></h3>
+<p>To sample a texture, <span class="math inline">\((x, y)\)</span> must
+be solved in terms of the known unit vector <span
+class="math inline">\(\vec{R}\)</span>. Adding <span
+class="math inline">\(1\)</span> to the <span
+class="math inline">\(R_z\)</span> expression:</p>
+<p><span class="math display">\[R_z + 1 = \frac{1 - (x^2 + y^2)}{x^2 +
+y^2 + 1} + 1 = \frac{2}{x^2 + y^2 + 1}\]</span></p>
+<p>Dividing <span class="math inline">\(R_x\)</span> and <span
+class="math inline">\(R_y\)</span> by <span class="math inline">\((R_z +
+1)\)</span>:</p>
+<p><span class="math display">\[\frac{R_x}{R_z + 1} =
+\frac{\frac{2x}{x^2 + y^2 + 1}}{\frac{2}{x^2 + y^2 + 1}} =
+x\]</span></p>
+<p><span class="math display">\[\frac{R_y}{R_z + 1} =
+\frac{\frac{2y}{x^2 + y^2 + 1}}{\frac{2}{x^2 + y^2 + 1}} =
+y\]</span></p>
+<p>Because the hemisphere covers the domain <span
+class="math inline">\(x^2 + y^2 \le 1\)</span>, the coordinates <span
+class="math inline">\(x\)</span> and <span
+class="math inline">\(y\)</span> are constrained to <span
+class="math inline">\([-1, 1]\)</span>.</p>
+<h3 id="texture-coordinate-mapping">Texture Coordinate Mapping</h3>
+<p>To map <span class="math inline">\(x, y \in [-1, 1]\)</span> into
+standard normalized UV coordinates <span class="math inline">\([0,
+1]\)</span>:</p>
+<p><span class="math display">\[u = \frac{x}{2} + 0.5 = \frac{R_x}{2(1 +
+R_z)} + 0.5\]</span></p>
+<p><span class="math display">\[v = \frac{y}{2} + 0.5 = \frac{R_y}{2(1 +
+R_z)} + 0.5\]</span></p>
+<h3 id="derivation-for-the-backward-hemisphere">Derivation for the
+Backward Hemisphere</h3>
+<p>The second paraboloid faces the opposite direction along the negative
+<span class="math inline">\(z\)</span>-axis. Repeating the reflection
+geometry with <span class="math inline">\(\vec{V} = (0, 0, -1)\)</span>
+flips the sign of <span class="math inline">\(R_z\)</span>. To preserve
+clockwise/counter-clockwise orientation and prevent mirror inversion,
+the resulting coordinates are:</p>
+<p><span class="math display">\[u = \frac{R_x}{2(1 - R_z)} +
+0.5\]</span></p>
+<p><span class="math display">\[v = \frac{R_y}{2(1 - R_z)} +
+0.5\]</span></p>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>In a GLSL shader, determine whether the reflection ray points forward
+(<span class="math inline">\(R_z \ge 0\)</span>) or backward (<span
+class="math inline">\(R_z &lt; 0\)</span>), compute the UV coordinates
+using the respective denominator, and sample the appropriate
+texture:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// R: Normalized 3D reflection or view vector</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> <span class="fu">sampleDualParaboloid</span><span class="op">(</span><span class="dt">sampler2D</span> frontMap<span class="op">,</span> <span class="dt">sampler2D</span> backMap<span class="op">,</span> <span class="dt">vec3</span> R<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> uv<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>R<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;=</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Forward hemisphere</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        uv<span class="op">.</span><span class="fu">x</span> <span class="op">=</span> <span class="op">(</span>R<span class="op">.</span><span class="fu">x</span> <span class="op">/</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">+</span> R<span class="op">.</span><span class="fu">z</span><span class="op">)))</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        uv<span class="op">.</span><span class="fu">y</span> <span class="op">=</span> <span class="op">(</span>R<span class="op">.</span><span class="fu">y</span> <span class="op">/</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">+</span> R<span class="op">.</span><span class="fu">z</span><span class="op">)))</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="bu">texture</span><span class="op">(</span>frontMap<span class="op">,</span> uv<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Backward hemisphere</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        uv<span class="op">.</span><span class="fu">x</span> <span class="op">=</span> <span class="op">(</span>R<span class="op">.</span><span class="fu">x</span> <span class="op">/</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> R<span class="op">.</span><span class="fu">z</span><span class="op">)))</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        uv<span class="op">.</span><span class="fu">y</span> <span class="op">=</span> <span class="op">(</span>R<span class="op">.</span><span class="fu">y</span> <span class="op">/</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> R<span class="op">.</span><span class="fu">z</span><span class="op">)))</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="bu">texture</span><span class="op">(</span>backMap<span class="op">,</span> uv<span class="op">);</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>When storing both maps inside a single <code>sampler2DArray</code>,
+the layer index can be selected directly using a condition such as
+<code>float layer = R.z &gt;= 0.0 ? 0.0 : 1.0;</code>, avoiding multiple
+branching texture fetch routines.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

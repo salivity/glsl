@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GLSL FMA Prevents Intermediate Rounding Errors - glsl</title>
+    <meta name="description" content="In GLSL, precision loss during complex mathematical operations can produce visible rendering artifacts, numerical drift, and stability issues. The Fused Multiply-Add instruction, accessed via the fma() built-in function, mitigates these problems by compu">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-glsl-fma-prevents-intermediate-rounding-errors">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GLSL FMA Prevents Intermediate Rounding Errors - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-glsl-fma-prevents-intermediate-rounding-errors" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL, precision loss during complex mathematical operations can produce visible rendering artifacts, numerical drift, and stability issues. The Fused Multiply-Add instruction, accessed via the fma() built-in function, mitigates these problems by compu" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-glsl-fma-prevents-intermediate-rounding-errors">How GLSL FMA
+Prevents Intermediate Rounding Errors</h1>
+<p>In GLSL, precision loss during complex mathematical operations can
+produce visible rendering artifacts, numerical drift, and stability
+issues. The Fused Multiply-Add instruction, accessed via the
+<code>fma()</code> built-in function, mitigates these problems by
+computing the product of two values and adding a third in a single step
+with only one final rounding stage. This article explains how
+intermediate rounding occurs in standard floating-point operations, how
+the <code>fma</code> instruction bypasses this error vector, and where
+its application is critical in GPU shader programming.</p>
+<h2 id="the-mechanics-of-intermediate-rounding">The Mechanics of
+Intermediate Rounding</h2>
+<p>In standard IEEE 754 floating-point arithmetic, evaluating an
+expression like <code>(a * b) + c</code> requires two distinct
+operations:</p>
+<ol type="1">
+<li><strong>Multiplication:</strong> The GPU multiplies <code>a</code>
+and <code>b</code>, producing an intermediate result that is immediately
+rounded to fit the target precision (such as 32-bit
+<code>float</code>).</li>
+<li><strong>Addition:</strong> The GPU adds the rounded intermediate
+result to <code>c</code>, followed by a second rounding step to store
+the final output.</li>
+</ol>
+<p>Because the intermediate product is truncated or rounded before the
+addition takes place, low-order bits containing significant numerical
+data are permanently discarded. In iterative or sensitive algorithms,
+this compounding truncation can cause catastrophic cancellation, where
+subtracting two nearly equal numbers causes the most significant digits
+to cancel out, leaving only the accumulated rounding noise.</p>
+<h2 id="how-the-fma-instruction-eliminates-rounding-loss">How the FMA
+Instruction Eliminates Rounding Loss</h2>
+<p>The <code>fma(a, b, c)</code> function computes
+<code>(a * b) + c</code> as an atomic operation. Internally, the
+hardware calculates the product <code>a * b</code> with infinite (or
+double-width) precision and holds this full representation in an
+internal register. The term <code>c</code> is then added directly to
+this unrounded product.</p>
+<p>Only after the addition is complete does the hardware perform a
+single rounding operation to fit the result back into the standard
+floating-point format. By eliminating the intermediate rounding step,
+<code>fma</code> achieves higher numerical precision than executing an
+explicit <code>mul</code> instruction followed by an <code>add</code>
+instruction.</p>
+<h2 id="critical-use-cases-in-shader-math">Critical Use Cases in Shader
+Math</h2>
+<p>Utilizing <code>fma</code> is essential in graphics programming
+scenarios that are sensitive to floating-point drift:</p>
+<ul>
+<li><strong>Polynomial Evaluations:</strong> Algorithms utilizing
+Horner's method for computing curves, splines, or transcendental
+approximations rely heavily on repeated multiply-add sequences. Unfused
+operations cause rapid error accumulation across successive terms.</li>
+<li><strong>Ray Tracing and Intersection Tests:</strong> Calculating
+ray-plane or ray-sphere intersections involves small discriminants.
+Rounding errors at intermediate stages can cause self-intersection
+artifacts (acne) or missed geometry.</li>
+<li><strong>Large-World Coordinate Systems:</strong> When rendering
+scenes with large spatial offsets, subtracting camera positions from
+world positions can cause vertex jitter. <code>fma</code> maintains
+precision when transforming high-magnitude coordinates.</li>
+<li><strong>Matrix Transformations and Dot Products:</strong>
+Accumulating matrix transforms using fused operations prevents subtle
+rotational and scaling drift over chained transformations.</li>
+</ul>
+<h2 id="hardware-performance-and-the-precise-qualifier">Hardware
+Performance and the <code>precise</code> Qualifier</h2>
+<p>Beyond precision, <code>fma</code> is computationally efficient.
+Modern GPU architectures contain dedicated hardware FMA units in their
+execution cores, enabling the combined multiply-add operation to execute
+in a single clock cycle—matching or exceeding the execution speed of
+separate instructions.</p>
+<p>To ensure consistent behavior, GLSL also provides the
+<code>precise</code> keyword. By default, optimizing compilers may
+automatically fuse or rearrange floating-point instructions to improve
+performance, which can lead to non-deterministic rounding behavior
+across different GPU vendors. Declaring a variable with
+<code>precise</code> forces the compiler to evaluate expressions
+strictly as written, ensuring that explicitly declared <code>fma</code>
+calculations are preserved without arbitrary reassociation.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

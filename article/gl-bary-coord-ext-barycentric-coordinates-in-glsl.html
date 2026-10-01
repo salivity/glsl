@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gl_BaryCoordEXT Barycentric Coordinates in GLSL - glsl</title>
+    <meta name="description" content="The glBaryCoordEXT built-in variable provides fragment shaders with direct access to the perspective-correct barycentric coordinates of a primitive without requiring manual calculation or data passing from earlier pipeline stages. Introduced through the">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gl-bary-coord-ext-barycentric-coordinates-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="gl_BaryCoordEXT Barycentric Coordinates in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gl-bary-coord-ext-barycentric-coordinates-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The glBaryCoordEXT built-in variable provides fragment shaders with direct access to the perspective-correct barycentric coordinates of a primitive without requiring manual calculation or data passing from earlier pipeline stages. Introduced through the" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="gl_barycoordext-barycentric-coordinates-in-glsl">gl_BaryCoordEXT
+Barycentric Coordinates in GLSL</h1>
+<p>The <code>gl_BaryCoordEXT</code> built-in variable provides fragment
+shaders with direct access to the perspective-correct barycentric
+coordinates of a primitive without requiring manual calculation or data
+passing from earlier pipeline stages. Introduced through the
+<code>GL_EXT_fragment_shader_barycentric</code> extension, this feature
+simplifies techniques such as single-pass wireframe rendering, custom
+attribute interpolation, and analytical antialiasing by exposing the
+location of the current fragment relative to the primitive's
+vertices.</p>
+<h3 id="extension-requirement-and-declaration">Extension Requirement and
+Declaration</h3>
+<p>To use <code>gl_BaryCoordEXT</code>, the fragment shader must first
+enable the corresponding extension:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_fragment_shader_barycentric : require</span></span></code></pre></div>
+<p>Once enabled, the OpenGL Shading Language (GLSL) runtime exposes
+<code>gl_BaryCoordEXT</code> as a built-in input variable.</p>
+<h3 id="data-representation-and-coordinate-meaning">Data Representation
+and Coordinate Meaning</h3>
+<p>The variable is defined as a 3-component floating-point vector:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> gl_BaryCoordEXT<span class="op">;</span></span></code></pre></div>
+<p>For a triangular primitive with vertices <span
+class="math inline">\(V_0\)</span>, <span
+class="math inline">\(V_1\)</span>, and <span
+class="math inline">\(V_2\)</span>, <code>gl_BaryCoordEXT</code>
+represents the weights <span class="math inline">\((u, v, w)\)</span> of
+the fragment's position relative to those vertices. These coordinates
+satisfy the relation:</p>
+<p><span class="math display">\[u + v + w = 1.0\]</span></p>
+<p>The component mapping corresponds directly to the primitive's
+provoking vertices:</p>
+<ul>
+<li><code>gl_BaryCoordEXT.x</code> represents the weight associated with
+<span class="math inline">\(V_0\)</span>. At vertex <span
+class="math inline">\(V_0\)</span>, this value is <code>1.0</code>,
+while at <span class="math inline">\(V_1\)</span> and <span
+class="math inline">\(V_2\)</span> it is <code>0.0</code>.</li>
+<li><code>gl_BaryCoordEXT.y</code> represents the weight associated with
+<span class="math inline">\(V_1\)</span>.</li>
+<li><code>gl_BaryCoordEXT.z</code> represents the weight associated with
+<span class="math inline">\(V_2\)</span>.</li>
+</ul>
+<h3 id="perspective-interpolation-vs-linear-interpolation">Perspective
+Interpolation vs. Linear Interpolation</h3>
+<p><code>gl_BaryCoordEXT</code> produces perspective-correct barycentric
+coordinates. During rasterization, the hardware performs
+perspective-correct interpolation by dividing the weights by the clip
+space <span class="math inline">\(w\)</span>-component before fragment
+evaluation.</p>
+<p>If screen-space, linear interpolation without perspective correction
+is needed, the extension also provides the companion built-in
+variable:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> gl_BaryCoordNoPerspEXT<span class="op">;</span></span></code></pre></div>
+<p>This alternative calculates barycentric weights in screen space,
+which is beneficial for screen-aligned effects or line rendering where
+perspective foreshortening is undesirable.</p>
+<h3 id="accessing-explicit-per-vertex-attributes">Accessing Explicit
+Per-Vertex Attributes</h3>
+<p>In addition to <code>gl_BaryCoordEXT</code>, the extension allows
+input attributes to be qualified with the <code>pervertexEXT</code>
+keyword. Instead of receiving automatically interpolated values, the
+fragment shader receives arrays of size 3 containing the raw,
+un-interpolated values from each vertex:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> pervertexEXT <span class="dt">vec4</span> inColor<span class="op">[];</span></span></code></pre></div>
+<p>Using <code>gl_BaryCoordEXT</code> alongside
+<code>pervertexEXT</code>, you can manually interpolate vertex
+attributes using custom mathematical curves or formulas:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> interpolatedColor <span class="op">=</span> inColor<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">*</span> gl_BaryCoordEXT<span class="op">.</span><span class="fu">x</span> <span class="op">+</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>                         inColor<span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">*</span> gl_BaryCoordEXT<span class="op">.</span><span class="fu">y</span> <span class="op">+</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>                         inColor<span class="op">[</span><span class="dv">2</span><span class="op">]</span> <span class="op">*</span> gl_BaryCoordEXT<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span></code></pre></div>
+<h3 id="practical-application-wireframe-rendering">Practical
+Application: Wireframe Rendering</h3>
+<p>A primary use case for <code>gl_BaryCoordEXT</code> is generating
+wireframes within a single rendering pass without using a geometry
+shader. The minimum component of <code>gl_BaryCoordEXT</code> indicates
+the shortest normalized distance to the nearest triangle edge:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> fragColor<span class="op">;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Find the minimum distance to an edge</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> minBary <span class="op">=</span> <span class="bu">min</span><span class="op">(</span><span class="bu">min</span><span class="op">(</span>gl_BaryCoordEXT<span class="op">.</span><span class="fu">x</span><span class="op">,</span> gl_BaryCoordEXT<span class="op">.</span><span class="fu">y</span><span class="op">),</span> gl_BaryCoordEXT<span class="op">.</span><span class="fu">z</span><span class="op">);</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute edge width using screen-space derivatives</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dEdge <span class="op">=</span> <span class="bu">fwidth</span><span class="op">(</span>gl_BaryCoordEXT<span class="op">);</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> edgeDist <span class="op">=</span> <span class="bu">smoothstep</span><span class="op">(</span><span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">),</span> dEdge <span class="op">*</span> <span class="fl">1.5</span><span class="op">,</span> gl_BaryCoordEXT<span class="op">);</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> edgeFactor <span class="op">=</span> <span class="bu">min</span><span class="op">(</span><span class="bu">min</span><span class="op">(</span>edgeDist<span class="op">.</span><span class="fu">x</span><span class="op">,</span> edgeDist<span class="op">.</span><span class="fu">y</span><span class="op">),</span> edgeDist<span class="op">.</span><span class="fu">z</span><span class="op">);</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> surfaceColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.8</span><span class="op">,</span> <span class="fl">0.8</span><span class="op">,</span> <span class="fl">0.8</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> wireColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>wireColor<span class="op">,</span> surfaceColor<span class="op">,</span> edgeFactor<span class="op">);</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By querying <code>gl_BaryCoordEXT</code>, the GPU avoids the memory
+bandwidth and geometry shader overhead traditionally required to assign
+and forward vertex identifiers or coordinate attributes down the
+rendering pipeline.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

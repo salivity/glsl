@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Specular Cone Tracing Using 3D Mipmaps in GLSL - glsl</title>
+    <meta name="description" content="This article details how specular cone tracing is evaluated in GLSL by marching through pre-filtered, mipmapped 3D voxel textures. It covers the mathematical formulation of the reflection cone, the method for computing continuous level-of-detail (LOD) va">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/specular-cone-tracing-using-3-d-mipmaps-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Specular Cone Tracing Using 3D Mipmaps in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/specular-cone-tracing-using-3-d-mipmaps-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article details how specular cone tracing is evaluated in GLSL by marching through pre-filtered, mipmapped 3D voxel textures. It covers the mathematical formulation of the reflection cone, the method for computing continuous level-of-detail (LOD) va" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="specular-cone-tracing-using-3d-mipmaps-in-glsl">Specular Cone
+Tracing Using 3D Mipmaps in GLSL</h1>
+<p>This article details how specular cone tracing is evaluated in GLSL
+by marching through pre-filtered, mipmapped 3D voxel textures. It covers
+the mathematical formulation of the reflection cone, the method for
+computing continuous level-of-detail (LOD) values based on cone spread
+and distance, and the front-to-back accumulation loop used to
+approximate glossy reflections in real-time.</p>
+<h3 id="cone-definition-and-aperture-calculation">Cone Definition and
+Aperture Calculation</h3>
+<p>Specular cone tracing approximates indirect specular reflections by
+casting a cone instead of an infinitely thin ray. The reflection cone
+origin is set at the world-space surface position, offset slightly along
+the surface normal to prevent self-intersection. The central direction
+vector <span class="math inline">\(\vec{D}\)</span> is calculated as the
+reflection of the view vector <span
+class="math inline">\(\vec{V}\)</span> across the surface normal <span
+class="math inline">\(\vec{N}\)</span>:</p>
+<p><span class="math display">\[\vec{D} = \text{reflect}(-\vec{V},
+\vec{N})\]</span></p>
+<p>The cone aperture (half-angle <span
+class="math inline">\(\theta\)</span>) is derived from the surface
+roughness parameter. A perfectly smooth surface (roughness = 0) produces
+a zero-aperture ray, while increasing roughness expands the cone
+angle:</p>
+<p><span class="math display">\[\tan(\theta) = \text{roughness} \times
+k\]</span></p>
+<p>where <span class="math inline">\(k\)</span> is an empirical scaling
+factor (typically around 0.5 to 1.0) defining maximum dispersion.</p>
+<h3 id="stepping-and-lod-derivation">Stepping and LOD Derivation</h3>
+<p>The algorithm steps along <span
+class="math inline">\(\vec{D}\)</span> by an increment proportional to
+the cone's current diameter, ensuring larger steps as the cone expands.
+At a travel distance <span class="math inline">\(t\)</span>, the
+diameter of the cone cross-section is:</p>
+<p><span class="math display">\[\text{diameter} = 2.0 \times t \times
+\tan(\theta)\]</span></p>
+<p>To simulate the integration of all voxels intersecting the cone
+footprint, the diameter is converted to a texture level-of-detail (LOD)
+for sampling the 3D mipmap chain. Given a base voxel size <span
+class="math inline">\(V_{\text{size}}\)</span> at mip level 0, the
+continuous mip level <span class="math inline">\(\lambda\)</span> is
+computed as:</p>
+<p><span class="math display">\[\lambda =
+\log_2\left(\frac{\text{diameter}}{V_{\text{size}}}\right)\]</span></p>
+<p>Higher mip levels contain pre-averaged, downsampled spatial and
+directional radiance, which acts as a low-cost spatial filter over the
+widening cone.</p>
+<h3 id="glsl-sampling-and-accumulation">GLSL Sampling and
+Accumulation</h3>
+<p>Inside the marching loop, the current sample coordinate in normalized
+voxel space is computed. GLSL’s <code>textureLod</code> function samples
+the 3D texture sampler (<code>sampler3D</code>) with trilinear filtering
+enabled, which automatically interpolates across both the 3D spatial
+grid and the fractional component of the calculated mip level <span
+class="math inline">\(\lambda\)</span>.</p>
+<p>The fetched sample typically contains pre-multiplied RGB radiance and
+an alpha channel representing voxel opacity:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> sampleColor <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>u_VoxelGrid<span class="op">,</span> voxelCoord<span class="op">,</span> lod<span class="op">);</span></span></code></pre></div>
+<p>Colors and opacities are accumulated using standard front-to-back
+compositing:</p>
+<p><span class="math display">\[\vec{C}_{\text{acc}} =
+\vec{C}_{\text{acc}} + (1.0 - \alpha_{\text{acc}}) \times
+\vec{C}_{\text{sample}} \times \alpha_{\text{sample}}\]</span> <span
+class="math display">\[\alpha_{\text{acc}} = \alpha_{\text{acc}} + (1.0
+- \alpha_{\text{acc}}) \times \alpha_{\text{sample}}\]</span></p>
+<h3 id="loop-execution-and-termination">Loop Execution and
+Termination</h3>
+<p>The stepping distance <span class="math inline">\(t\)</span> advances
+dynamically by a fraction of the current diameter (e.g., <span
+class="math inline">\(t += \max(V_{\text{size}}, \text{diameter} \times
+0.5)\)</span>) to avoid undersampling or excessive oversampling. The
+marching loop terminates when one of three conditions is met:</p>
+<ol type="1">
+<li>The accumulated opacity <span
+class="math inline">\(\alpha_{\text{acc}}\)</span> reaches a threshold
+close to full saturation (<span class="math inline">\(\ge
+0.95\)</span>).</li>
+<li>The current coordinate steps outside the normalized <span
+class="math inline">\([0, 1]^3\)</span> bounds of the voxel volume.</li>
+<li>A predefined maximum tracing distance or step count is
+exceeded.</li>
+</ol>
+<p>The resulting <span
+class="math inline">\(\vec{C}_{\text{acc}}\)</span> represents the final
+filtered specular radiance, which is then modulated by the material's
+Fresnel reflectance before being combined into the final lighting
+equation.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

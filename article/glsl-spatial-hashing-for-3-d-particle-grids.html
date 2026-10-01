@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Spatial Hashing for 3D Particle Grids - glsl</title>
+    <meta name="description" content="Spatial hashing in GLSL is an optimization technique that maps continuous 3D particle positions into discrete cells within a uniform grid, collapsing three-dimensional space into a one-dimensional index using a hash function. This approach allows GPU sha">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-spatial-hashing-for-3-d-particle-grids">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Spatial Hashing for 3D Particle Grids - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-spatial-hashing-for-3-d-particle-grids" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Spatial hashing in GLSL is an optimization technique that maps continuous 3D particle positions into discrete cells within a uniform grid, collapsing three-dimensional space into a one-dimensional index using a hash function. This approach allows GPU sha" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-spatial-hashing-for-3d-particle-grids">GLSL Spatial Hashing
+for 3D Particle Grids</h1>
+<p>Spatial hashing in GLSL is an optimization technique that maps
+continuous 3D particle positions into discrete cells within a uniform
+grid, collapsing three-dimensional space into a one-dimensional index
+using a hash function. This approach allows GPU shaders to rapidly
+partition space, reducing pairwise particle interaction checks from an
+<span class="math inline">\(O(N^2)\)</span> brute-force complexity to an
+efficient <span class="math inline">\(O(N)\)</span> local neighborhood
+search. This article explains the core mathematical formulation, the
+standard GLSL implementation, and the process for querying neighbor
+cells.</p>
+<h3 id="coordinate-discretization">Coordinate Discretization</h3>
+<p>The first step converts a floating-point world-space position into
+integer grid cell coordinates. Dividing the continuous position vector
+by the uniform cell spacing size and taking the floor of each component
+yields the discrete 3D index:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">ivec3</span> <span class="fu">getCellCoords</span><span class="op">(</span><span class="dt">vec3</span> position<span class="op">,</span> <span class="dt">float</span> cellSize<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">ivec3</span><span class="op">(</span><span class="bu">floor</span><span class="op">(</span>position <span class="op">/</span> cellSize<span class="op">));</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The <code>cellSize</code> parameter is typically set to match or
+slightly exceed the interaction radius (or smoothing length) of the
+particles to ensure that interacting particles reside either in the same
+cell or in immediately adjacent cells.</p>
+<h3 id="the-3d-hash-function">The 3D Hash Function</h3>
+<p>Once the discrete integer coordinates <code>(x, y, z)</code> are
+established, they must be converted into a single integer hash value.
+When working with unbounded domains or fixed-size hash tables (such as
+Shader Storage Buffer Objects), large prime numbers are used to
+distribute the 3D coordinates evenly across the table while minimizing
+collisions:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="fu">hashCell</span><span class="op">(</span><span class="dt">ivec3</span> cell<span class="op">,</span> <span class="dt">uint</span> tableSize<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Large prime numbers for bitwise mixing</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">uint</span> p1 <span class="op">=</span> <span class="dv">73856093</span>u<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">uint</span> p2 <span class="op">=</span> <span class="dv">19349663</span>u<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">uint</span> p3 <span class="op">=</span> <span class="dv">83492791</span>u<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Convert negative coordinates safely to unsigned integers</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uvec3</span> uCell <span class="op">=</span> <span class="dt">uvec3</span><span class="op">(</span>cell<span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute hash via XOR and prime multiplication</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> hash <span class="op">=</span> <span class="op">(</span>uCell<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> p1<span class="op">)</span> <span class="op">^</span> <span class="op">(</span>uCell<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> p2<span class="op">)</span> <span class="op">^</span> <span class="op">(</span>uCell<span class="op">.</span><span class="fu">z</span> <span class="op">*</span> p3<span class="op">);</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> hash <span class="op">%</span> tableSize<span class="op">;</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>If the domain is strictly bounded within a fixed resolution (for
+example, a grid of size <span class="math inline">\(W \times H \times
+D\)</span>), a linear flat-index can be calculated directly without
+hashing collisions:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="fu">getLinearIndex</span><span class="op">(</span><span class="dt">ivec3</span> cell<span class="op">,</span> <span class="dt">ivec3</span> gridDim<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">uint</span><span class="op">(</span>cell<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> cell<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> gridDim<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> cell<span class="op">.</span><span class="fu">z</span> <span class="op">*</span> <span class="op">(</span>gridDim<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> gridDim<span class="op">.</span><span class="fu">y</span><span class="op">));</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="neighborhood-querying">Neighborhood Querying</h3>
+<p>To detect collisions or compute inter-particle forces (such as in
+Smoothed Particle Hydrodynamics), a thread must inspect the current cell
+and all 26 adjacent neighboring cells. This is achieved using nested
+loops covering the offset range from <code>-1</code> to <code>+1</code>
+along each axis:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">findNeighbors</span><span class="op">(</span><span class="dt">vec3</span> position<span class="op">,</span> <span class="dt">float</span> cellSize<span class="op">,</span> <span class="dt">uint</span> tableSize<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> baseCell <span class="op">=</span> <span class="fu">getCellCoords</span><span class="op">(</span>position<span class="op">,</span> cellSize<span class="op">);</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> z <span class="op">=</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span> z <span class="op">&lt;=</span> <span class="dv">1</span><span class="op">;</span> <span class="op">++</span>z<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> y <span class="op">=</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span> y <span class="op">&lt;=</span> <span class="dv">1</span><span class="op">;</span> <span class="op">++</span>y<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>            <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">=</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span> x <span class="op">&lt;=</span> <span class="dv">1</span><span class="op">;</span> <span class="op">++</span>x<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>                <span class="dt">ivec3</span> neighborCell <span class="op">=</span> baseCell <span class="op">+</span> <span class="dt">ivec3</span><span class="op">(</span>x<span class="op">,</span> y<span class="op">,</span> z<span class="op">);</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>                <span class="dt">uint</span> cellHash <span class="op">=</span> <span class="fu">hashCell</span><span class="op">(</span>neighborCell<span class="op">,</span> tableSize<span class="op">);</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>                <span class="co">// Retrieve particle list or head pointer associated with cellHash</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>                <span class="co">// and evaluate distance checks</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="memory-layout-and-collision-management">Memory Layout and
+Collision Management</h3>
+<p>Because multiple cells can map to the same hash value when using a
+modulo hash function, the GPU implementation must handle collisions.
+Standard GPU spatial binning architectures resolve this using two
+passes:</p>
+<ol type="1">
+<li><strong>Sorting/Counting Pass:</strong> Each particle computes its
+cell hash. The particle indices are then sorted by their hash value
+using a GPU-friendly parallel sort (such as Bitonic or Radix sort).</li>
+<li><strong>Cell Offset Buffer:</strong> A secondary buffer stores the
+starting index and particle count for each unique hash bucket, enabling
+direct lookups during physics or rendering passes.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

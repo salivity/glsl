@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does GLSL Invariant Stop Z-Fighting? - glsl</title>
+    <meta name="description" content="In multi-pass rendering pipelines, subtle floating-point variations across different shader programs can cause identical geometry to produce slightly different depth coordinates, resulting in severe visual artifacting known as Z-fighting. The invariant q">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-glsl-invariant-stop-z-fighting">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does GLSL Invariant Stop Z-Fighting? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-glsl-invariant-stop-z-fighting" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In multi-pass rendering pipelines, subtle floating-point variations across different shader programs can cause identical geometry to produce slightly different depth coordinates, resulting in severe visual artifacting known as Z-fighting. The invariant q" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-glsl-invariant-stop-z-fighting">How Does GLSL Invariant
+Stop Z-Fighting?</h1>
+<p>In multi-pass rendering pipelines, subtle floating-point variations
+across different shader programs can cause identical geometry to produce
+slightly different depth coordinates, resulting in severe visual
+artifacting known as Z-fighting. The <code>invariant</code> qualifier in
+GLSL addresses this by instructing the shader compiler and GPU driver to
+guarantee bit-for-bit identical evaluation of targeted output variables
+across different shader objects. By enforcing exact computational
+repeatability on <code>gl_Position</code>, developers can run depth
+pre-passes, lighting passes, and post-effects using
+<code>GL_EQUAL</code> depth tests without surface flicker or
+non-deterministic depth test failures.</p>
+<h2 id="the-cause-of-multi-pass-depth-inconsistencies">The Cause of
+Multi-Pass Depth Inconsistencies</h2>
+<p>Multi-pass rendering relies on drawing the exact same geometric mesh
+multiple times across distinct shader programs. A standard pattern
+involves rendering depth in an initial baseline pass, followed by
+subsequent passes that compute forward lighting, ambient occlusion, or
+volumetric effects. To avoid redundant depth writing and preserve
+performance, secondary passes typically configure the depth function to
+<code>GL_EQUAL</code> or <code>GL_LEQUAL</code>.</p>
+<p>Even when separate vertex shaders execute mathematically identical
+matrix transformations—such as transforming an object-space vertex by
+identical model, view, and projection matrices—the resulting
+floating-point values can diverge:</p>
+<ul>
+<li><strong>Instruction Reordering:</strong> Different surrounding
+shader code alters register pressure, prompting compiler optimizers to
+rearrange mathematical operations.</li>
+<li><strong>Fused Multiply-Add (FMA) Optimizations:</strong> The
+compiler might fuse a multiplication and addition into an
+<code>FMA</code> instruction in one shader while leaving them as
+distinct operations in another.</li>
+<li><strong>Algebraic Simplifications:</strong> Commutative and
+associative transformations that are algebraically equivalent in pure
+mathematics are not bit-identical in IEEE 754 floating-point
+arithmetic.</li>
+</ul>
+<p>Because the depth buffer operates at high precision, a discrepancy of
+a single Unit in the Last Place (ULP) causes fragments to fail depth
+equality tests, producing noisy rendering artifacts and missing
+geometry.</p>
+<h2 id="how-the-invariant-qualifier-enforces-bit-exact-precision">How
+the Invariant Qualifier Enforces Bit-Exact Precision</h2>
+<p>The <code>invariant</code> qualifier acts as a binding contract with
+the GLSL compiler. When an output variable—most commonly the built-in
+<code>gl_Position</code>—is marked as invariant, the compiler is
+restricted from applying optimizations that compromise deterministic
+output.</p>
+<p>Specifically, the compiler ensures:</p>
+<ol type="1">
+<li>The exact sequence of machine instructions generated for computing
+the marked variable is consistent across separate shader binaries.</li>
+<li>Target calculations bypass aggressive floating-point contraction or
+tree-balancing that depends on variable lifetime or surrounding
+context.</li>
+<li>The generated output coordinate matches identically across draw
+calls, provided the source inputs and order of calculations are
+consistent.</li>
+</ol>
+<h2 id="syntax-and-implementation-patterns">Syntax and Implementation
+Patterns</h2>
+<p>GLSL allows applying the <code>invariant</code> qualifier either to
+specific variables or globally across the entire compilation unit.</p>
+<h3 id="selective-variable-invariance">Selective Variable
+Invariance</h3>
+<p>The standard and most performant approach is to mark specific vertex
+outputs. You can declare invariance directly at output definition or
+retroactively declare built-in variables:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Retroactively marking the built-in position output as invariant</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">invariant</span> <span class="bu">gl_Position</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> u_ModelViewProjection<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> a_Position<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> u_ModelViewProjection <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>a_Position<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This ensures that any other shader in the pipeline using identical
+transformation logic for <code>gl_Position</code> will produce the exact
+same depth value.</p>
+<h3 id="global-invariance-pragma">Global Invariance Pragma</h3>
+<p>GLSL also supports forcing invariance on all shader outputs via a
+preprocessor pragma:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#pragma STDGL invariant(all)</span></span></code></pre></div>
+<p>While convenient, applying global invariance is generally
+discouraged. Forcing invariance across every color, normal, and texture
+coordinate disables global compiler optimizations, which can degrade
+execution efficiency.</p>
+<h2 id="requirements-for-guaranteed-determinism">Requirements for
+Guaranteed Determinism</h2>
+<p>The <code>invariant</code> qualifier prevents compiler-induced
+non-determinism, but it cannot fix application-level discrepancies. For
+invariance to successfully eliminate Z-fighting, the host application
+must satisfy several criteria:</p>
+<ul>
+<li><strong>Identical Expressions:</strong> The sequence of operations
+used to compute the invariant variable must be identical in source code
+across all participating shaders. Writing <code>P * (V * (M * v))</code>
+in one shader and <code>(P * V * M) * v</code> in another breaks
+determinism regardless of the qualifier.</li>
+<li><strong>Identical Uniform Inputs:</strong> Uniform values used in
+the transformation must contain identical binary float data across
+passes.</li>
+<li><strong>Matching Precision Qualifiers:</strong> In GLSL ES,
+floating-point precision qualifiers (such as <code>highp</code>) for all
+variables contributing to the invariant output must match exactly.</li>
+</ul>
+<p>In modern OpenGL (GLSL 4.0+) and Vulkan (via SPIR-V), developers
+often supplement or replace <code>invariant</code> with the
+<code>precise</code> qualifier, which provides fine-grained control over
+intermediate operation order, preventing FMA contraction on arbitrary
+variable assignments.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

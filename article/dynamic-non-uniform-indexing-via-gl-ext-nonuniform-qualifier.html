@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Non-Uniform Indexing via GL_EXT_nonuniform_qualifier - glsl</title>
+    <meta name="description" content="This article provides a comprehensive guide to the GLEXTnonuniformqualifier extension in GLSL, explaining how it resolves resource indexing divergence in modern graphics pipelines. It covers the fundamental problem of dynamically uniform resource indexin">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/dynamic-non-uniform-indexing-via-gl-ext-nonuniform-qualifier">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Dynamic Non-Uniform Indexing via GL_EXT_nonuniform_qualifier - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/dynamic-non-uniform-indexing-via-gl-ext-nonuniform-qualifier" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a comprehensive guide to the GLEXTnonuniformqualifier extension in GLSL, explaining how it resolves resource indexing divergence in modern graphics pipelines. It covers the fundamental problem of dynamically uniform resource indexin" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="dynamic-non-uniform-indexing-via-gl_ext_nonuniform_qualifier">Dynamic
+Non-Uniform Indexing via GL_EXT_nonuniform_qualifier</h1>
+<p>This article provides a comprehensive guide to the
+<code>GL_EXT_nonuniform_qualifier</code> extension in GLSL, explaining
+how it resolves resource indexing divergence in modern graphics
+pipelines. It covers the fundamental problem of dynamically uniform
+resource indexing, how the <code>nonuniformEXT</code> qualifier alters
+shader compilation, how underlying hardware executes divergent resource
+loads, and best practices for its implementation in bindless
+workflows.</p>
+<h3 id="the-limitation-of-dynamically-uniform-indexing">The Limitation
+of Dynamically Uniform Indexing</h3>
+<p>In standard GLSL and traditional graphics pipelines, accessing arrays
+of resources—such as textures, samplers, and storage buffers—imposes a
+strict constraint: the index used must be <em>dynamically uniform</em>.
+Dynamic uniformity dictates that for any given execution scope
+(typically an invocation group, workgroup, or draw call), every active
+thread must evaluate the index to the exact same value.</p>
+<p>Modern GPUs execute threads in lockstep groups known as warps
+(NVIDIA) or wavefronts (AMD). Hardware texture units and descriptor
+caches are heavily optimized under the assumption that all threads
+within a warp read from the same resource descriptor. If threads within
+the same warp evaluate different indices without explicit driver
+handling, the operation produces undefined behavior, visual corruption,
+or device crashes.</p>
+<h3 id="the-role-of-gl_ext_nonuniform_qualifier">The Role of
+GL_EXT_nonuniform_qualifier</h3>
+<p>The <code>GL_EXT_nonuniform_qualifier</code> extension lifts this
+dynamic uniformity restriction. It provides GLSL with the syntactic and
+semantic tools required to mark specific indices as non-uniform across
+execution units, enabling dynamic indexing into unsized or large
+descriptor arrays (often referred to as bindless descriptors).</p>
+<p>The core mechanism introduced by the extension is the
+<code>nonuniformEXT</code> qualifier and keyword function. By wrapping
+an index expression in <code>nonuniformEXT(...)</code>, the developer
+communicates to the compiler that the value of the index is expected to
+vary between adjacent threads within the same warp.</p>
+<h3 id="compilation-and-the-spir-v-intermediate-layer">Compilation and
+the SPIR-V Intermediate Layer</h3>
+<p>When compiling GLSL to SPIR-V (primarily within Vulkan pipelines),
+resource indexing undergoes a critical transformation when decorated
+with this extension.</p>
+<ol type="1">
+<li><strong>Decoration Injection:</strong> The GLSL compiler emits the
+<code>NonUniform</code> decoration in the resulting SPIR-V code on
+instructions associated with the variable or intermediate value (e.g.,
+<code>OpDecorate %var NonUniform</code>).</li>
+<li><strong>SPIR-V Capability:</strong> The shader module declares the
+<code>ShaderNonUniform</code> capability, instructing the driver to
+bypass validation rules that enforce uniform indexing.</li>
+<li><strong>Descriptor Indexing Execution:</strong> When an array of
+resources is indexed, the instruction referencing the descriptor array
+preserves this <code>NonUniform</code> tag through downstream load and
+sampling operations.</li>
+</ol>
+<h3 id="hardware-execution-the-scalarization-loop">Hardware Execution:
+The Scalarization Loop</h3>
+<p>Graphics hardware typically lacks the ability to execute simultaneous
+fetches from completely different descriptor table entries within a
+single cycle of a single warp instruction. To execute a non-uniform
+fetch safely, the GPU driver translates the decorated instruction into a
+control-flow pattern known as a <strong>scalarization loop</strong>.</p>
+<p>During execution:</p>
+<ol type="1">
+<li>The warp evaluates the non-uniform index for all active lanes.</li>
+<li>A single lane’s index is selected using ballot and broadcast
+instructions.</li>
+<li>The warp generates an execution mask identifying all lanes that
+share this specific index.</li>
+<li>The texture or buffer fetch executes for those matching lanes
+uniformly.</li>
+<li>The processed lanes are masked off, and the loop repeats for the
+next unique index until all lanes in the warp have executed their
+respective fetches.</li>
+</ol>
+<p>Because the extension explicitly flags the non-uniform expression,
+the compiler knows exactly where to emit the scalarization loop without
+having to conservatively assume all resource accesses require loop-based
+unrolling.</p>
+<h3 id="implementation-and-syntax-in-glsl">Implementation and Syntax in
+GLSL</h3>
+<p>To utilize dynamic non-uniform indexing in a shader, the extension
+must first be declared. The qualifier is then applied directly to the
+indexing expression of the resource array.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_nonuniform_qualifier : enable</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">sampler2D</span> uTextures<span class="op">[];</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">flat</span> <span class="dt">int</span> inMaterialID<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec2</span> inUV<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> outColor<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// inMaterialID can vary per primitive/invocation within the same warp</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    outColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>uTextures<span class="op">[</span><span class="fu">nonuniformEXT</span><span class="op">(</span>inMaterialID<span class="op">)],</span> inUV<span class="op">);</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>In addition to wrapping expressions, the qualifier can be applied
+directly to variables to propagate non-uniformity automatically across
+intermediate calculations:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>nonuniformEXT <span class="dt">int</span> dynamicIndex <span class="op">=</span> <span class="fu">calculateDynamicIndex</span><span class="op">();</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>outColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>uTextures<span class="op">[</span>dynamicIndex<span class="op">],</span> inUV<span class="op">);</span></span></code></pre></div>
+<h3 id="performance-considerations">Performance Considerations</h3>
+<p>While <code>GL_EXT_nonuniform_qualifier</code> makes fully bindless
+rendering architectures possible, it is not cost-free. Because
+non-uniform accesses rely on scalarization loops at the hardware level,
+execution latency scales with the degree of divergence within a
+warp.</p>
+<p>If all 32 or 64 threads in a warp access different descriptors, the
+fetch instruction will loop up to 32 or 64 times. For optimal
+performance, workloads should be grouped so that spatially coherent
+primitives share the same resource indices whenever feasible, minimizing
+warp divergence while relying on <code>nonuniformEXT</code> as a safe
+fallback.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

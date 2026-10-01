@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How rayQueryGetIntersectionTEXT Works in GLSL - glsl</title>
+    <meta name="description" content="This article explains how the rayQueryGetIntersectionTEXT function retrieves the parametric hit distance ($t$) during ray query execution in GLSL using the GLEXTrayquery extension. It covers the underlying mathematical ray representation, how the hardwar">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-ray-query-get-intersection-text-works-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How rayQueryGetIntersectionTEXT Works in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-ray-query-get-intersection-text-works-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the rayQueryGetIntersectionTEXT function retrieves the parametric hit distance ($t$) during ray query execution in GLSL using the GLEXTrayquery extension. It covers the underlying mathematical ray representation, how the hardwar" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-rayquerygetintersectiontext-works-in-glsl">How
+rayQueryGetIntersectionTEXT Works in GLSL</h1>
+<p>This article explains how the
+<code>rayQueryGetIntersectionTEXT</code> function retrieves the
+parametric hit distance (<span class="math inline">\(t\)</span>) during
+ray query execution in GLSL using the <code>GL_EXT_ray_query</code>
+extension. It covers the underlying mathematical ray representation, how
+the hardware tracks intersection states, the distinction between
+candidate and committed hits, and a practical implementation
+example.</p>
+<h3 id="the-parametric-ray-equation-and-hit-distance">The Parametric Ray
+Equation and Hit Distance</h3>
+<p>Ray tracing engines represent a ray mathematically using the
+parametric line equation:</p>
+<p><span class="math display">\[\mathbf{P}(t) = \mathbf{O} + t \cdot
+\mathbf{D}\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(\mathbf{O}\)</span> is the ray origin
+(<code>rayQueryGetIntersectionRayOriginEXT</code>).</li>
+<li><span class="math inline">\(\mathbf{D}\)</span> is the ray direction
+(<code>rayQueryGetIntersectionRayDirectionEXT</code>).</li>
+<li><span class="math inline">\(t\)</span> is the scalar parametric
+distance along the ray.</li>
+</ul>
+<p>When a ray intersects geometry (such as an axis-aligned bounding box
+or a triangle), the intersection hardware calculates the exact value of
+<span class="math inline">\(t\)</span> where the intersection takes
+place. The function <code>rayQueryGetIntersectionTEXT</code> retrieves
+this calculated scalar <span class="math inline">\(t\)</span> value
+directly from internal hardware ray query registers.</p>
+<h3 id="function-signature-and-parameters">Function Signature and
+Parameters</h3>
+<p>The GLSL intrinsic is defined as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">rayQueryGetIntersectionTEXT</span><span class="op">(</span>rayQueryEXT rayQuery<span class="op">,</span> <span class="dt">bool</span> committed<span class="op">);</span></span></code></pre></div>
+<p>The function takes two parameters:</p>
+<ol type="1">
+<li><code>rayQuery</code>: The ray query traversal object tracking
+state.</li>
+<li><code>committed</code>: A boolean flag determining which
+intersection register to read from:
+<ul>
+<li><strong><code>false</code> (Candidate Intersection):</strong> Reads
+the hit distance of the candidate geometry currently being evaluated.
+This is used during traversal when processing non-opaque geometry or
+custom intersection shaders to evaluate whether a hit should be accepted
+or rejected.</li>
+<li><strong><code>true</code> (Committed Intersection):</strong> Reads
+the hit distance of the closest accepted intersection confirmed so far.
+Once traversal completes, this returns the final, confirmed hit distance
+along the ray.</li>
+</ul></li>
+</ol>
+<h3 id="internal-traversal-mechanism">Internal Traversal Mechanism</h3>
+<ol type="1">
+<li><strong>Initialization:</strong> The ray is launched with
+<code>rayQueryInitializeEXT</code>, establishing <span
+class="math inline">\(t_{\min}\)</span> and <span
+class="math inline">\(t_{\max}\)</span> bounds.</li>
+<li><strong>Traversal Steps:</strong> During
+<code>rayQueryProceedEXT</code>, the ray traversal unit tests nodes in
+the acceleration structure. When a primitive falls within current <span
+class="math inline">\(t\)</span> bounds:
+<ul>
+<li>The candidate hit distance is updated in hardware scratch
+memory.</li>
+<li>If non-opaque, execution yields back to the shader. Calling
+<code>rayQueryGetIntersectionTEXT(rayQuery, false)</code> returns this
+candidate <span class="math inline">\(t\)</span> value.</li>
+</ul></li>
+<li><strong>Commitment:</strong> If the hit is confirmed (either
+automatically for opaque primitives or via
+<code>rayQueryConfirmIntersectionEXT</code>), the candidate <span
+class="math inline">\(t\)</span> becomes the new active <span
+class="math inline">\(t_{\max}\)</span> limit for subsequent tests, and
+the committed register is updated.</li>
+<li><strong>Final Result:</strong> After <code>rayQueryProceedEXT</code>
+returns <code>false</code>,
+<code>rayQueryGetIntersectionTEXT(rayQuery, true)</code> retrieves the
+scalar <span class="math inline">\(t\)</span> of the closest confirmed
+hit.</li>
+</ol>
+<h3 id="practical-implementation">Practical Implementation</h3>
+<p>The following example demonstrates how to extract the hit distance
+after traversing an acceleration structure:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_ray_query : require</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> set <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> accelerationStructureEXT topLevelAS<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    rayQueryEXT rayQuery<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> origin <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> direction <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> tMin <span class="op">=</span> <span class="fl">0.001</span><span class="op">;</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> tMax <span class="op">=</span> <span class="fl">1000.0</span><span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Initialize the query</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">rayQueryInitializeEXT</span><span class="op">(</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        rayQuery<span class="op">,</span> </span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        topLevelAS<span class="op">,</span> </span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        gl_RayFlagsOpaqueEXT<span class="op">,</span> </span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        <span class="bn">0xFF</span><span class="op">,</span> </span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        origin<span class="op">,</span> </span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>        tMin<span class="op">,</span> </span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        direction<span class="op">,</span> </span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>        tMax</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Process all intersections</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">while</span> <span class="op">(</span><span class="fu">rayQueryProceedEXT</span><span class="op">(</span>rayQuery<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>        <span class="co">// For candidate intersections (if handling non-opaque geometry)</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> candidateT <span class="op">=</span> <span class="fu">rayQueryGetIntersectionTEXT</span><span class="op">(</span>rayQuery<span class="op">,</span> <span class="kw">false</span><span class="op">);</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Check if an intersection was committed</span></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="fu">rayQueryGetIntersectionTypeEXT</span><span class="op">(</span>rayQuery<span class="op">,</span> <span class="kw">true</span><span class="op">)</span> <span class="op">!=</span> gl_RayQueryCommittedIntersectionNoneEXT<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Retrieve the final parametric hit distance</span></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> hitT <span class="op">=</span> <span class="fu">rayQueryGetIntersectionTEXT</span><span class="op">(</span>rayQuery<span class="op">,</span> <span class="kw">true</span><span class="op">);</span></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> hitPosition <span class="op">=</span> origin <span class="op">+</span> hitT <span class="op">*</span> direction<span class="op">;</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="physical-distance-vs-parametric-t">Physical Distance vs.
+Parametric <span class="math inline">\(t\)</span></h3>
+<p>The scalar returned by <code>rayQueryGetIntersectionTEXT</code>
+represents world-space Euclidean distance <strong>only if</strong> the
+ray direction vector (<span class="math inline">\(\mathbf{D}\)</span>)
+supplied to <code>rayQueryInitializeEXT</code> is normalized.</p>
+<p>If the direction vector has a length other than <span
+class="math inline">\(1.0\)</span>, the actual physical distance to the
+hit point must be computed as:</p>
+<p><span class="math display">\[\text{Distance} = t \cdot
+\|\mathbf{D}\|\]</span></p>
+<p>Normalizing the direction vector prior to ray initialization ensures
+that <code>rayQueryGetIntersectionTEXT</code> directly reflects true
+world-space units.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

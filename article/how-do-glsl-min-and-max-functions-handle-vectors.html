@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Do GLSL Min and Max Functions Handle Vectors? - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), the built-in min and max functions are designed to operate component-wise across vector types, either comparing two vectors of matching dimensions or comparing each element of a vector against a single scalar value.">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-do-glsl-min-and-max-functions-handle-vectors">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Do GLSL Min and Max Functions Handle Vectors? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-do-glsl-min-and-max-functions-handle-vectors" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), the built-in min and max functions are designed to operate component-wise across vector types, either comparing two vectors of matching dimensions or comparing each element of a vector against a single scalar value." />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-do-glsl-min-and-max-functions-handle-vectors">How Do GLSL
+Min and Max Functions Handle Vectors?</h1>
+<p>In the OpenGL Shading Language (GLSL), the built-in <code>min</code>
+and <code>max</code> functions are designed to operate component-wise
+across vector types, either comparing two vectors of matching dimensions
+or comparing each element of a vector against a single scalar value.
+This guide covers how both function overloads behave mathematically, how
+modern GPUs execute them efficiently, practical shader use cases like
+bounding and clamping, and key syntax pitfalls to avoid.</p>
+<h2 id="component-wise-vector-overloads">Component-Wise Vector
+Overloads</h2>
+<p>When you pass two vectors of identical dimensions into
+<code>min()</code> or <code>max()</code>, GLSL performs an independent,
+component-wise comparison across each matching coordinate (<span
+class="math inline">\(x\)</span>, <span
+class="math inline">\(y\)</span>, <span
+class="math inline">\(z\)</span>, and <span
+class="math inline">\(w\)</span>).</p>
+<p>For two 3D vectors <span class="math inline">\(A = (a_x, a_y,
+a_z)\)</span> and <span class="math inline">\(B = (b_x, b_y,
+b_z)\)</span>:</p>
+<ul>
+<li><code>min(A, B)</code> resolves to
+<code>vec3(min(a_x, b_x), min(a_y, b_y), min(a_z, b_z))</code></li>
+<li><code>max(A, B)</code> resolves to
+<code>vec3(max(a_x, b_x), max(a_y, b_y), max(a_z, b_z))</code></li>
+</ul>
+<h3 id="code-example-vector-vs-vector">Code Example: Vector vs.
+Vector</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> a <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">5.0</span><span class="op">,</span> <span class="fl">2.0</span><span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> b <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">4.0</span><span class="op">,</span> <span class="fl">3.0</span><span class="op">,</span> <span class="fl">0.5</span><span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> minimumResult <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>a<span class="op">,</span> b<span class="op">);</span> <span class="co">// Returns vec3(1.0, 3.0, 0.5)</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> maximumResult <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>a<span class="op">,</span> b<span class="op">);</span> <span class="co">// Returns vec3(4.0, 5.0, 2.0)</span></span></code></pre></div>
+<p>The resulting vector contains the individual minima or maxima per
+axis, rather than comparing the overall magnitudes (lengths) of the
+vectors.</p>
+<h2 id="vector-and-scalar-overloads">Vector and Scalar Overloads</h2>
+<p>GLSL also provides overloads where the first parameter is a vector
+and the second parameter is a single scalar of the same underlying data
+type (such as <code>float</code>, <code>int</code>, or
+<code>uint</code>). In this scenario, the scalar value is implicitly
+distributed and compared against every individual component of the
+vector.</p>
+<p>For vector <span class="math inline">\(A = (a_x, a_y, a_z)\)</span>
+and scalar <span class="math inline">\(s\)</span>:</p>
+<ul>
+<li><code>min(A, s)</code> resolves to
+<code>vec3(min(a_x, s), min(a_y, s), min(a_z, s))</code></li>
+<li><code>max(A, s)</code> resolves to
+<code>vec3(max(a_x, s), max(a_y, s), max(a_z, s))</code></li>
+</ul>
+<h3 id="code-example-vector-vs-scalar">Code Example: Vector vs.
+Scalar</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> color <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.2</span><span class="op">,</span> <span class="fl">0.8</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.4</span><span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Clamp upper limit to 1.0</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> capped <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>color<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span> <span class="co">// Returns vec3(1.0, 0.8, -0.4)</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Clamp lower limit to 0.0</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> nonNegative <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>color<span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span> <span class="co">// Returns vec3(1.2, 0.8, 0.0)</span></span></code></pre></div>
+<h2 id="common-practical-applications">Common Practical
+Applications</h2>
+<h3 id="1-manual-clamping-and-color-management">1. Manual Clamping and
+Color Management</h3>
+<p>While GLSL includes a dedicated <code>clamp(x, minVal, maxVal)</code>
+function, chaining <code>min()</code> and <code>max()</code> is often
+used for directional constraints:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Ensure normal or color channels stay within [0.0, 1.0]</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> normalizedColor <span class="op">=</span> <span class="bu">min</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>rawColor<span class="op">,</span> <span class="fl">0.0</span><span class="op">),</span> <span class="fl">1.0</span><span class="op">);</span></span></code></pre></div>
+<h3 id="2-axis-aligned-bounding-box-aabb-calculations">2. Axis-Aligned
+Bounding Box (AABB) Calculations</h3>
+<p>In ray tracing and raymarching shaders, finding slab intersections
+requires tracking the nearest and farthest plane boundaries across all
+spatial axes simultaneously:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> t0 <span class="op">=</span> <span class="op">(</span>boxMin <span class="op">-</span> rayOrigin<span class="op">)</span> <span class="op">/</span> rayDirection<span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> t1 <span class="op">=</span> <span class="op">(</span>boxMax <span class="op">-</span> rayOrigin<span class="op">)</span> <span class="op">/</span> rayDirection<span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> tMin <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>t0<span class="op">,</span> t1<span class="op">);</span> <span class="co">// Element-wise minimum entry times</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> tMax <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>t0<span class="op">,</span> t1<span class="op">);</span> <span class="co">// Element-wise maximum exit times</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Reduce vector to find global intersection interval</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> entryTime <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>tMin<span class="op">.</span><span class="fu">x</span><span class="op">,</span> tMin<span class="op">.</span><span class="fu">y</span><span class="op">),</span> tMin<span class="op">.</span><span class="fu">z</span><span class="op">);</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> exitTime  <span class="op">=</span> <span class="bu">min</span><span class="op">(</span><span class="bu">min</span><span class="op">(</span>tMax<span class="op">.</span><span class="fu">x</span><span class="op">,</span> tMax<span class="op">.</span><span class="fu">y</span><span class="op">),</span> tMax<span class="op">.</span><span class="fu">z</span><span class="op">);</span></span></code></pre></div>
+<h3 id="3-signed-distance-functions-sdfs">3. Signed Distance Functions
+(SDFs)</h3>
+<p>3D procedural modeling and raymarching frequently rely on
+component-wise <code>max()</code> to compute Euclidean distances outside
+rectangular prisms and bounding volumes:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">sdBox</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">,</span> <span class="dt">vec3</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> d <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span>p<span class="op">)</span> <span class="op">-</span> b<span class="op">;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">length</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>d<span class="op">,</span> <span class="fl">0.0</span><span class="op">))</span> <span class="op">+</span> <span class="bu">min</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>d<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="bu">max</span><span class="op">(</span>d<span class="op">.</span><span class="fu">y</span><span class="op">,</span> d<span class="op">.</span><span class="fu">z</span><span class="op">)),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="hardware-execution-and-performance">Hardware Execution and
+Performance</h2>
+<p>Modern GPUs are built on Single Instruction, Multiple Data (SIMD) and
+Single Instruction, Multiple Threads (SIMT) architectures. Because
+<code>min</code> and <code>max</code> translate directly into dedicated
+hardware-level assembly instructions (like <code>MIN</code> and
+<code>MAX</code> opcodes), they execute in a single GPU clock cycle per
+component with no conditional branching overhead.</p>
+<h2 id="common-pitfalls">Common Pitfalls</h2>
+<ul>
+<li><strong>Implicit Vector Dimension Promotion:</strong> GLSL does not
+support broadcasting between vectors of different sizes. Passing a
+<code>vec2</code> and a <code>vec3</code> into <code>min()</code> will
+trigger a compile-time error.</li>
+<li><strong>Type Strictness:</strong> GLSL requires strict type
+matching. Comparing a floating-point vector (<code>vec3</code>) against
+an integer scalar (<code>1</code> instead of <code>1.0</code>) causes a
+compilation failure unless explicitly cast.</li>
+<li><strong>Magnitude Confusion:</strong> If your goal is to find which
+vector has a larger magnitude, <code>min()</code> and <code>max()</code>
+will not compute length. You must compare scalar lengths explicitly
+using <code>length(a)</code> and <code>length(b)</code>.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

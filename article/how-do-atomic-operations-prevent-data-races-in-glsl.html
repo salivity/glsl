@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Do Atomic Operations Prevent Data Races in GLSL? - glsl</title>
+    <meta name="description" content="In massively parallel GPU programming, multiple shader invocations often attempt to read and write to the same memory address in Shader Storage Buffer Objects (SSBOs) or shared memory simultaneously. Without synchronization, these overlapping read-modify">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-do-atomic-operations-prevent-data-races-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Do Atomic Operations Prevent Data Races in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-do-atomic-operations-prevent-data-races-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In massively parallel GPU programming, multiple shader invocations often attempt to read and write to the same memory address in Shader Storage Buffer Objects (SSBOs) or shared memory simultaneously. Without synchronization, these overlapping read-modify" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-do-atomic-operations-prevent-data-races-in-glsl">How Do
+Atomic Operations Prevent Data Races in GLSL?</h1>
+<p>In massively parallel GPU programming, multiple shader invocations
+often attempt to read and write to the same memory address in Shader
+Storage Buffer Objects (SSBOs) or shared memory simultaneously. Without
+synchronization, these overlapping read-modify-write sequences cause
+data races and corrupted data. In GLSL, atomic operations such as
+<code>atomicAdd</code> and <code>atomicMin</code> solve this concurrency
+problem by executing the read, modification, and write steps as a
+single, uninterruptible hardware transaction, guaranteeing deterministic
+and race-free state updates across all executing threads.</p>
+<h2 id="the-concurrency-problem-unsynchronized-memory-access">The
+Concurrency Problem: Unsynchronized Memory Access</h2>
+<p>GPUs execute thousands of threads across compute units in parallel.
+When two or more threads attempt a standard update on a shared variable,
+the operation decomposes into three distinct steps:</p>
+<ol type="1">
+<li>Loading the current value from memory into a thread register.</li>
+<li>Performing the arithmetic or comparison logic locally.</li>
+<li>Storing the updated result back into shared memory.</li>
+</ol>
+<p>If Thread A and Thread B execute this sequence simultaneously on the
+same memory location, both threads may read the same initial value
+before either writes back its result. As a consequence, one thread's
+update overwrites the other, leading to a lost update. This behavior is
+undefined and constitutes a classic data race.</p>
+<h2 id="how-atomic-operations-guarantee-isolation">How Atomic Operations
+Guarantee Isolation</h2>
+<p>Atomic operations prevent data races by executing the
+read-modify-write cycle as an indivisible unit of work at the memory
+controller or L2 cache level.</p>
+<p>When a GLSL invocation calls an atomic function:</p>
+<ul>
+<li><strong>Hardware Lockout/Serialization:</strong> The memory hardware
+serializes incoming requests targeted at the specific 32-bit or 64-bit
+memory word.</li>
+<li><strong>Non-Interleaved Execution:</strong> No intermediate read or
+write from any other thread can access the target memory location until
+the current atomic operation completes its entire cycle.</li>
+<li><strong>Return of Original State:</strong> GLSL atomic functions
+return the original value stored in memory immediately before the
+operation took place, enabling thread-safe index allocation and state
+tracking.</li>
+</ul>
+<h2 id="core-glsl-atomic-functions-in-practice">Core GLSL Atomic
+Functions in Practice</h2>
+<p>Atomic operations are available in GLSL compute shaders and fragment
+shaders primarily on <code>coherent</code> SSBOs and <code>shared</code>
+workgroup memory. They operate on signed and unsigned integers
+(<code>int</code> and <code>uint</code>).</p>
+<h3 id="atomicadd">atomicAdd</h3>
+<p><code>atomicAdd</code> computes the sum of the value currently in
+memory and a supplied operand, storing the result back into memory
+atomically:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> OutputBuffer <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> globalCounter<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> data<span class="op">[];</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Atomically increment the global counter and receive a unique index</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> slotIndex <span class="op">=</span> <span class="bu">atomicAdd</span><span class="op">(</span>globalCounter<span class="op">,</span> <span class="dv">1</span>u<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Safely write to the uniquely allocated slot</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    data<span class="op">[</span>slotIndex<span class="op">]</span> <span class="op">=</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Because <code>atomicAdd</code> is guaranteed to be atomic, every
+thread receives a distinct index value, preventing multiple threads from
+claiming the same array slot.</p>
+<h3 id="atomicmin-and-atomicmax">atomicMin and atomicMax</h3>
+<p><code>atomicMin</code> compares the value stored at the memory
+location with the provided argument, storing the smaller of the two:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">buffer</span> BoundsBuffer <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> minDepth<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> localDepth <span class="op">=</span> <span class="fu">computeDepth</span><span class="op">();</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Atomically update the minimum depth recorded across all invocations</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">atomicMin</span><span class="op">(</span>minDepth<span class="op">,</span> localDepth<span class="op">);</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>If multiple threads run <code>atomicMin</code> simultaneously, the
+memory controller processes each comparison sequentially. The final
+value in <code>minDepth</code> is mathematically guaranteed to reflect
+the absolute minimum produced across the entire dispatch.</p>
+<h2 id="memory-qualifiers-and-synchronization">Memory Qualifiers and
+Synchronization</h2>
+<p>Using atomic operations requires correct memory qualification in
+shader definitions:</p>
+<ul>
+<li><strong>The <code>coherent</code> Qualifier:</strong> Buffers
+accessed atomically across different workgroups must use the
+<code>coherent</code> memory qualifier to bypass local thread caches and
+ensure visibility across all compute units.</li>
+<li><strong>Memory Barriers:</strong> When mixing atomic operations with
+standard reads and writes within the same workgroup, functions like
+<code>memoryBarrierShared()</code> or <code>groupMemoryBarrier()</code>
+enforce strict ordering constraints, ensuring that prior non-atomic
+writes are visible before subsequent atomic checks proceed.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

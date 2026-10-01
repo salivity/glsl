@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Is the Difference Between sampler2D and sampler2DArray? - glsl</title>
+    <meta name="description" content="In GLSL, sampler2D is used to access a single, standalone two-dimensional texture using standard normalized coordinates, while sampler2DArray accesses a two-dimensional texture array containing multiple layers of identical size and format using a three-c">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-is-the-difference-between-sampler-2-d-and-sampler-2-d-array">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Is the Difference Between sampler2D and sampler2DArray? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-is-the-difference-between-sampler-2-d-and-sampler-2-d-array" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL, sampler2D is used to access a single, standalone two-dimensional texture using standard normalized coordinates, while sampler2DArray accesses a two-dimensional texture array containing multiple layers of identical size and format using a three-c" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="what-is-the-difference-between-sampler2d-and-sampler2darray">What Is
+the Difference Between sampler2D and sampler2DArray?</h1>
+<p>In GLSL, <code>sampler2D</code> is used to access a single,
+standalone two-dimensional texture using standard normalized
+coordinates, while <code>sampler2DArray</code> accesses a
+two-dimensional texture array containing multiple layers of identical
+size and format using a three-component coordinate. Texture arrays allow
+shaders to select from multiple 2D texture layers within a single draw
+call without the texture binding overhead, edge bleeding, or mipmapping
+artifacts typical of traditional texture atlases.</p>
+<h2 id="fundamental-architectural-differences">Fundamental Architectural
+Differences</h2>
+<p>A <code>sampler2D</code> uniform represents a single 2D texture
+object (<code>GL_TEXTURE_2D</code>). It is sampled using two-dimensional
+texture coordinates <span class="math inline">\((u, v)\)</span>,
+returning a color value interpolated across the width and height of that
+individual image.</p>
+<p>A <code>sampler2DArray</code> uniform represents a 2D texture array
+(<code>GL_TEXTURE_2D_ARRAY</code>). It consists of an ordered sequence
+of discrete 2D image layers. All layers in the array must share the
+exact same dimensions, internal pixel format, and mipmap level count.
+Sampling requires a three-component vector <span
+class="math inline">\((u, v, layer)\)</span>, where the third coordinate
+specifies the zero-based layer index.</p>
+<h2 id="sampling-and-filtering-behavior">Sampling and Filtering
+Behavior</h2>
+<p>While <code>sampler2DArray</code> uses a <code>vec3</code>
+coordinate, it is fundamentally different from a 3D volume texture
+(<code>sampler3D</code>):</p>
+<ul>
+<li><strong>No Cross-Layer Filtering:</strong> Hardware texture
+filtering (linear or nearest) occurs strictly within the selected 2D
+layer across the <span class="math inline">\(u\)</span> and <span
+class="math inline">\(v\)</span> axes. The GPU rounds the layer index to
+the nearest integer layer and does not interpolate between adjacent
+layers in the array.</li>
+<li><strong>Independent Mipmapping:</strong> Mipmaps are generated per
+layer. When minification occurs, filtering samples from the mip levels
+belonging exclusively to the specified layer.</li>
+<li><strong>Standard 2D Sampling:</strong> A standard
+<code>sampler2D</code> performs bilinear or trilinear filtering across
+the <span class="math inline">\(u\)</span> and <span
+class="math inline">\(v\)</span> dimensions of its single image and its
+corresponding mipmaps.</li>
+</ul>
+<h2 id="glsl-usage-and-syntax-comparison">GLSL Usage and Syntax
+Comparison</h2>
+<p>Sampling each type in GLSL requires different coordinate dimensions
+and sampler uniforms.</p>
+<h3 id="standard-2d-texture-sampler2d">Standard 2D Texture
+(<code>sampler2D</code>)</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> u_Texture<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec2</span> v_TexCoord<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Samples a single 2D texture using standard UV coordinates</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_Texture<span class="op">,</span> v_TexCoord<span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="2d-texture-array-sampler2darray">2D Texture Array
+(<code>sampler2DArray</code>)</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2DArray</span> u_TextureArray<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec2</span> v_TexCoord<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">flat</span> <span class="dt">in</span> <span class="dt">int</span> v_LayerIndex<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Samples a specific layer using a vec3(u, v, layerIndex)</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> arrayCoord <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span>v_TexCoord<span class="op">,</span> <span class="dt">float</span><span class="op">(</span>v_LayerIndex<span class="op">));</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_TextureArray<span class="op">,</span> arrayCoord<span class="op">);</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="performance-and-use-cases">Performance and Use Cases</h2>
+<p>Understanding when to choose <code>sampler2DArray</code> over
+<code>sampler2D</code> depends on rendering architecture and batching
+requirements.</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th><code>sampler2D</code></th>
+<th><code>sampler2DArray</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>OpenGL Target</strong></td>
+<td><code>GL_TEXTURE_2D</code></td>
+<td><code>GL_TEXTURE_2D_ARRAY</code></td>
+</tr>
+<tr>
+<td><strong>Coordinate Type</strong></td>
+<td><code>vec2(u, v)</code></td>
+<td><code>vec3(u, v, layer)</code></td>
+</tr>
+<tr>
+<td><strong>Batching Efficiency</strong></td>
+<td>Requires rebinding or atlasing</td>
+<td>High; draws many textures in one call</td>
+</tr>
+<tr>
+<td><strong>Bleeding Artifacts</strong></td>
+<td>Atlas seams require UV clamping/padding</td>
+<td>None; layer boundaries are hardware-isolated</td>
+</tr>
+<tr>
+<td><strong>Dimension Constraints</strong></td>
+<td>Any supported dimension</td>
+<td>All layers must share identical dimensions</td>
+</tr>
+</tbody>
+</table>
+<h3 id="benefits-of-texture-arrays-over-texture-atlases">Benefits of
+Texture Arrays Over Texture Atlases</h3>
+<p>Texture arrays are commonly used in terrain splatting, UI rendering,
+particle systems, and voxel engines to render multiple distinct surfaces
+in a single draw call. Unlike texture atlases—which pack multiple images
+into one giant 2D texture—texture arrays do not suffer from sub-texture
+coordinate bleeding or mipmap filtering artifacts at borders, and
+wrapping modes like <code>GL_REPEAT</code> function independently on
+every layer.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

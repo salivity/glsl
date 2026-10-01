@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atmospheric Rayleigh and Mie Scattering in GLSL - glsl</title>
+    <meta name="description" content="Atmospheric rendering in real-time computer graphics relies on simulating how sunlight interacts with particles suspended in a planetary atmosphere. Rayleigh scattering describes light interacting with air molecules smaller than the wavelength of light,">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/atmospheric-rayleigh-and-mie-scattering-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Atmospheric Rayleigh and Mie Scattering in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/atmospheric-rayleigh-and-mie-scattering-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Atmospheric rendering in real-time computer graphics relies on simulating how sunlight interacts with particles suspended in a planetary atmosphere. Rayleigh scattering describes light interacting with air molecules smaller than the wavelength of light," />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="atmospheric-rayleigh-and-mie-scattering-in-glsl">Atmospheric
+Rayleigh and Mie Scattering in GLSL</h1>
+<p>Atmospheric rendering in real-time computer graphics relies on
+simulating how sunlight interacts with particles suspended in a
+planetary atmosphere. Rayleigh scattering describes light interacting
+with air molecules smaller than the wavelength of light, producing the
+blue sky and reddish sunsets, while Mie scattering describes interaction
+with larger aerosol particles, yielding the haze and white glare around
+the sun. In GLSL, this phenomenon is simulated through spherical
+numerical integration—commonly known as ray marching—where shaders
+evaluate the radiative transfer equation across view rays passing
+through concentric planetary and atmospheric spheres to compute optical
+depth, transmittance, and in-scattered radiance.</p>
+<h2 id="planetary-geometry-and-atmospheric-density">Planetary Geometry
+and Atmospheric Density</h2>
+<p>The physical model treats the planet as a solid sphere of radius
+<span class="math inline">\(R_p\)</span> concentric with an outer
+atmospheric boundary sphere of radius <span
+class="math inline">\(R_a\)</span>. The altitude <span
+class="math inline">\(h\)</span> of any point <span
+class="math inline">\(\mathbf{x}\)</span> above the planetary surface is
+calculated as:</p>
+<p><span class="math display">\[h = \|\mathbf{x}\| - R_p\]</span></p>
+<p>Atmospheric density decreases exponentially with altitude according
+to the barometric formula. Two distinct particle densities are computed
+using their respective scale heights (<span class="math inline">\(H_R
+\approx 8000\,\text{m}\)</span> for air molecules, and <span
+class="math inline">\(H_M \approx 1200\,\text{m}\)</span> for
+aerosols):</p>
+<p><span class="math display">\[\rho_R(h) =
+\exp\left(-\frac{h}{H_R}\right), \quad \rho_M(h) =
+\exp\left(-\frac{h}{H_M}\right)\]</span></p>
+<p>In GLSL, ray-sphere intersection tests determine the entry point
+<span class="math inline">\(\mathbf{p}_{\text{start}}\)</span> and exit
+point <span class="math inline">\(\mathbf{p}_{\text{end}}\)</span> of
+the camera ray within the atmospheric shell:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> <span class="fu">raySphereIntersect</span><span class="op">(</span><span class="dt">vec3</span> ro<span class="op">,</span> <span class="dt">vec3</span> rd<span class="op">,</span> <span class="dt">float</span> rad<span class="op">,</span> <span class="dt">out</span> <span class="dt">float</span> t0<span class="op">,</span> <span class="dt">out</span> <span class="dt">float</span> t1<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> b <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>ro<span class="op">,</span> rd<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> c <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>ro<span class="op">,</span> ro<span class="op">)</span> <span class="op">-</span> rad <span class="op">*</span> rad<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d <span class="op">=</span> b <span class="op">*</span> b <span class="op">-</span> c<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>d <span class="op">&lt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="kw">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sqrtD <span class="op">=</span> <span class="bu">sqrt</span><span class="op">(</span>d<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    t0 <span class="op">=</span> <span class="op">-</span>b <span class="op">-</span> sqrtD<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    t1 <span class="op">=</span> <span class="op">-</span>b <span class="op">+</span> sqrtD<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="phase-functions-and-scattering-coefficients">Phase Functions and
+Scattering Coefficients</h2>
+<p>The directional distribution of scattered light is governed by phase
+functions dependent on the scattering angle <span
+class="math inline">\(\theta\)</span> (the angle between the view
+direction <span class="math inline">\(\mathbf{v}\)</span> and the sun
+direction <span class="math inline">\(\mathbf{l}\)</span>, where <span
+class="math inline">\(\mu = \cos\theta = \mathbf{v} \cdot
+\mathbf{l}\)</span>).</p>
+<h3 id="rayleigh-phase-function">Rayleigh Phase Function</h3>
+<p>Rayleigh scattering radiates almost symmetrically forward and
+backward:</p>
+<p><span class="math display">\[P_R(\mu) = \frac{3}{16\pi} (1 +
+\mu^2)\]</span></p>
+<p>The wavelength-dependent scattering coefficient <span
+class="math inline">\(\beta_R\)</span> dictates the color of the
+atmosphere:</p>
+<p><span class="math display">\[\beta_R = (5.8 \times 10^{-6}, 13.5
+\times 10^{-6}, 33.1 \times 10^{-6})\,\text{m}^{-1}\]</span></p>
+<h3 id="mie-phase-function">Mie Phase Function</h3>
+<p>Mie scattering produces strong forward scattering, typically
+approximated using the Cornette-Shanks or Henyey-Greenstein phase
+function with an asymmetry factor <span class="math inline">\(g \in
+[0.75, 0.99]\)</span>:</p>
+<p><span class="math display">\[P_M(\mu) = \frac{3}{8\pi} \frac{(1 -
+g^2)(1 + \mu^2)}{(2 + g^2)(1 + g^2 - 2g\mu)^{3/2}}\]</span></p>
+<p>The Mie scattering coefficient <span
+class="math inline">\(\beta_M\)</span> is generally constant across
+visible wavelengths:</p>
+<p><span class="math display">\[\beta_M \approx 21.0 \times
+10^{-6}\,\text{m}^{-1}\]</span></p>
+<h2 id="spherical-integration-via-ray-marching">Spherical Integration
+via Ray Marching</h2>
+<p>The total in-scattered light reaching the camera along a ray of
+length <span class="math inline">\(L\)</span> requires computing a
+double integral. The outer integral samples points along the camera view
+ray, while the inner integral computes the optical depth along the light
+ray from each sample point to the top of the atmosphere.</p>
+<p>For a point along the view ray, optical depth represents the integral
+of density:</p>
+<p><span class="math display">\[\tau(A, B) = \beta_R \int_A^B
+\rho_R(h(s))\,ds + \beta_M \cdot 1.11 \int_A^B
+\rho_M(h(s))\,ds\]</span></p>
+<p>Transmittance (attenuation) is derived using the Beer-Lambert
+law:</p>
+<p><span class="math display">\[T(A, B) = \exp(-\tau(A, B))\]</span></p>
+<p>The accumulated in-scattering integral is formulated as:</p>
+<p><span class="math display">\[I = \int_0^L T(\mathbf{x}_0,
+\mathbf{x}(s)) \cdot T(\mathbf{x}(s), \mathbf{x}_{\text{sun}}) \cdot
+\left[ \beta_R \rho_R(h(s)) P_R(\mu) + \beta_M \rho_M(h(s)) P_M(\mu)
+\right] ds\]</span></p>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>The following fragment shader function executes the spherical
+integration using numerical Riemann sums:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define PRIMARY_STEPS 32</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#define LIGHT_STEPS 8</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> PI <span class="op">=</span> <span class="fl">3.14159265359</span><span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">vec3</span> BETA_R <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">5.8e-6</span><span class="op">,</span> <span class="fl">13.5e-6</span><span class="op">,</span> <span class="fl">33.1e-6</span><span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">vec3</span> BETA_M <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">21.0e-6</span><span class="op">);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> H_R <span class="op">=</span> <span class="fl">8000.0</span><span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> H_M <span class="op">=</span> <span class="fl">1200.0</span><span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> G <span class="op">=</span> <span class="fl">0.76</span><span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">integrateAtmosphere</span><span class="op">(</span><span class="dt">vec3</span> rayOrigin<span class="op">,</span> <span class="dt">vec3</span> rayDir<span class="op">,</span> <span class="dt">vec3</span> sunDir<span class="op">,</span> <span class="dt">float</span> tMin<span class="op">,</span> <span class="dt">float</span> tMax<span class="op">,</span> <span class="dt">float</span> rPlanet<span class="op">,</span> <span class="dt">float</span> rAtmo<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> stepSize <span class="op">=</span> <span class="op">(</span>tMax <span class="op">-</span> tMin<span class="op">)</span> <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>PRIMARY_STEPS<span class="op">);</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> currentPos <span class="op">=</span> rayOrigin <span class="op">+</span> rayDir <span class="op">*</span> <span class="op">(</span>tMin <span class="op">+</span> stepSize <span class="op">*</span> <span class="fl">0.5</span><span class="op">);</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> totalRayleigh <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> totalMie <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> optDepthR <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> optDepthM <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosTheta <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>rayDir<span class="op">,</span> sunDir<span class="op">);</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosTheta2 <span class="op">=</span> cosTheta <span class="op">*</span> cosTheta<span class="op">;</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Phase functions</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> phaseR <span class="op">=</span> <span class="op">(</span><span class="fl">3.0</span> <span class="op">/</span> <span class="op">(</span><span class="fl">16.0</span> <span class="op">*</span> PI<span class="op">))</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">+</span> cosTheta2<span class="op">);</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> phaseM <span class="op">=</span> <span class="op">(</span><span class="fl">3.0</span> <span class="op">/</span> <span class="op">(</span><span class="fl">8.0</span> <span class="op">*</span> PI<span class="op">))</span> <span class="op">*</span> <span class="op">((</span><span class="fl">1.0</span> <span class="op">-</span> G <span class="op">*</span> G<span class="op">)</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">+</span> cosTheta2<span class="op">))</span> <span class="op">/</span> </span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>                   <span class="op">((</span><span class="fl">2.0</span> <span class="op">+</span> G <span class="op">*</span> G<span class="op">)</span> <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">+</span> G <span class="op">*</span> G <span class="op">-</span> <span class="fl">2.0</span> <span class="op">*</span> G <span class="op">*</span> cosTheta<span class="op">,</span> <span class="fl">1.5</span><span class="op">));</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> PRIMARY_STEPS<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> h <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>currentPos<span class="op">)</span> <span class="op">-</span> rPlanet<span class="op">;</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>h <span class="op">&lt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="kw">break</span><span class="op">;</span> <span class="co">// Intersected planet</span></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> hr <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>h <span class="op">/</span> H_R<span class="op">)</span> <span class="op">*</span> stepSize<span class="op">;</span></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> hm <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>h <span class="op">/</span> H_M<span class="op">)</span> <span class="op">*</span> stepSize<span class="op">;</span></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>        optDepthR <span class="op">+=</span> hr<span class="op">;</span></span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>        optDepthM <span class="op">+=</span> hm<span class="op">;</span></span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Inner ray march toward the sun</span></span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> tSun0<span class="op">,</span> tSun1<span class="op">;</span></span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>        <span class="fu">raySphereIntersect</span><span class="op">(</span>currentPos<span class="op">,</span> sunDir<span class="op">,</span> rAtmo<span class="op">,</span> tSun0<span class="op">,</span> tSun1<span class="op">);</span></span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> sunStepSize <span class="op">=</span> tSun1 <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>LIGHT_STEPS<span class="op">);</span></span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> sunPos <span class="op">=</span> currentPos <span class="op">+</span> sunDir <span class="op">*</span> <span class="op">(</span>sunStepSize <span class="op">*</span> <span class="fl">0.5</span><span class="op">);</span></span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> sunOptDepthR <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> sunOptDepthM <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>        <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> j <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> LIGHT_STEPS<span class="op">;</span> <span class="op">++</span>j<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>            <span class="dt">float</span> sunH <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>sunPos<span class="op">)</span> <span class="op">-</span> rPlanet<span class="op">;</span></span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a>            sunOptDepthR <span class="op">+=</span> <span class="bu">exp</span><span class="op">(-</span>sunH <span class="op">/</span> H_R<span class="op">)</span> <span class="op">*</span> sunStepSize<span class="op">;</span></span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>            sunOptDepthM <span class="op">+=</span> <span class="bu">exp</span><span class="op">(-</span>sunH <span class="op">/</span> H_M<span class="op">)</span> <span class="op">*</span> sunStepSize<span class="op">;</span></span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>            sunPos <span class="op">+=</span> sunDir <span class="op">*</span> sunStepSize<span class="op">;</span></span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-55"><a href="#cb2-55" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> tau <span class="op">=</span> BETA_R <span class="op">*</span> <span class="op">(</span>optDepthR <span class="op">+</span> sunOptDepthR<span class="op">)</span> <span class="op">+</span> BETA_M <span class="op">*</span> <span class="fl">1.11</span> <span class="op">*</span> <span class="op">(</span>optDepthM <span class="op">+</span> sunOptDepthM<span class="op">);</span></span>
+<span id="cb2-56"><a href="#cb2-56" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> attenuation <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>tau<span class="op">);</span></span>
+<span id="cb2-57"><a href="#cb2-57" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-58"><a href="#cb2-58" aria-hidden="true" tabindex="-1"></a>        totalRayleigh <span class="op">+=</span> attenuation <span class="op">*</span> hr<span class="op">;</span></span>
+<span id="cb2-59"><a href="#cb2-59" aria-hidden="true" tabindex="-1"></a>        totalMie <span class="op">+=</span> attenuation <span class="op">*</span> hm<span class="op">;</span></span>
+<span id="cb2-60"><a href="#cb2-60" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-61"><a href="#cb2-61" aria-hidden="true" tabindex="-1"></a>        currentPos <span class="op">+=</span> rayDir <span class="op">*</span> stepSize<span class="op">;</span></span>
+<span id="cb2-62"><a href="#cb2-62" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-63"><a href="#cb2-63" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-64"><a href="#cb2-64" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span>totalRayleigh <span class="op">*</span> BETA_R <span class="op">*</span> phaseR <span class="op">+</span> totalMie <span class="op">*</span> BETA_M <span class="op">*</span> phaseM<span class="op">);</span></span>
+<span id="cb2-65"><a href="#cb2-65" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="performance-optimizations">Performance Optimizations</h2>
+<p>Direct execution of <span class="math inline">\(N \times M\)</span>
+nested integration loops per pixel is computationally intensive for
+real-time applications. Common real-time optimizations include:</p>
+<ol type="1">
+<li><strong>Look-Up Tables (LUTs):</strong> Precomputing the optical
+depth <span class="math inline">\(\tau(\mathbf{x}, \mathbf{l})\)</span>
+as a 2D texture parameterized by altitude and sun zenith angle
+eliminates the inner ray march entirely, reducing the runtime complexity
+from <span class="math inline">\(\mathcal{O}(N \times M)\)</span> to
+<span class="math inline">\(\mathcal{O}(N)\)</span>.</li>
+<li><strong>Multiple Scattering Approximations:</strong> Single
+scattering ignores secondary illumination from the atmosphere and ground
+reflections. Real-time engines account for higher-order scattering by
+compounding the precomputed transmittance using dual-scattering terms or
+parameterizing an ambient energy-preservation factor.</li>
+<li><strong>Temporal Sampling:</strong> Offsetting the ray march sample
+positions with interleaved gradient noise or blue noise, combined with
+temporal anti-aliasing (TAA), allows equivalent visual quality using as
+few as 8 to 16 primary steps.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

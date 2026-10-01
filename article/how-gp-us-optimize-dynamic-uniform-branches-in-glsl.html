@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GPUs Optimize Dynamic Uniform Branches in GLSL - glsl</title>
+    <meta name="description" content="In modern graphics programming, dynamic uniform branches allow a shader to conditionally execute code based on values that are identical across all invocations in an execution group. This article explains how GPU compilers recognize these uniform conditi">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-gp-us-optimize-dynamic-uniform-branches-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GPUs Optimize Dynamic Uniform Branches in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-gp-us-optimize-dynamic-uniform-branches-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In modern graphics programming, dynamic uniform branches allow a shader to conditionally execute code based on values that are identical across all invocations in an execution group. This article explains how GPU compilers recognize these uniform conditi" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-gpus-optimize-dynamic-uniform-branches-in-glsl">How GPUs
+Optimize Dynamic Uniform Branches in GLSL</h1>
+<p>In modern graphics programming, dynamic uniform branches allow a
+shader to conditionally execute code based on values that are identical
+across all invocations in an execution group. This article explains how
+GPU compilers recognize these uniform conditions, leverage divergence
+analysis, and lower the control flow to dedicated scalar hardware
+instead of relying on expensive vector masking, eliminating branch
+divergence penalties and freeing up compute resources.</p>
+<h3 id="the-role-of-dynamic-uniformity">The Role of Dynamic
+Uniformity</h3>
+<p>In GLSL, a dynamic uniform expression is an expression whose value is
+guaranteed to be identical for all shader invocations within an
+invocation group—such as a wavefront on AMD or a warp on NVIDIA—even if
+the value changes dynamically between draws or dispatches. Examples
+include uniform buffer values, push constants, and variables computed
+strictly from uniform inputs.</p>
+<p>Without uniform optimization, traditional Single Instruction,
+Multiple Threads (SIMT) architectures must assume branches could
+diverge. Divergence forces the GPU to execute both the <code>if</code>
+and <code>else</code> blocks across all threads, disabling individual
+lanes via an execution mask. This serializes execution paths and
+degrades performance.</p>
+<h3 id="divergence-analysis-in-the-compiler">Divergence Analysis in the
+Compiler</h3>
+<p>When the GPU driver compiles a GLSL shader (often from an
+intermediate representation like SPIR-V), it executes an optimization
+pass known as <strong>divergence analysis</strong>.</p>
+<ol type="1">
+<li><strong>Source Tracking:</strong> The compiler constructs a Static
+Single Assignment (SSA) data-flow graph and flags the origins of all
+inputs. Anything originating from descriptors, uniform registers, or
+workgroup-invariant values is marked as uniform.</li>
+<li><strong>Propagation:</strong> Operations applied to uniform inputs
+are recursively tagged as uniform.</li>
+<li><strong>Control-Flow Evaluation:</strong> When the compiler
+encounters an <code>if-else</code> block, it checks the divergence state
+of the conditional expression. If the condition is tagged as uniform,
+the compiler proves that every thread within the wave will evaluate to
+the same Boolean result.</li>
+</ol>
+<h3 id="lowering-to-scalar-execution-units">Lowering to Scalar Execution
+Units</h3>
+<p>Modern GPU architectures typically feature a hybrid compute design
+containing both Vector Arithmetic Logic Units (VALUs) and Scalar
+Arithmetic Logic Units (SALUs). VALUs operate across 32 or 64 data lanes
+simultaneously, while the SALU operates on a single value shared across
+the entire wavefront.</p>
+<p>When the compiler identifies a dynamic uniform condition:</p>
+<ul>
+<li><strong>Scalar Comparison:</strong> The comparison instruction is
+emitted as a scalar instruction (for example, <code>s_cmp_*</code> on
+AMD architectures) rather than a vector comparison instruction. The
+result is written directly to a single scalar register or a special
+condition code register, rather than writing a multi-bit execution
+mask.</li>
+<li><strong>Scalar Branch Instruction:</strong> Instead of manipulating
+execution thread masks (like <code>EXEC</code> or warp active masks),
+the driver emits a scalar jump instruction (such as AMD's
+<code>s_cbranch</code> or NVIDIA's uniform branch instructions).</li>
+<li><strong>Direct PC Manipulation:</strong> The program counter (PC) of
+the entire wavefront jumps directly to the target block.</li>
+</ul>
+<h3 id="execution-and-performance-benefits">Execution and Performance
+Benefits</h3>
+<p>By converting dynamic uniform branches into scalar operations, the
+GPU achieves several low-level performance advantages:</p>
+<ul>
+<li><strong>Zero Divergence Overhead:</strong> Because the entire wave
+takes the jump collectively, there is no serialization. The unselected
+branch path is skipped entirely without executing instructions with
+masked-out threads.</li>
+<li><strong>Reduced Register Pressure:</strong> Scalar conditions and
+operations use Scalar General-Purpose Registers (SGPRs) instead of
+Vector General-Purpose Registers (VGPRs). Because VGPRs are often the
+primary bottleneck for GPU occupancy, shifting state to SGPRs increases
+the number of concurrent waves the hardware can schedule.</li>
+<li><strong>ALU Offloading:</strong> Evaluating uniform math on the SALU
+frees up the VALUs to continue processing parallel geometry or pixel
+data, improving instruction-level parallelism within the compute
+core.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

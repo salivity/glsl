@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inline Ray Query vs Ray Tracing Pipeline in GLSL - glsl</title>
+    <meta name="description" content="Inline ray queries and full ray tracing pipeline dispatches represent two distinct paradigms for hardware-accelerated ray tracing in GLSL and Vulkan. Inline ray query (GLEXTrayquery) allows developers to cast rays synchronously from within existing progr">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/inline-ray-query-vs-ray-tracing-pipeline-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Inline Ray Query vs Ray Tracing Pipeline in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/inline-ray-query-vs-ray-tracing-pipeline-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Inline ray queries and full ray tracing pipeline dispatches represent two distinct paradigms for hardware-accelerated ray tracing in GLSL and Vulkan. Inline ray query (GLEXTrayquery) allows developers to cast rays synchronously from within existing progr" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="inline-ray-query-vs-ray-tracing-pipeline-in-glsl">Inline Ray
+Query vs Ray Tracing Pipeline in GLSL</h1>
+<p>Inline ray queries and full ray tracing pipeline dispatches represent
+two distinct paradigms for hardware-accelerated ray tracing in GLSL and
+Vulkan. Inline ray query (<code>GL_EXT_ray_query</code>) allows
+developers to cast rays synchronously from within existing programmable
+stages, such as compute or fragment shaders, using imperative traversal
+loops. In contrast, the full ray tracing pipeline
+(<code>GL_EXT_ray_tracing</code>) introduces an entirely separate
+execution model composed of specialized stages—ray generation,
+closest-hit, any-hit, intersection, and miss shaders—driven by a Shader
+Binding Table (SBT). This article outlines the architectural,
+performance, and implementation differences between these two execution
+strategies.</p>
+<h3 id="execution-model-and-pipeline-architecture">Execution Model and
+Pipeline Architecture</h3>
+<p>The full ray tracing pipeline requires dispatching work through a
+specialized command (such as <code>vkCmdTraceRaysKHR</code>). The
+execution flows through distinct stages: a ray generation shader
+initiates rays via <code>traceRayEXT()</code>, the hardware traversal
+engine intersects rays with acceleration structures, and control
+branches dynamically to any-hit, closest-hit, or miss shaders based on
+hit results.</p>
+<p>Inline ray queries eliminate this dedicated pipeline structure. A ray
+query is executed as an intrinsic object directly within an existing
+shader stage (vertex, fragment, compute, or mesh). Using functions like
+<code>rayQueryInitializeEXT()</code> and
+<code>rayQueryProceedEXT()</code>, the shader acts as the driver of the
+ray traversal, stepping through intersections sequentially in a standard
+execution thread without invoking secondary shaders.</p>
+<h3 id="control-flow-and-shading-dispatch">Control Flow and Shading
+Dispatch</h3>
+<p>In the full pipeline dispatch, material shading is handled
+polymorphically. When an intersection occurs, the hardware automatically
+resolves the Shader Binding Table to invoke the precise closest-hit
+shader associated with the intersected geometry. This enables clean
+separation of material logic, complex recursive ray casting, and
+scalable scene rendering involving thousands of distinct materials.</p>
+<p>Ray queries provide no automatic shader dispatching. The calling
+shader retains total control throughout traversal. If an intersection is
+confirmed via <code>rayQueryGetIntersectionTypeEXT()</code>, the caller
+must manually handle the resulting shading logic, often via branch
+statements or data lookups based on instance and primitive IDs.
+Consequently, ray queries are typically restricted to binary tests
+(e.g., visibility or shadow testing) or simple materials to avoid
+massive shader branching.</p>
+<h3 id="memory-overhead-and-register-pressure">Memory Overhead and
+Register Pressure</h3>
+<p>The full ray tracing pipeline relies on ray payloads and hit
+attributes to pass data across shader stages. The driver manages
+execution states, call stacks, and thread scheduling across multiple
+shader invocations, which can lead to spill-to-memory overhead if ray
+payloads or recursion depths are large.</p>
+<p>Inline ray queries keep ray state local to the calling shader
+invocation. While this eliminates call-stack overhead and context
+switching, it stores the traversal state directly in the calling
+thread's register file or local scratch memory. This substantially
+increases register pressure in complex shaders, potentially reducing
+overall thread occupancy (wavefront/warp occupancy) on the GPU.</p>
+<h3 id="divergence-and-scheduling">Divergence and Scheduling</h3>
+<p>Full ray tracing pipelines allow modern GPU architectures to reorder
+and re-pack threads dynamically to mitigate divergence caused by complex
+ray paths and varying material evaluations. When divergent rays hit
+different surfaces, modern hardware schedulers can group similar hits to
+maximize SIMD efficiency.</p>
+<p>Ray queries do not benefit from this dynamic thread regrouping.
+Because traversal is executed in-line inside standard SIMD warps, rays
+that complete traversal early must idle while neighboring divergent rays
+in the same warp continue their traversal loops. This makes ray queries
+prone to SIMD underutilization when tracing divergent, incoherent paths,
+such as diffuse global illumination.</p>
+<h3 id="typical-use-cases">Typical Use Cases</h3>
+<ul>
+<li><strong>Inline Ray Query (<code>GL_EXT_ray_query</code>):</strong>
+Best suited for localized, coherent visibility queries integrated into
+existing rasterization or compute passes. Common implementations include
+screen-space shadow verification, ambient occlusion, directional light
+shadows, and physics or AI line-of-sight tests.</li>
+<li><strong>Ray Tracing Pipeline
+(<code>GL_EXT_ray_tracing</code>):</strong> Best suited for complex path
+tracing, primary ray generation, recursive reflections, and scenes with
+extensive material diversity that benefit from modular hit shaders and
+specialized hardware thread scheduling.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screen-Space Reflection Edge Fade in GLSL - glsl</title>
+    <meta name="description" content="Screen-space reflections (SSR) produce harsh visual cutoffs when reflection rays traverse beyond the visible viewport borders. Implementing boundary vignette attenuation solves this issue by computing an attenuation factor based on the distance between t">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/screen-space-reflection-edge-fade-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Screen-Space Reflection Edge Fade in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/screen-space-reflection-edge-fade-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Screen-space reflections (SSR) produce harsh visual cutoffs when reflection rays traverse beyond the visible viewport borders. Implementing boundary vignette attenuation solves this issue by computing an attenuation factor based on the distance between t" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="screen-space-reflection-edge-fade-in-glsl">Screen-Space
+Reflection Edge Fade in GLSL</h1>
+<p>Screen-space reflections (SSR) produce harsh visual cutoffs when
+reflection rays traverse beyond the visible viewport borders.
+Implementing boundary vignette attenuation solves this issue by
+computing an attenuation factor based on the distance between the
+projected sample UVs and the screen boundaries, smoothly fading the
+reflection color to zero as it approaches the viewport perimeter.</p>
+<h2 id="the-mathematical-formulas">The Mathematical Formulas</h2>
+<p>There are two primary mathematical approaches used in GLSL to
+calculate screen-space boundary attenuation:</p>
+<h3 id="1-distance-to-edge-with-smoothstep-separable">1.
+Distance-to-Edge with Smoothstep (Separable)</h3>
+<p>This approach computes the linear distance to the nearest edge on
+each axis independently, applies a Hermite interpolation
+(<code>smoothstep</code>) across an edge threshold, and multiplies the
+axes together.</p>
+<p>Given UV coordinates <span class="math inline">\(\mathbf{uv} \in [0,
+1]^2\)</span> and a fade margin <span class="math inline">\(m \in (0,
+0.5]\)</span>:</p>
+<p><span class="math display">\[\mathbf{d} = \min(\mathbf{uv}, 1.0 -
+\mathbf{uv})\]</span> <span class="math display">\[\mathbf{fade} =
+\text{smoothstep}(0.0, m, \mathbf{d})\]</span> <span
+class="math display">\[\text{attenuation} = \mathbf{fade}_x \cdot
+\mathbf{fade}_y\]</span></p>
+<h3 id="2-normalized-device-coordinate-ndc-chebyshev-metric">2.
+Normalized Device Coordinate (NDC) Chebyshev Metric</h3>
+<p>Alternatively, you can transform the UVs into normalized coordinates
+centered at the origin <span class="math inline">\([-1, 1]\)</span>,
+compute the maximum absolute deviation (Chebyshev distance), and fade
+out toward the outer edge.</p>
+<p>Given UV coordinates <span class="math inline">\(\mathbf{uv} \in [0,
+1]^2\)</span> and a fade start threshold <span class="math inline">\(t
+\in [0, 1)\)</span>:</p>
+<p><span class="math display">\[\mathbf{ndc} = |\mathbf{uv} \cdot 2.0 -
+1.0|\]</span> <span class="math display">\[d_{\max} =
+\max(\mathbf{ndc}_x, \mathbf{ndc}_y)\]</span> <span
+class="math display">\[\text{attenuation} = 1.0 - \text{smoothstep}(t,
+1.0, d_{\max})\]</span></p>
+<hr />
+<h2 id="glsl-implementations">GLSL Implementations</h2>
+<h3 id="method-1-separable-edge-attenuation">Method 1: Separable Edge
+Attenuation</h3>
+<p>This function calculates smooth fading individually on both the X and
+Y axes, producing rounded corner falloffs.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">/**</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co"> * Calculates vignette attenuation for screen edges.</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param uv Normalized screen-space texture coordinates in [0, 1].</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param edgeMargin The thickness of the fade zone (typically 0.05 to 0.2).</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"> * @return Attenuation factor in the range [0.0, 1.0].</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"> */</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">calculateSSREdgeFade</span><span class="op">(</span><span class="dt">vec2</span> uv<span class="op">,</span> <span class="dt">float</span> edgeMargin<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> edgeDist <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>uv<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">1.0</span><span class="op">)</span> <span class="op">-</span> uv<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> fade <span class="op">=</span> <span class="bu">smoothstep</span><span class="op">(</span><span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">),</span> <span class="dt">vec2</span><span class="op">(</span>edgeMargin<span class="op">),</span> edgeDist<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> fade<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> fade<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="method-2-center-offset-maximum-bound-fade">Method 2:
+Center-Offset Maximum Bound Fade</h3>
+<p>This method measures the distance from the center of the viewport to
+the nearest outer edge using normalized device coordinates.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">/**</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="co"> * Calculates vignette attenuation based on maximum offset from the screen center.</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param uv Normalized screen-space texture coordinates in [0, 1].</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param fadeStart Normalized distance from center where fade begins [0.0, 1.0].</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="co"> * @return Attenuation factor in the range [0.0, 1.0].</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co"> */</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">calculateSSREdgeFadeChebyshev</span><span class="op">(</span><span class="dt">vec2</span> uv<span class="op">,</span> <span class="dt">float</span> fadeStart<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> ndc <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span>uv <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> maxDist <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>ndc<span class="op">.</span><span class="fu">x</span><span class="op">,</span> ndc<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">clamp</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> <span class="bu">smoothstep</span><span class="op">(</span>fadeStart<span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> maxDist<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<hr />
+<h2 id="applying-the-vignette-to-reflections">Applying the Vignette to
+Reflections</h2>
+<p>In an SSR shader pipeline, the attenuation factor scales the incoming
+reflected radiance before compositing with the scene color:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> hitUV <span class="op">=</span> rayMarchResult<span class="op">.</span><span class="fu">xy</span><span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> hit <span class="op">=</span> rayMarchResult<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>hit<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> reflectionColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>sceneColorTexture<span class="op">,</span> hitUV<span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute boundary fade</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> edgeFactor <span class="op">=</span> <span class="fu">calculateSSREdgeFade</span><span class="op">(</span>hitUV<span class="op">,</span> <span class="fl">0.1</span><span class="op">);</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Combine with other attenuation factors (e.g., ray distance, roughness)</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> finalAlpha <span class="op">=</span> edgeFactor <span class="op">*</span> hitConfidence<span class="op">;</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    outColor <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>baseColor<span class="op">,</span> reflectionColor<span class="op">,</span> finalAlpha<span class="op">);</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This ensures that any reflection ray intersecting scene geometry near
+the edges of the frame diminishes smoothly without popping or displaying
+clipping artifacts.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

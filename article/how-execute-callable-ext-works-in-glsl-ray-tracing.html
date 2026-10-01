@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How executeCallableEXT Works in GLSL Ray Tracing - glsl</title>
+    <meta name="description" content="This article explains how the executeCallableEXT function executes a callable shader routine in GLSL under the GLEXTraytracing extension. It outlines the mechanics of the dynamic dispatch process, the mapping of the call to the Shader Binding Table (SBT)">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-execute-callable-ext-works-in-glsl-ray-tracing">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How executeCallableEXT Works in GLSL Ray Tracing - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-execute-callable-ext-works-in-glsl-ray-tracing" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the executeCallableEXT function executes a callable shader routine in GLSL under the GLEXTraytracing extension. It outlines the mechanics of the dynamic dispatch process, the mapping of the call to the Shader Binding Table (SBT)" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-executecallableext-works-in-glsl-ray-tracing">How
+executeCallableEXT Works in GLSL Ray Tracing</h1>
+<p>This article explains how the <code>executeCallableEXT</code>
+function executes a callable shader routine in GLSL under the
+<code>GL_EXT_ray_tracing</code> extension. It outlines the mechanics of
+the dynamic dispatch process, the mapping of the call to the Shader
+Binding Table (SBT), and how parameters are communicated between the
+caller and the invoked shader.</p>
+<p>In modern ray tracing pipelines, <code>executeCallableEXT</code>
+allows ray generation, closest hit, miss, and other callable shaders to
+invoke execution blocks dynamically. Unlike hardcoded function calls,
+callable shaders are dispatched dynamically at runtime, behaving
+similarly to a virtual function call or an indirect jump within the GPU
+pipeline.</p>
+<p>The function takes the following signature:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">executeCallableEXT</span><span class="op">(</span><span class="dt">uint</span> sbtRecordIndex<span class="op">,</span> <span class="dt">int</span> callableDataLocation<span class="op">);</span></span></code></pre></div>
+<h3 id="1-shader-binding-table-sbt-resolution">1. Shader Binding Table
+(SBT) Resolution</h3>
+<p>When <code>executeCallableEXT</code> is executed, the GPU uses the
+first argument, <code>sbtRecordIndex</code>, to locate the appropriate
+shader routine in the Shader Binding Table.</p>
+<p>The pipeline's host setup defines a callable shader binding region
+via <code>VkStridedDeviceAddressRegionKHR</code>. When the shader
+executes:</p>
+<ul>
+<li>The GPU calculates the memory address of the target shader handle
+using the formula:
+<code>targetAddress = callableBaseAddress + (sbtRecordIndex * callableStride)</code>.</li>
+<li>The shader record stored at that address contains the shader group
+handle corresponding to the compiled callable shader, along with any
+embedded local shader parameters.</li>
+<li>Control flow transfers to the callable shader specified by this
+record.</li>
+</ul>
+<h3 id="2-passing-data-with-storage-qualifiers">2. Passing Data with
+Storage Qualifiers</h3>
+<p>The second argument, <code>callableDataLocation</code>, links input
+and output parameters between the invoking shader and the callable
+shader without using an explicit parameter list.</p>
+<p>Data communication relies on custom storage qualifiers matched by
+location indices:</p>
+<ul>
+<li>In the <strong>calling shader</strong>, data is declared using the
+<code>callableDataEXT</code> qualifier:
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> callableDataEXT MyDataBlock <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> parameter1<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> result<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> myData<span class="op">;</span></span></code></pre></div></li>
+<li>In the <strong>callable shader</strong>, the corresponding data is
+received using the <code>callableDataInEXT</code> qualifier at the
+identical location:
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> callableDataInEXT MyDataBlock <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> parameter1<span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> result<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> receivedData<span class="op">;</span></span></code></pre></div></li>
+</ul>
+<p>The GPU passes an effective pointer to this memory payload. Any
+modifications made by the callable shader to variables marked with
+<code>callableDataInEXT</code> directly alter the payload defined in the
+caller.</p>
+<h3 id="3-execution-and-return-flow">3. Execution and Return Flow</h3>
+<p>Calling <code>executeCallableEXT</code> suspends execution of the
+calling shader. The GPU switches execution contexts to the target
+callable shader entry point (<code>main()</code>).</p>
+<p>Once the callable shader reaches the end of its routine:</p>
+<ul>
+<li>Execution control returns to the caller immediately after the
+<code>executeCallableEXT</code> instruction.</li>
+<li>The caller can then read any modified values stored in the
+<code>callableDataEXT</code> structure.</li>
+<li>Callable shaders can also recursively invoke other callable shaders
+using <code>executeCallableEXT</code>, provided the implementation's
+maximum call depth limit (<code>maxRayDispatchInvocationCount</code> /
+call depth settings) is not exceeded.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

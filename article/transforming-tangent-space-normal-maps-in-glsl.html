@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transforming Tangent Space Normal Maps in GLSL - glsl</title>
+    <meta name="description" content="This article explains how tangent, bitangent, and normal vectors form the TBN matrix to transform tangent-space normal maps into world or view space within OpenGL Shading Language (GLSL). Normal maps store surface perturbations relative to an arbitrary 2">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/transforming-tangent-space-normal-maps-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Transforming Tangent Space Normal Maps in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/transforming-tangent-space-normal-maps-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how tangent, bitangent, and normal vectors form the TBN matrix to transform tangent-space normal maps into world or view space within OpenGL Shading Language (GLSL). Normal maps store surface perturbations relative to an arbitrary 2" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="transforming-tangent-space-normal-maps-in-glsl">Transforming
+Tangent Space Normal Maps in GLSL</h1>
+<p>This article explains how tangent, bitangent, and normal vectors form
+the TBN matrix to transform tangent-space normal maps into world or view
+space within OpenGL Shading Language (GLSL). Normal maps store surface
+perturbations relative to an arbitrary 2D texture plane, requiring a
+dynamic coordinate transformation to interact correctly with scene
+lighting. By understanding the geometric roles of the tangent,
+bitangent, and normal vectors, you will learn how to construct the TBN
+basis matrix, sample normal maps, and apply the transformations directly
+inside your vertex and fragment shaders.</p>
+<h3 id="understanding-tangent-space">Understanding Tangent Space</h3>
+<p>A normal map encodes 3D vector directions as RGB color values. In a
+standard tangent-space normal map:</p>
+<ul>
+<li>The <strong>Red</strong> channel corresponds to the X-axis
+(left/right).</li>
+<li>The <strong>Green</strong> channel corresponds to the Y-axis
+(up/down).</li>
+<li>The <strong>Blue</strong> channel corresponds to the Z-axis
+(pointing directly outwards from the surface).</li>
+</ul>
+<p>Because these vectors point predominantly along the positive Z-axis,
+tangent-space normal maps appear predominantly blue. However, these
+vectors are local to the 2D surface of the geometry. To calculate
+lighting, the renderer must translate these local offsets into the
+coordinate space where lighting occurs—typically world space or view
+(camera) space.</p>
+<h3 id="the-role-of-tangent-bitangent-and-normal-vectors">The Role of
+Tangent, Bitangent, and Normal Vectors</h3>
+<p>To align the normal map with the 3D surface, a local coordinate frame
+is defined for each vertex using three mutually perpendicular unit
+vectors:</p>
+<ol type="1">
+<li><strong>Normal (<span class="math inline">\(N\)</span>):</strong>
+The vector perpendicular to the triangle's surface.</li>
+<li><strong>Tangent (<span class="math inline">\(T\)</span>):</strong>
+The vector lying within the surface plane, aligned with the positive
+horizontal (<span class="math inline">\(U\)</span>) axis of the texture
+coordinates.</li>
+<li><strong>Bitangent (<span class="math inline">\(B\)</span>):</strong>
+The vector lying within the surface plane, aligned with the positive
+vertical (<span class="math inline">\(V\)</span>) axis of the texture
+coordinates.</li>
+</ol>
+<p>Together, these three vectors form an orthonormal basis known as the
+<strong>TBN matrix</strong>. The bitangent can be supplied per-vertex or
+derived mathematically in the vertex shader by computing the cross
+product of the normal and the tangent, often multiplied by a scalar to
+account for UV mirroring:</p>
+<p><span class="math display">\[\mathbf{B} = (\mathbf{N} \times
+\mathbf{T}) \cdot \text{handedness}\]</span></p>
+<h3 id="constructing-the-tbn-matrix-in-glsl">Constructing the TBN Matrix
+in GLSL</h3>
+<p>Transforming vectors between spaces can be done in two ways:
+transforming light and view vectors into tangent space within the vertex
+shader, or transforming the sampled normal into world/view space within
+the fragment shader. The latter is preferred in modern deferred and
+physically based rendering pipelines.</p>
+<h4 id="1-vertex-shader-implementation">1. Vertex Shader
+Implementation</h4>
+<p>In the vertex shader, the incoming attributes for normal and tangent
+are transformed by the model or normal matrix. The Gram-Schmidt process
+is typically applied to guarantee that the tangent remains perfectly
+perpendicular to the normal after interpolation and transformation.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> aPos<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> aNormal<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec2</span> aTexCoords<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">3</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec4</span> aTangent<span class="op">;</span> <span class="co">// xyz: tangent, w: handedness</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec2</span> TexCoords<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">mat3</span> vTBN<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> model<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat3</span> normalMatrix<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    TexCoords <span class="op">=</span> aTexCoords<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Transform vectors to world space</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> N <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>normalMatrix <span class="op">*</span> aNormal<span class="op">);</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> T <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>normalMatrix <span class="op">*</span> aTangent<span class="op">.</span><span class="fu">xyz</span><span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Gram-Schmidt re-orthogonalization</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    T <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>T <span class="op">-</span> <span class="bu">dot</span><span class="op">(</span>T<span class="op">,</span> N<span class="op">)</span> <span class="op">*</span> N<span class="op">);</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate bitangent</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> B <span class="op">=</span> <span class="bu">cross</span><span class="op">(</span>N<span class="op">,</span> T<span class="op">)</span> <span class="op">*</span> aTangent<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Construct the TBN matrix</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    vTBN <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span>T<span class="op">,</span> B<span class="op">,</span> N<span class="op">);</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> model <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>aPos<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h4 id="2-fragment-shader-implementation">2. Fragment Shader
+Implementation</h4>
+<p>In the fragment shader, the color from the normal map is read and
+converted from the normalized <span class="math inline">\([0,
+1]\)</span> color range back to the <span class="math inline">\([-1,
+1]\)</span> vector range. The unpacked vector is then multiplied by the
+interpolated <code>TBN</code> matrix to rotate it into world space.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec2</span> TexCoords<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">mat3</span> vTBN<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> normalMap<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Sample the normal map (values in range [0, 1])</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> normal <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>normalMap<span class="op">,</span> TexCoords<span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Unpack the normal to range [-1, 1]</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    normal <span class="op">=</span> normal <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Transform normal to world space and normalize</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> worldNormal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>vTBN <span class="op">*</span> normal<span class="op">);</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Use worldNormal in lighting calculations</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>worldNormal <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="deriving-the-tbn-matrix-in-the-fragment-shader">Deriving the TBN
+Matrix in the Fragment Shader</h3>
+<p>If tangent attributes are unavailable in the mesh data, the TBN basis
+can be derived dynamically in the fragment shader using screen-space
+derivatives (<code>dFdx</code> and <code>dFdy</code>). By evaluating the
+rate of change of world-space positions relative to the rate of change
+of texture coordinates, GLSL can approximate the surface tangent and
+bitangent at runtime:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">calculateNormal</span><span class="op">(</span><span class="dt">vec3</span> worldPos<span class="op">,</span> <span class="dt">vec3</span> worldNormal<span class="op">,</span> <span class="dt">vec2</span> texCoords<span class="op">,</span> <span class="dt">sampler2D</span> map<span class="op">)</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dPdx <span class="op">=</span> <span class="bu">dFdx</span><span class="op">(</span>worldPos<span class="op">);</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dPdy <span class="op">=</span> <span class="bu">dFdy</span><span class="op">(</span>worldPos<span class="op">);</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> dUvdx <span class="op">=</span> <span class="bu">dFdx</span><span class="op">(</span>texCoords<span class="op">);</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> dUvdy <span class="op">=</span> <span class="bu">dFdy</span><span class="op">(</span>texCoords<span class="op">);</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> N <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>worldNormal<span class="op">);</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> T <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>dPdx <span class="op">*</span> dUvdy<span class="op">.</span><span class="fu">y</span> <span class="op">-</span> dPdy <span class="op">*</span> dUvdx<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> B <span class="op">=</span> <span class="op">-</span><span class="bu">normalize</span><span class="op">(</span><span class="bu">cross</span><span class="op">(</span>N<span class="op">,</span> T<span class="op">));</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat3</span> TBN <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span>T<span class="op">,</span> B<span class="op">,</span> N<span class="op">);</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> mapNormal <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>map<span class="op">,</span> texCoords<span class="op">).</span><span class="fu">rgb</span> <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">normalize</span><span class="op">(</span>TBN <span class="op">*</span> mapNormal<span class="op">);</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By leveraging the TBN matrix, GLSL allows 2D textures to define
+micro-surface details without altering the underlying geometric
+complexity, yielding high visual fidelity during dynamic lighting
+passes.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

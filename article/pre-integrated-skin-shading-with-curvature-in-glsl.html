@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pre-Integrated Skin Shading with Curvature in GLSL - glsl</title>
+    <meta name="description" content="Pre-integrated skin shading is an efficient real-time rendering technique that approximates subsurface scattering by decoupling light transport into pre-computed lookups. Instead of performing expensive diffusion simulations at runtime, this method calcu">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/pre-integrated-skin-shading-with-curvature-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Pre-Integrated Skin Shading with Curvature in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/pre-integrated-skin-shading-with-curvature-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Pre-integrated skin shading is an efficient real-time rendering technique that approximates subsurface scattering by decoupling light transport into pre-computed lookups. Instead of performing expensive diffusion simulations at runtime, this method calcu" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="pre-integrated-skin-shading-with-curvature-in-glsl">Pre-Integrated
+Skin Shading with Curvature in GLSL</h1>
+<p>Pre-integrated skin shading is an efficient real-time rendering
+technique that approximates subsurface scattering by decoupling light
+transport into pre-computed lookups. Instead of performing expensive
+diffusion simulations at runtime, this method calculates the local
+surface curvature dynamically and uses it alongside the light incidence
+angle to sample a pre-integrated two-dimensional lookup table (LUT).
+This article outlines the mathematical basis of the algorithm, explains
+how to estimate surface curvature dynamically using screen-space
+derivatives, and provides a direct, production-ready GLSL
+implementation.</p>
+<h3 id="the-algorithm-concept">The Algorithm Concept</h3>
+<p>Subsurface scattering causes light to bleed through translucent
+surfaces such as human skin, softening harsh shadow boundaries and
+shifting shadow penumbras toward red due to blood absorption. Eric
+Penner’s pre-integrated skin shading algorithm models this behavior by
+integrating the diffusion profile over spheres of varying radii.</p>
+<p>The scattering response is stored in a 2D texture (LUT):</p>
+<ul>
+<li><strong>Horizontal Axis (U):</strong> Light incidence angle, mapped
+from the dot product of the surface normal and the light vector (<span
+class="math inline">\(N \cdot L\)</span>).</li>
+<li><strong>Vertical Axis (V):</strong> Local surface curvature (<span
+class="math inline">\(\kappa = 1 / r\)</span>), representing how sharply
+the surface curves.</li>
+</ul>
+<p>At runtime, the shader determines the local curvature, computes the
+lighting angle, and samples this LUT to yield the scattered diffuse
+color.</p>
+<h3 id="step-1-estimating-curvature-in-screen-space">Step 1: Estimating
+Curvature in Screen Space</h3>
+<p>Curvature can be authored offline in texture maps or computed
+dynamically in the fragment shader. Dynamic estimation uses screen-space
+partial derivatives (<code>dFdx</code> and <code>dFdy</code>) to measure
+how quickly the geometric surface normal changes relative to world-space
+position:</p>
+<p><span class="math display">\[\kappa \approx \frac{\|\nabla
+N\|}{\|\nabla P\|}\]</span></p>
+<p>In GLSL, this is derived by comparing the length of the normal delta
+to the length of the position delta:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">estimateCurvature</span><span class="op">(</span><span class="dt">vec3</span> worldNormal<span class="op">,</span> <span class="dt">vec3</span> worldPosition<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dNdx <span class="op">=</span> <span class="bu">dFdx</span><span class="op">(</span>worldNormal<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dNdy <span class="op">=</span> <span class="bu">dFdy</span><span class="op">(</span>worldNormal<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dPdx <span class="op">=</span> <span class="bu">dFdx</span><span class="op">(</span>worldPosition<span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dPdy <span class="op">=</span> <span class="bu">dFdy</span><span class="op">(</span>worldPosition<span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> deltaNormal <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>dNdx<span class="op">)</span> <span class="op">+</span> <span class="bu">length</span><span class="op">(</span>dNdy<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> deltaPos <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>dPdx<span class="op">)</span> <span class="op">+</span> <span class="bu">length</span><span class="op">(</span>dPdy<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Prevent division by zero and scale to adjust scattering responsiveness</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> deltaNormal <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>deltaPos<span class="op">,</span> <span class="fl">0.0001</span><span class="op">);</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="step-2-preparing-the-lut-coordinates">Step 2: Preparing the LUT
+Coordinates</h3>
+<p>The horizontal coordinate is parameterized by mapping <span
+class="math inline">\(N \cdot L\)</span> from the range <span
+class="math inline">\([-1.0, 1.0]\)</span> to <span
+class="math inline">\([0.0, 1.0]\)</span>:</p>
+<p><span class="math display">\[u = 0.5 \times (N \cdot L) +
+0.5\]</span></p>
+<p>The vertical coordinate is parameterized by scaling the estimated
+curvature into the normalized <span class="math inline">\([0.0,
+1.0]\)</span> range based on the model's unit scale:</p>
+<p><span class="math display">\[v = \text{clamp}(\kappa \times
+\text{curvatureScale}, 0.0, 1.0)\]</span></p>
+<h3 id="step-3-complete-glsl-shader-implementation">Step 3: Complete
+GLSL Shader Implementation</h3>
+<p>Below is the complete fragment shader logic for calculating the
+pre-integrated diffuse scattering term:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> vWorldPos<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> vWorldNormal<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> fragColor<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> uPreIntegratedLUT<span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> uLightDir<span class="op">;</span>       <span class="co">// Direction towards the light</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> uLightColor<span class="op">;</span>     <span class="co">// Light intensity and color</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> uCurvatureScale<span class="op">;</span> <span class="co">// Global tuning multiplier (e.g., 0.01 - 0.1)</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">computeCurvature</span><span class="op">(</span><span class="dt">vec3</span> normal<span class="op">,</span> <span class="dt">vec3</span> position<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dNdx <span class="op">=</span> <span class="bu">dFdx</span><span class="op">(</span>normal<span class="op">);</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dNdy <span class="op">=</span> <span class="bu">dFdy</span><span class="op">(</span>normal<span class="op">);</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dPdx <span class="op">=</span> <span class="bu">dFdx</span><span class="op">(</span>position<span class="op">);</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dPdy <span class="op">=</span> <span class="bu">dFdy</span><span class="op">(</span>position<span class="op">);</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> deltaNormal <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>dNdx<span class="op">)</span> <span class="op">+</span> <span class="bu">length</span><span class="op">(</span>dNdy<span class="op">);</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> deltaPosition <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>dPdx<span class="op">)</span> <span class="op">+</span> <span class="bu">length</span><span class="op">(</span>dPdy<span class="op">);</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> deltaNormal <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>deltaPosition<span class="op">,</span> <span class="fl">0.00001</span><span class="op">);</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> N <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>vWorldNormal<span class="op">);</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> L <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>uLightDir<span class="op">);</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 1. Calculate N dot L</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotL <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> L<span class="op">);</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 2. Map NdotL to [0.0, 1.0] for the LUT&#39;s U coordinate</span></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> u <span class="op">=</span> NdotL <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 3. Compute screen-space curvature for the LUT&#39;s V coordinate</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> rawCurvature <span class="op">=</span> <span class="fu">computeCurvature</span><span class="op">(</span>N<span class="op">,</span> vWorldPos<span class="op">);</span></span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> v <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>rawCurvature <span class="op">*</span> uCurvatureScale<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 4. Sample the pre-integrated scattering profile (RGB represents wavelength diffusion)</span></span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> sssDiffuse <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>uPreIntegratedLUT<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>u<span class="op">,</span> v<span class="op">)).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 5. Combine with light properties</span></span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> finalDiffuse <span class="op">=</span> sssDiffuse <span class="op">*</span> uLightColor<span class="op">;</span></span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>finalDiffuse<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="integration-notes">Integration Notes</h3>
+<ul>
+<li><strong>Shadow Handling:</strong> Standard shadow mapping produces
+hard edges that break subsurface illusions. To soften shadows, blend a
+blurred shadow map or apply Penner's separate shadow penumbra scattering
+pass.</li>
+<li><strong>Derivative Artifacts:</strong> Screen-space derivatives can
+produce high-frequency noise across polygon seams or silhouette edges.
+Filtering the calculated curvature or combining it with an offline-baked
+curvature map eliminates visual noise while preserving dynamic
+deformation scattering.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

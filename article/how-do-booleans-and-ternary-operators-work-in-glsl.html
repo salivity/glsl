@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Do Booleans and Ternary Operators Work in GLSL? - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), boolean operations and conditional ternary operators provide essential logical control flow and value selection. While their syntax mirrors C-style languages, their execution model differs fundamentally due to the Singl">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-do-booleans-and-ternary-operators-work-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Do Booleans and Ternary Operators Work in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-do-booleans-and-ternary-operators-work-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), boolean operations and conditional ternary operators provide essential logical control flow and value selection. While their syntax mirrors C-style languages, their execution model differs fundamentally due to the Singl" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-do-booleans-and-ternary-operators-work-in-glsl">How Do
+Booleans and Ternary Operators Work in GLSL?</h1>
+<p>In OpenGL Shading Language (GLSL), boolean operations and conditional
+ternary operators provide essential logical control flow and value
+selection. While their syntax mirrors C-style languages, their execution
+model differs fundamentally due to the Single Instruction, Multiple
+Threads (SIMT) architecture of modern Graphics Processing Units (GPUs).
+This guide examines how GLSL evaluates boolean expressions and ternary
+operations, how the underlying hardware handles execution divergence
+through masking, and best practices for writing performant shader
+logic.</p>
+<h2 id="boolean-types-and-logical-operators-in-glsl">Boolean Types and
+Logical Operators in GLSL</h2>
+<p>GLSL includes a native scalar <code>bool</code> type as well as
+vector variations: <code>bvec2</code>, <code>bvec3</code>, and
+<code>bvec4</code>. Scalar booleans support standard logical
+operators:</p>
+<ul>
+<li><strong>Logical NOT (<code>!</code>):</strong> Inverts a boolean
+expression.</li>
+<li><strong>Logical AND (<code>&amp;&amp;</code>):</strong> Evaluates to
+<code>true</code> only if both operands are <code>true</code>.</li>
+<li><strong>Logical OR (<code>||</code>):</strong> Evaluates to
+<code>true</code> if at least one operand is <code>true</code>.</li>
+<li><strong>Logical XOR (<code>^^</code>):</strong> Evaluates to
+<code>true</code> if exactly one operand is <code>true</code>.</li>
+</ul>
+<p>Relational operators such as <code>&lt;</code>, <code>&lt;=</code>,
+<code>&gt;</code>, <code>&gt;=</code>, <code>==</code>, and
+<code>!=</code> produce scalar booleans when comparing scalar types.
+When working with vector types, GLSL provides specialized built-in
+functions rather than component-wise logical operators:</p>
+<ul>
+<li><code>lessThan(vecA, vecB)</code>,
+<code>greaterThan(vecA, vecB)</code>: Return component-wise boolean
+vectors (<code>bvec</code>).</li>
+<li><code>equal(vecA, vecB)</code>, <code>notEqual(vecA, vecB)</code>:
+Produce <code>bvec</code> outputs comparing vector components.</li>
+<li><code>any(bvec)</code>: Returns <code>true</code> if any component
+of the boolean vector is <code>true</code>.</li>
+<li><code>all(bvec)</code>: Returns <code>true</code> only if all
+components are <code>true</code>.</li>
+<li><code>not(bvec)</code>: Performs a component-wise inversion on a
+boolean vector.</li>
+</ul>
+<h2 id="the-conditional-ternary-operator">The Conditional Ternary
+Operator</h2>
+<p>The conditional ternary operator
+(<code>condition ? expression_true : expression_false</code>) evaluates
+a scalar boolean condition and selects one of two expressions. Both
+return expressions must share the exact same type.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Basic ternary syntax</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> intensity <span class="op">=</span> isLit <span class="op">?</span> <span class="fl">1.0</span> <span class="op">:</span> <span class="fl">0.2</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> finalColor <span class="op">=</span> isHighlighted <span class="op">?</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">:</span> baseColor<span class="op">;</span></span></code></pre></div>
+<p>Unlike scalar mathematics, the ternary operator in GLSL requires the
+condition to be a scalar <code>bool</code>. It cannot take a
+<code>bvec</code> directly; vector-wide selection is handled through
+functions such as <code>mix()</code>.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Component-wise conditional selection using mix</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> result <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>colorA<span class="op">,</span> colorB<span class="op">,</span> <span class="dt">vec3</span><span class="op">(</span>conditionVec<span class="op">));</span></span></code></pre></div>
+<h2 id="execution-mechanics-on-the-gpu">Execution Mechanics on the
+GPU</h2>
+<p>The physical execution of boolean logic and ternary operators depends
+on how GPU hardware processes parallel work units, typically grouped
+into warps (NVIDIA) or wavefronts (AMD).</p>
+<h3 id="short-circuit-evaluation">Short-Circuit Evaluation</h3>
+<p>In standard C++, <code>&amp;&amp;</code> and <code>||</code>
+guarantee short-circuit evaluation: if the left operand determines the
+outcome, the right operand is not evaluated. In GLSL, the specification
+allows short-circuiting for logical operators and the ternary operator,
+but hardware implementation varies:</p>
+<ul>
+<li><strong>Uniform Conditions:</strong> When all threads in a warp
+evaluate the same condition to the same branch, the GPU executes only
+the active branch path.</li>
+<li><strong>Divergent Conditions:</strong> When threads within the same
+warp evaluate conditions differently, the hardware must execute both
+execution paths sequentially while using internal execution masks to
+enable or disable writes for individual threads.</li>
+</ul>
+<h3 id="predication-and-execution-masking">Predication and Execution
+Masking</h3>
+<p>For short instructions and ternary operators, modern GPU shader
+compilers often replace branch instructions with predication
+(conditional assignment).</p>
+<p>Instead of jumping over instructions:</p>
+<ol type="1">
+<li>The compiler evaluates the boolean condition and stores the result
+in an internal predicate register.</li>
+<li>The instructions for both the true and false expressions are
+computed.</li>
+<li>The hardware uses conditional select (<code>csel</code> or
+<code>cmov</code>) instructions to assign the final register values
+based on the predicate bit.</li>
+</ol>
+<p>This predication mechanism avoids the high overhead of warp
+serialization and branch prediction penalties for simple scalar
+arithmetic.</p>
+<h2 id="performance-considerations">Performance Considerations</h2>
+<ul>
+<li><strong>Avoid Complex Branch Divergence:</strong> If expressions
+inside a ternary operator involve expensive operations (such as texture
+fetches or heavy trigonometry), divergence will force all threads in the
+warp to stall while both paths execute.</li>
+<li><strong>Utilize Arithmetic Step Functions:</strong> For pure
+numerical selections, built-in functions like <code>step()</code>,
+<code>clamp()</code>, and <code>mix()</code> can map directly to fast,
+vector-friendly instructions without creating execution divergence.</li>
+<li><strong>Derivative Safety:</strong> Functions that rely on implicit
+screen-space derivatives (such as <code>texture()</code> with mipmaps or
+<code>dFdx</code>/<code>dFdy</code>) must execute uniformly. Placing
+derivative-dependent lookups inside non-uniform ternary conditions can
+lead to undefined behavior or visual artifacts.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

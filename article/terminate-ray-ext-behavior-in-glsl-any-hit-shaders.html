@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>terminateRayEXT Behavior in GLSL Any-Hit Shaders - glsl</title>
+    <meta name="description" content="The terminateRayEXT function in GLSL ray tracing shaders immediately halts the traversal of the current ray and accepts the current hit. When invoked within an any-hit shader, it causes the current shader invocation to stop execution instantly, skips any">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/terminate-ray-ext-behavior-in-glsl-any-hit-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="terminateRayEXT Behavior in GLSL Any-Hit Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/terminate-ray-ext-behavior-in-glsl-any-hit-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The terminateRayEXT function in GLSL ray tracing shaders immediately halts the traversal of the current ray and accepts the current hit. When invoked within an any-hit shader, it causes the current shader invocation to stop execution instantly, skips any" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="terminaterayext-behavior-in-glsl-any-hit-shaders">terminateRayEXT
+Behavior in GLSL Any-Hit Shaders</h1>
+<p>The <code>terminateRayEXT</code> function in GLSL ray tracing shaders
+immediately halts the traversal of the current ray and accepts the
+current hit. When invoked within an any-hit shader, it causes the
+current shader invocation to stop execution instantly, skips any
+remaining primitive or acceleration structure intersections along the
+ray, and proceeds directly to resolving the accepted hit. This mechanism
+provides programmable, early-out termination for rays where finding a
+single valid hit is sufficient.</p>
+<h3 id="immediate-invocation-termination">Immediate Invocation
+Termination</h3>
+<p>When <code>terminateRayEXT()</code> is called, the execution flow
+within the calling any-hit shader invocation halts at that exact point.
+Any instructions placed after the call within the shader body are
+discarded and will not execute. In SPIR-V, this maps directly to
+<code>OpTerminateRayKHR</code>, which acts as a terminating instruction
+for the current execution thread.</p>
+<h3 id="traversal-halting-and-hit-acceptance">Traversal Halting and Hit
+Acceptance</h3>
+<p>Beyond stopping the local shader invocation,
+<code>terminateRayEXT()</code> affects the broader ray tracing
+pipeline:</p>
+<ul>
+<li><strong>Hit Confirmation:</strong> The intersection being evaluated
+is officially accepted as a confirmed hit.</li>
+<li><strong>Aborted Traversal:</strong> The traversal engine stops
+testing further bounding boxes and primitives for that ray. No
+additional intersection shaders or any-hit shaders will be launched for
+the remainder of the ray's query.</li>
+</ul>
+<h3 id="interaction-with-ignore-intersection">Interaction with Ignore
+Intersection</h3>
+<p>Calling <code>ignoreIntersectionEXT()</code> explicitly rejects a hit
+and continues ray traversal. If both functions exist in branching logic,
+they are mutually exclusive based on path execution. However, calling
+<code>terminateRayEXT()</code> implicitly accepts the hit; it should not
+be paired with <code>ignoreIntersectionEXT()</code> in the same
+execution path, as doing so creates contradictory pipeline
+instructions.</p>
+<h3 id="downstream-pipeline-execution">Downstream Pipeline
+Execution</h3>
+<p>Once traversal is terminated via <code>terminateRayEXT()</code>, the
+pipeline moves to the completion phase:</p>
+<ul>
+<li>If ray traversal terminates and the accepted hit is the closest (or
+the only required) hit, the corresponding closest-hit shader executes,
+provided one is defined.</li>
+<li>If the ray was dispatched with flags that suppress closest-hit
+shaders (such as <code>gl_RayFlagsSkipClosestHitShaderEXT</code>),
+execution control returns directly to the ray generation shader or the
+caller of <code>traceRayEXT</code>.</li>
+</ul>
+<h3 id="typical-use-case-alpha-tested-occlusion">Typical Use Case:
+Alpha-Tested Occlusion</h3>
+<p>The primary application of <code>terminateRayEXT()</code> in an
+any-hit shader is evaluating transparent or cut-out geometry during
+shadow (occlusion) ray passes. The shader samples a texture to evaluate
+alpha transparency; if the fragment is transparent, it calls
+<code>ignoreIntersectionEXT()</code> to keep traversing. If the fragment
+is fully opaque, it calls <code>terminateRayEXT()</code> to instantly
+confirm occlusion and stop traversing, avoiding unnecessary intersection
+tests for the rest of the scene.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

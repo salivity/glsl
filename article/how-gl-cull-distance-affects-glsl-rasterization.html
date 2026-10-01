@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How gl_CullDistance Affects GLSL Rasterization - glsl</title>
+    <meta name="description" content="This article explains the mechanics of the glCullDistance built-in output in GLSL and its direct impact on primitive rasterization discard behavior. In OpenGL, glCullDistance provides hardware-accelerated, whole-primitive culling against user-defined hal">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-gl-cull-distance-affects-glsl-rasterization">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How gl_CullDistance Affects GLSL Rasterization - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-gl-cull-distance-affects-glsl-rasterization" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains the mechanics of the glCullDistance built-in output in GLSL and its direct impact on primitive rasterization discard behavior. In OpenGL, glCullDistance provides hardware-accelerated, whole-primitive culling against user-defined hal" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-gl_culldistance-affects-glsl-rasterization">How
+gl_CullDistance Affects GLSL Rasterization</h1>
+<p>This article explains the mechanics of the
+<code>gl_CullDistance</code> built-in output in GLSL and its direct
+impact on primitive rasterization discard behavior. In OpenGL,
+<code>gl_CullDistance</code> provides hardware-accelerated,
+whole-primitive culling against user-defined half-spaces prior to
+rasterization. By writing signed floating-point distances to this array
+at the vertex, tessellation, or geometry shader stages, developers can
+cause entire primitives to be discarded before fragment shading occurs,
+bypassing the expensive vertex generation overhead associated with
+standard geometric clipping.</p>
+<h3 id="understanding-gl_culldistance">Understanding
+<code>gl_CullDistance</code></h3>
+<p>The <code>gl_CullDistance[]</code> variable is a built-in shader
+output array of floating-point values available in pre-rasterization
+shader stages (Vertex, Tessellation Control, Tessellation Evaluation,
+and Geometry). Each element in the array represents the signed distance
+from the processed vertex to a user-defined plane or half-space:</p>
+<ul>
+<li><strong>Positive value or zero (<code>&gt;= 0.0</code>):</strong>
+The vertex is inside the boundary (accepted).</li>
+<li><strong>Negative value (<code>&lt; 0.0</code>):</strong> The vertex
+is outside the boundary (culled).</li>
+</ul>
+<p>Unlike <code>gl_ClipDistance</code>, which clips geometry and
+computes new interpolated boundary vertices along the clipping boundary,
+<code>gl_CullDistance</code> determines visibility strictly at the
+primitive level.</p>
+<h3 id="primitive-discard-rule">Primitive Discard Rule</h3>
+<p>The OpenGL specification dictates that a primitive is completely
+discarded from rasterization if and only if <strong>all
+vertices</strong> forming that primitive have a negative cull distance
+for the <strong>same plane index</strong>.</p>
+<p>Specifically, for an enabled cull plane index <code>i</code>:</p>
+<ol type="1">
+<li>If vertex <span class="math inline">\(A\)</span>, vertex <span
+class="math inline">\(B\)</span>, and vertex <span
+class="math inline">\(C\)</span> of a triangle all produce
+<code>gl_CullDistance[i] &lt; 0.0</code>, the entire triangle is
+rejected and discarded before rasterization.</li>
+<li>If at least one vertex produces
+<code>gl_CullDistance[i] &gt;= 0.0</code>, the primitive is retained and
+passes through to the rasterizer, even if the other two vertices have
+negative values.</li>
+<li>If multiple cull distances are enabled (e.g., indices <code>0</code>
+through <code>n</code>), the primitive is discarded if the all-negative
+condition is satisfied for <strong>any single enabled
+index</strong>.</li>
+</ol>
+<p>Because interpolation does not create new vertices during a culling
+operation, partially culled primitives are rendered in their entirety
+unless paired with <code>gl_ClipDistance</code> or conventional
+viewport/frustum clipping.</p>
+<h3 id="enabling-cull-planes-on-the-host">Enabling Cull Planes on the
+Host</h3>
+<p>Setting values in <code>gl_CullDistance</code> within a shader has no
+effect on rasterization discard behavior unless the corresponding planes
+are enabled via the OpenGL API on the CPU side. Each cull distance index
+corresponds to a distinct capability:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>glEnable<span class="op">(</span>GL_CULL_DISTANCE0<span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>glEnable<span class="op">(</span>GL_CULL_DISTANCE1<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// ... or using indexed enables where supported</span></span></code></pre></div>
+<p>If a shader writes to <code>gl_CullDistance[i]</code> but
+<code>GL_CULL_DISTANCEi</code> is not enabled, the hardware ignores the
+value for culling purposes, and the primitive is not discarded by that
+index.</p>
+<h3 id="shader-implementation-example">Shader Implementation
+Example</h3>
+<p>In a vertex shader, <code>gl_CullDistance</code> is commonly
+calculated by taking the dot product of a vertex's position with a plane
+equation defined as <span class="math inline">\((A, B, C,
+D)\)</span>:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> inPosition<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> uModelView<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> uProjection<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec4</span> uCullPlane<span class="op">;</span> <span class="co">// Plane equation Ax + By + Cz + D = 0</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">float</span> <span class="bu">gl_CullDistance</span><span class="op">[</span><span class="dv">1</span><span class="op">];</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> eyePos <span class="op">=</span> uModelView <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>inPosition<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> uProjection <span class="op">*</span> eyePos<span class="op">;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate signed distance to the plane</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_CullDistance</span><span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>eyePos<span class="op">,</span> uCullPlane<span class="op">);</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>If every vertex of a given primitive yields an <code>eyePos</code>
+that places it behind <code>uCullPlane</code> (resulting in a negative
+dot product), the hardware primitive assembler drops the primitive
+instantly.</p>
+<h3 id="performance-impact-on-the-pipeline">Performance Impact on the
+Pipeline</h3>
+<p>Using <code>gl_CullDistance</code> to discard primitives provides
+significant performance benefits over manual fragment-stage discarding
+(<code>discard</code> in GLSL):</p>
+<ul>
+<li><strong>Bypasses Fragment Shading:</strong> Culled primitives are
+eliminated at the primitive assembly stage. No fragments are generated,
+saving execution time in the fragment shader and reducing bandwidth to
+the frame buffer.</li>
+<li><strong>Avoids Tessellation/Clipping Overhead:</strong> Unlike
+<code>gl_ClipDistance</code>, which splits triangles and produces new
+geometry that must be handled by the rasterizer,
+<code>gl_CullDistance</code> performs a binary keep-or-discard
+evaluation per primitive, preserving fixed-function pipeline
+throughput.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iterative Thermal Erosion in GLSL Heightmaps - glsl</title>
+    <meta name="description" content="Thermal erosion simulates the natural degradation of steep terrain slopes into stable angles of repose, known as the talus angle. In OpenGL Shading Language (GLSL), this process is evaluated iteratively over a terrain heightmap by computing height differ">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/iterative-thermal-erosion-in-glsl-heightmaps">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Iterative Thermal Erosion in GLSL Heightmaps - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/iterative-thermal-erosion-in-glsl-heightmaps" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Thermal erosion simulates the natural degradation of steep terrain slopes into stable angles of repose, known as the talus angle. In OpenGL Shading Language (GLSL), this process is evaluated iteratively over a terrain heightmap by computing height differ" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="iterative-thermal-erosion-in-glsl-heightmaps">Iterative Thermal
+Erosion in GLSL Heightmaps</h1>
+<p>Thermal erosion simulates the natural degradation of steep terrain
+slopes into stable angles of repose, known as the talus angle. In OpenGL
+Shading Language (GLSL), this process is evaluated iteratively over a
+terrain heightmap by computing height differentials between adjacent
+texels, calculating sediment displacement beyond a critical threshold,
+and updating the surface across successive render passes. Using
+ping-pong framebuffers or compute shaders, the GPU accelerates this
+relaxation process, resolving millions of texel interactions in
+parallel.</p>
+<h3 id="the-thermal-erosion-model">The Thermal Erosion Model</h3>
+<p>Thermal erosion, or material slumping, occurs when the slope between
+a given point and its neighbor exceeds a critical angle of repose (the
+talus threshold, <span class="math inline">\(T\)</span>). The height
+differential is defined as:</p>
+<p><span class="math display">\[\Delta h_i = h_{\text{center}} -
+h_i\]</span></p>
+<p>If <span class="math inline">\(\Delta h_i &gt; T\)</span>, the slope
+is unstable. A fraction of the excess material, governed by a transfer
+rate constant <span class="math inline">\(c\)</span>, shears off and is
+deposited onto the lower neighbor:</p>
+<p><span class="math display">\[\Delta m_i = c \cdot (\Delta h_i -
+T)\]</span></p>
+<p>To maintain numerical stability and avoid over-eroding a cell past
+the height of its neighbors, the total displaced material must not
+exceed the maximum allowable drop divided by the number of participating
+neighbors.</p>
+<h3 id="the-gpu-gather-architecture">The GPU Gather Architecture</h3>
+<p>Because GPUs rely on a parallel gather pattern—where a shader thread
+writes strictly to its designated output texel rather than scattering
+values to adjacent memory addresses—a cell must calculate both its
+outgoing material and the incoming material from its neighbors.</p>
+<p>In a single-pass formulation, the new height <span
+class="math inline">\(h&#39;\)</span> of a cell at coordinate <span
+class="math inline">\(\mathbf{x}\)</span> is calculated as:</p>
+<p><span class="math display">\[h&#39;(\mathbf{x}) = h(\mathbf{x}) -
+\sum \text{Outflow}(\mathbf{x} \to \text{neighbors}) + \sum
+\text{Inflow}(\text{neighbors} \to \mathbf{x})\]</span></p>
+<p>Evaluating both inflow and outflow simultaneously requires sampling
+not only the direct neighbors of the cell, but also the neighborhood of
+each neighbor to determine how much material those neighbors distributed
+elsewhere. To avoid excessive texture lookups, thermal relaxation is
+often split into two distinct sub-passes:</p>
+<ol type="1">
+<li><strong>Sediment/Flux Pass:</strong> Calculates and stores the
+amount of material shifting along grid directions.</li>
+<li><strong>Advection/Update Pass:</strong> Reads the flux data,
+subtracts outgoing material, adds incoming material, and writes the
+updated height.</li>
+</ol>
+<p>Alternatively, a simplified symmetric relaxation can evaluate
+incoming and outgoing sediment in a single pass if the time step (<span
+class="math inline">\(\Delta t\)</span>) is kept sufficiently small to
+prevent oscillation.</p>
+<h3 id="ping-pong-framebuffer-pipeline">Ping-Pong Framebuffer
+Pipeline</h3>
+<p>GLSL shaders cannot read from and write to the same texture memory
+simultaneously without causing race conditions. The iterative relaxation
+loop resolves this by using two identical floating-point textures
+(typically <code>GL_R32F</code> or <code>GL_RGBA32F</code> formats) set
+up in a ping-pong configuration:</p>
+<ol type="1">
+<li><strong>Texture A</strong> is bound as an input sampler;
+<strong>Texture B</strong> is bound as the render target (Framebuffer
+Object or compute write image).</li>
+<li>The GLSL shader executes across the grid, evaluating one erosion
+step.</li>
+<li>The bindings swap: <strong>Texture B</strong> becomes the input
+sampler, and <strong>Texture A</strong> becomes the render target.</li>
+<li>The process repeats for <span class="math inline">\(N\)</span>
+iterations until the terrain converges to the desired stability.</li>
+</ol>
+<h3 id="glsl-implementation-example">GLSL Implementation Example</h3>
+<p>The following fragment shader demonstrates a single-pass relaxation
+step using a 4-neighborhood (von Neumann) stencil:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> u_Heightmap<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec2</span> u_TexelSize<span class="op">;</span>     <span class="co">// 1.0 / TextureDimensions</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_CellSize<span class="op">;</span>      <span class="co">// World-space distance between texels</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_TalusAngle<span class="op">;</span>    <span class="co">// Minimum height difference to trigger erosion</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_ErosionRate<span class="op">;</span>   <span class="co">// Rate coefficient (0.0 to 0.5 for stability)</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> uv <span class="op">=</span> <span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">xy</span> <span class="op">*</span> u_TexelSize<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> h <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_Heightmap<span class="op">,</span> uv<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Neighbor offsets: North, South, East, West</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> offsets<span class="op">[</span><span class="dv">4</span><span class="op">]</span> <span class="op">=</span> <span class="dt">vec2</span><span class="op">[](</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">),</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">),</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">),</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span><span class="op">(-</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">)</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> totalOutflow <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> totalInflow <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> maxDiff <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Pass 1: Calculate material leaving this cell</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">4</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> h_neighbor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_Heightmap<span class="op">,</span> uv <span class="op">+</span> offsets<span class="op">[</span>i<span class="op">]</span> <span class="op">*</span> u_TexelSize<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> diff <span class="op">=</span> h <span class="op">-</span> h_neighbor<span class="op">;</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>diff <span class="op">&gt;</span> u_TalusAngle<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>            <span class="dt">float</span> excess <span class="op">=</span> diff <span class="op">-</span> u_TalusAngle<span class="op">;</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>            totalOutflow <span class="op">+=</span> excess<span class="op">;</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>            maxDiff <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>maxDiff<span class="op">,</span> diff<span class="op">);</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Clamp outflow to avoid inversion artifacts</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>totalOutflow <span class="op">&gt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>        totalOutflow <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>totalOutflow <span class="op">*</span> u_ErosionRate<span class="op">,</span> maxDiff <span class="op">*</span> <span class="fl">0.5</span><span class="op">);</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Pass 2: Calculate material arriving from neighbors</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">4</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span> n_uv <span class="op">=</span> uv <span class="op">+</span> offsets<span class="op">[</span>i<span class="op">]</span> <span class="op">*</span> u_TexelSize<span class="op">;</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> h_neighbor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_Heightmap<span class="op">,</span> n_uv<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> diff <span class="op">=</span> h_neighbor <span class="op">-</span> h<span class="op">;</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>diff <span class="op">&gt;</span> u_TalusAngle<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Estimate neighbor&#39;s local outflow distribution</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>            <span class="dt">float</span> neighborExcess <span class="op">=</span> diff <span class="op">-</span> u_TalusAngle<span class="op">;</span></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>            totalInflow <span class="op">+=</span> <span class="op">(</span>neighborExcess <span class="op">*</span> u_ErosionRate<span class="op">)</span> <span class="op">*</span> <span class="fl">0.25</span><span class="op">;</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> newHeight <span class="op">=</span> h <span class="op">-</span> totalOutflow <span class="op">+</span> totalInflow<span class="op">;</span></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>newHeight<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="numerical-stability-and-boundary-conditions">Numerical Stability
+and Boundary Conditions</h3>
+<p>Iterative relaxation methods on the GPU are susceptible to numerical
+oscillation when transfer rates are set too high. If a cell transfers
+more material than is necessary to achieve the talus threshold, the
+slope will invert in the following iteration, causing checkerboard
+artifacts. Setting the global transfer rate <span
+class="math inline">\(c \le \frac{1}{2D}\)</span> (where <span
+class="math inline">\(D\)</span> is the dimensionality or neighborhood
+count) guarantees monotonic convergence.</p>
+<p>Boundary texels along the edge of the heightmap must be handled
+explicitly by clamping texture sampling (<code>GL_CLAMP_TO_EDGE</code>)
+or mirroring coordinates. When simulating open-boundary systems, borders
+can act as sinks where sediment falls off the map, whereas closed
+boundaries preserve total mass across the entire heightmap.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

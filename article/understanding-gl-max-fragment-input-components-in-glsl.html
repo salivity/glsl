@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding gl_MaxFragmentInputComponents in GLSL - glsl</title>
+    <meta name="description" content="This article explains how the built-in GLSL constant glMaxFragmentInputComponents dictates the maximum amount of interpolated data that can pass from earlier pipeline stages into a fragment shader. It covers how the OpenGL specification defines component">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-gl-max-fragment-input-components-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding gl_MaxFragmentInputComponents in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-gl-max-fragment-input-components-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the built-in GLSL constant glMaxFragmentInputComponents dictates the maximum amount of interpolated data that can pass from earlier pipeline stages into a fragment shader. It covers how the OpenGL specification defines component" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="understanding-gl_maxfragmentinputcomponents-in-glsl">Understanding
+gl_MaxFragmentInputComponents in GLSL</h1>
+<p>This article explains how the built-in GLSL constant
+<code>gl_MaxFragmentInputComponents</code> dictates the maximum amount
+of interpolated data that can pass from earlier pipeline stages into a
+fragment shader. It covers how the OpenGL specification defines
+component counts, how hardware interpolators map to these values, and
+the rules governing packing and shader linkage limitations.</p>
+<h3 id="components-versus-variables">Components Versus Variables</h3>
+<p>In GLSL, <code>gl_MaxFragmentInputComponents</code> defines the upper
+bound for the total number of scalar values—floats, integers, or
+booleans—that a fragment shader can receive as inputs (<code>in</code>
+variables). This limit does not count the number of declared variables,
+but the individual scalar components they consume.</p>
+<p>Each data type consumes components based on its underlying scalar
+elements:</p>
+<ul>
+<li>A <code>float</code> or <code>int</code> consumes 1 component.</li>
+<li>A <code>vec2</code> consumes 2 components.</li>
+<li>A <code>vec3</code> consumes 3 components.</li>
+<li>A <code>vec4</code> consumes 4 components.</li>
+<li>A <code>mat4</code> consumes 16 components (treated as four
+4-component vectors).</li>
+<li>Arrays multiply the base type's footprint by the array length (e.g.,
+<code>float[4]</code> consumes 4 components).</li>
+</ul>
+<h3 id="hardware-interpolators-and-the-packing-model">Hardware
+Interpolators and the Packing Model</h3>
+<p>During rasterization, the GPU relies on dedicated hardware
+interpolators to compute perspective-correct or flat values across the
+surface of a primitive. Physical interpolation hardware is generally
+arranged into 4-wide vector registers (often referred to in older
+specifications as varying vectors).</p>
+<p>The value of <code>gl_MaxFragmentInputComponents</code> directly
+reflects the capacity of these physical registers. For example, a system
+exposing a limit of 64 components provides the equivalent of 16
+four-component interpolator registers (since <span
+class="math inline">\(64 \div 4 = 16\)</span>).</p>
+<p>The GLSL compiler performs varying packing, attempting to merge
+smaller variables (such as multiple <code>float</code> or
+<code>vec2</code> declarations) into single 4-component slots to
+conserve hardware resources. However, if explicit layout locations or
+interpolation qualifiers (such as <code>flat</code>,
+<code>noperspective</code>, or <code>smooth</code>) prevent efficient
+packing, fragmentation can occur. Regardless of how the compiler packs
+them, the total active component count must remain at or below
+<code>gl_MaxFragmentInputComponents</code>.</p>
+<h3 id="built-in-inputs-and-linkage">Built-in Inputs and Linkage</h3>
+<p>User-defined inputs are not the only values that consume
+interpolation resources. Depending on the driver and hardware
+architecture, certain built-in variables—such as
+<code>gl_FragCoord</code>, <code>gl_PointCoord</code>, or clip
+distances—may also count against this component ceiling or share the
+same physical routing resources.</p>
+<p>If the combined sum of declared active fragment inputs exceeds
+<code>gl_MaxFragmentInputComponents</code>, the OpenGL driver cannot
+allocate enough interpolator registers. As a result, the shader program
+will fail at the link stage, generating a compile-time or link-time
+error detectable via <code>glGetProgramiv</code> with
+<code>GL_LINK_STATUS</code>.</p>
+<h3 id="practical-considerations">Practical Considerations</h3>
+<p>To prevent exceeding this limit across different GPUs, developers can
+query the hardware capability at runtime using
+<code>glGetIntegerv(GL_MAX_FRAGMENT_INPUT_COMPONENTS, &amp;value)</code>.
+While the OpenGL specification mandates a minimum baseline (typically 60
+or 128 components depending on the core version), complex shaders with
+extensive vertex-to-fragment data transfers can easily exhaust this
+budget. In such cases, data that does not vary across a primitive should
+be migrated to Uniform Buffer Objects (UBOs) or Shader Storage Buffer
+Objects (SSBOs) rather than passing through the interpolator
+pipeline.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

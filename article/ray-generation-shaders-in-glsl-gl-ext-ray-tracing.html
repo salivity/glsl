@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ray Generation Shaders in GLSL GL_EXT_ray_tracing - glsl</title>
+    <meta name="description" content="Ray generation shaders serve as the initial entry point for hardware-accelerated ray tracing pipelines using the GLEXTraytracing GLSL extension. This article breaks down the foundational structure required to write a ray generation shader—including nec">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/ray-generation-shaders-in-glsl-gl-ext-ray-tracing">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Ray Generation Shaders in GLSL GL_EXT_ray_tracing - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/ray-generation-shaders-in-glsl-gl-ext-ray-tracing" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Ray generation shaders serve as the initial entry point for hardware-accelerated ray tracing pipelines using the GLEXTraytracing GLSL extension. This article breaks down the foundational structure required to write a ray generation shader—including nec" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="ray-generation-shaders-in-glsl-gl_ext_ray_tracing">Ray
+Generation Shaders in GLSL GL_EXT_ray_tracing</h1>
+<p>Ray generation shaders serve as the initial entry point for
+hardware-accelerated ray tracing pipelines using the
+<code>GL_EXT_ray_tracing</code> GLSL extension. This article breaks down
+the foundational structure required to write a ray generation
+shader—including necessary extension directives, resource bindings,
+payload setup, and built-in variables—and explains how the shader
+calculates world-space rays, triggers traversal via
+<code>traceRayEXT</code>, and executes across a dispatched computational
+grid.</p>
+<h2 id="core-structure-and-required-declarations">Core Structure and
+Required Declarations</h2>
+<p>A ray generation shader must target SPIR-V and explicitly enable the
+ray tracing extension. The top of the shader file requires
+<code>#version 460</code> and the extension directive:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_ray_tracing : require</span></span></code></pre></div>
+<h3 id="essential-bindings">Essential Bindings</h3>
+<p>Ray generation shaders typically bind three primary resources:</p>
+<ol type="1">
+<li><strong>Top-Level Acceleration Structure (TLAS):</strong> Declared
+using the <code>accelerationStructureEXT</code> uniform type to allow
+traversal over scene geometry.</li>
+<li><strong>Storage Image:</strong> A 2D image (e.g., <code>rgba8</code>
+or <code>rgba32f</code>) where final pixel color values are
+written.</li>
+<li><strong>Uniform or Storage Buffers:</strong> Camera matrices
+(inverse view and inverse projection) used to compute ray vectors from
+screen-space coordinates.</li>
+</ol>
+<h3 id="ray-payloads">Ray Payloads</h3>
+<p>Data shared between the ray generation shader, hit shaders, and miss
+shaders is stored in a ray payload. The payload is declared in global
+scope using the <code>rayPayloadEXT</code> storage qualifier and an
+explicit location index:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> rayPayloadEXT <span class="dt">vec3</span> hitValue<span class="op">;</span></span></code></pre></div>
+<h2 id="built-in-variables">Built-In Variables</h2>
+<p>The execution environment provides several built-in variables that
+allow each invocation to determine its position within the launch
+grid:</p>
+<ul>
+<li><code>gl_LaunchIDEXT</code>: A <code>uvec3</code> indicating the
+coordinates of the current thread invocation. Typically,
+<code>gl_LaunchIDEXT.xy</code> corresponds to the pixel coordinate <span
+class="math inline">\((x, y)\)</span>.</li>
+<li><code>gl_LaunchSizeEXT</code>: A <code>uvec3</code> representing the
+total dimensions of the ray tracing dispatch (e.g., width, height, and
+depth).</li>
+</ul>
+<h2 id="ray-calculation-and-tracerayext">Ray Calculation and
+<code>traceRayEXT</code></h2>
+<p>Each invocation derives normalized device coordinates (NDC) from
+<code>gl_LaunchIDEXT.xy</code> relative to
+<code>gl_LaunchSizeEXT.xy</code>. Transforming these coordinates by the
+inverse view and projection matrices yields the ray's origin and
+direction in world space.</p>
+<p>Traversing the acceleration structure is initiated using the built-in
+function <code>traceRayEXT</code>. The signature is structured as
+follows:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">traceRayEXT</span><span class="op">(</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    accelerationStructureEXT topLevel<span class="op">,</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> rayFlags<span class="op">,</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> cullMask<span class="op">,</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> sbtRecordOffset<span class="op">,</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> sbtRecordStride<span class="op">,</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> missIndex<span class="op">,</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> origin<span class="op">,</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> tMin<span class="op">,</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> direction<span class="op">,</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> tMax<span class="op">,</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> payload</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<ul>
+<li><strong><code>topLevel</code></strong>: The bound TLAS.</li>
+<li><strong><code>rayFlags</code></strong>: Traversal control flags
+(e.g., <code>gl_RayFlagsOpaqueEXT</code> or
+<code>gl_RayFlagsNoneEXT</code>).</li>
+<li><strong><code>cullMask</code></strong>: An 8-bit mask evaluated
+against instance masks to filter geometry.</li>
+<li><strong><code>sbtRecordOffset</code></strong>: Offset into the
+Shader Binding Table (SBT) for hit groups.</li>
+<li><strong><code>sbtRecordStride</code></strong>: Stride between hit
+groups in the SBT.</li>
+<li><strong><code>missIndex</code></strong>: The index of the miss
+shader to invoke if no geometry is intersected.</li>
+<li><strong><code>origin</code> / <code>direction</code></strong>:
+World-space origin point and normalized direction vector.</li>
+<li><strong><code>tMin</code> / <code>tMax</code></strong>: Geometric
+clipping distances along the ray.</li>
+<li><strong><code>payload</code></strong>: The payload layout location
+number matching the <code>rayPayloadEXT</code> variable.</li>
+</ul>
+<h2 id="complete-minimal-shader-example">Complete Minimal Shader
+Example</h2>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_ray_tracing : require</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> set <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> accelerationStructureEXT topLevelAS<span class="op">;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> rgba8<span class="op">)</span> <span class="kw">uniform</span> <span class="dt">image2D</span> outputImage<span class="op">;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">2</span><span class="op">,</span> set <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> CameraData <span class="op">{</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> invView<span class="op">;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> invProj<span class="op">;</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> camera<span class="op">;</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> rayPayloadEXT <span class="dt">vec3</span> prd<span class="op">;</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">vec2</span> pixelCenter <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span>gl_LaunchIDEXT<span class="op">.</span><span class="fu">xy</span><span class="op">)</span> <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.5</span><span class="op">);</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">vec2</span> inUV <span class="op">=</span> pixelCenter <span class="op">/</span> <span class="dt">vec2</span><span class="op">(</span>gl_LaunchSizeEXT<span class="op">.</span><span class="fu">xy</span><span class="op">);</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> d <span class="op">=</span> inUV <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> origin <span class="op">=</span> camera<span class="op">.</span><span class="fu">invView</span> <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> target <span class="op">=</span> camera<span class="op">.</span><span class="fu">invProj</span> <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>d<span class="op">.</span><span class="fu">x</span><span class="op">,</span> d<span class="op">.</span><span class="fu">y</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> direction <span class="op">=</span> camera<span class="op">.</span><span class="fu">invView</span> <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span><span class="bu">normalize</span><span class="op">(</span>target<span class="op">.</span><span class="fu">xyz</span><span class="op">),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> rayFlags <span class="op">=</span> gl_RayFlagsOpaqueEXT<span class="op">;</span></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> tMin <span class="op">=</span> <span class="fl">0.001</span><span class="op">;</span></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> tMax <span class="op">=</span> <span class="fl">10000.0</span><span class="op">;</span></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>    <span class="fu">traceRayEXT</span><span class="op">(</span></span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>        topLevelAS<span class="op">,</span></span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>        rayFlags<span class="op">,</span></span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>        <span class="bn">0xFF</span><span class="op">,</span></span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>        <span class="dv">0</span><span class="op">,</span></span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>        <span class="dv">0</span><span class="op">,</span></span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>        <span class="dv">0</span><span class="op">,</span></span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>        origin<span class="op">.</span><span class="fu">xyz</span><span class="op">,</span></span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>        tMin<span class="op">,</span></span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>        direction<span class="op">.</span><span class="fu">xyz</span><span class="op">,</span></span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>        tMax<span class="op">,</span></span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>        <span class="dv">0</span></span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>    <span class="bu">imageStore</span><span class="op">(</span>outputImage<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(</span>gl_LaunchIDEXT<span class="op">.</span><span class="fu">xy</span><span class="op">),</span> <span class="dt">vec4</span><span class="op">(</span>prd<span class="op">,</span> <span class="fl">1.0</span><span class="op">));</span></span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="execution-flow">Execution Flow</h2>
+<ol type="1">
+<li><strong>Pipeline Invocation:</strong> The host API issues a trace
+command (such as <code>vkCmdTraceRaysKHR</code>), defining the 3D
+dimensions of the dispatch grid.</li>
+<li><strong>Independent Spawning:</strong> The GPU spawns individual
+threads corresponding to <code>gl_LaunchSizeEXT</code>. Unlike compute
+shaders, there is no shared memory or explicit threadgroup/workgroup
+synchronization.</li>
+<li><strong>Ray Traversal:</strong> When <code>traceRayEXT</code>
+executes, execution within the thread yields while fixed-function
+hardware traverses the bounding volume hierarchy (BVH).</li>
+<li><strong>Hit/Miss Execution:</strong> Intersection, any-hit,
+closest-hit, or miss shaders execute according to traversal results,
+updating the memory referenced by the ray payload location.</li>
+<li><strong>Resumption:</strong> Once traversal and subsequent shader
+executions finish, <code>traceRayEXT</code> returns control back to the
+ray generation shader.</li>
+<li><strong>Output Writing:</strong> The shader reads the updated
+payload values, performs any required post-processing, and commits the
+result to the destination resource via operations like
+<code>imageStore</code>.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GGX Trowbridge-Reitz NDF in GLSL Explained - glsl</title>
+    <meta name="description" content="The GGX (Trowbridge-Reitz) Normal Distribution Function (NDF) is a core component of modern Physically Based Rendering (PBR) specular models. It statistically calculates the concentration of microscopic surface facets—known as microfacets—oriented pr">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/ggx-trowbridge-reitz-ndf-in-glsl-explained">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GGX Trowbridge-Reitz NDF in GLSL Explained - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/ggx-trowbridge-reitz-ndf-in-glsl-explained" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The GGX (Trowbridge-Reitz) Normal Distribution Function (NDF) is a core component of modern Physically Based Rendering (PBR) specular models. It statistically calculates the concentration of microscopic surface facets—known as microfacets—oriented pr" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="ggx-trowbridge-reitz-ndf-in-glsl-explained">GGX Trowbridge-Reitz
+NDF in GLSL Explained</h1>
+<p>The GGX (Trowbridge-Reitz) Normal Distribution Function (NDF) is a
+core component of modern Physically Based Rendering (PBR) specular
+models. It statistically calculates the concentration of microscopic
+surface facets—known as microfacets—oriented precisely toward the
+half-vector between the light and view directions. This article explains
+the underlying mathematical model of the GGX distribution, breaks down
+how it evaluates surface roughness to produce realistic specular
+highlights, and provides a direct, production-ready GLSL
+implementation.</p>
+<h3 id="the-microfacet-theory-and-the-half-vector">The Microfacet Theory
+and the Half-Vector</h3>
+<p>Microfacet theory assumes that rough surfaces are composed of
+microscopic, perfectly reflective mirrors. A microfacet only reflects
+light from an incoming light direction (<span
+class="math inline">\(L\)</span>) directly into the camera view
+direction (<span class="math inline">\(V\)</span>) if its individual
+normal (<span class="math inline">\(m\)</span>) aligns with the
+half-vector (<span class="math inline">\(H\)</span>).</p>
+<p>The half-vector is the normalized vector bisecting the view and light
+vectors:</p>
+<p><span class="math display">\[H = \frac{L + V}{\|L + V\|}\]</span></p>
+<p>The Normal Distribution Function, denoted as <span
+class="math inline">\(D(H)\)</span>, computes the statistical density of
+microfacets pointing in the direction of <span
+class="math inline">\(H\)</span>. Surfaces with higher alignment yield
+sharper, more intense specular highlights, while surfaces with scattered
+alignments yield broad, diffuse reflections.</p>
+<h3 id="the-ggx--trowbridge-reitz-equation">The GGX / Trowbridge-Reitz
+Equation</h3>
+<p>The GGX distribution is widely preferred in computer graphics because
+of its heavy-tailed distribution, which creates a sharp peak with a
+soft, natural halo falloff. The mathematical formula is:</p>
+<p><span class="math display">\[D_{GGX}(N, H, \alpha) =
+\frac{\alpha^2}{\pi \left( (N \cdot H)^2 (\alpha^2 - 1) + 1
+\right)^2}\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(N\)</span> is the macroscopic surface
+normal.</li>
+<li><span class="math inline">\(H\)</span> is the normalized
+half-vector.</li>
+<li><span class="math inline">\(N \cdot H\)</span> is the cosine of the
+angle between the macro normal and the half-vector.</li>
+<li><span class="math inline">\(\alpha\)</span> is the roughness
+parameter. In modern PBR pipelines (such as Disney's principled model),
+<span class="math inline">\(\alpha\)</span> is set to the square of the
+perceptual roughness (<span class="math inline">\(\alpha =
+\text{roughness}^2\)</span>) to ensure a linear, intuitive visual
+progression.</li>
+</ul>
+<h3 id="breaking-down-the-math">Breaking Down the Math</h3>
+<ol type="1">
+<li><strong>Roughness Squaring (<span
+class="math inline">\(\alpha^2\)</span>):</strong> Squaring the
+roughness value shifts distribution scaling so that changes at lower
+roughness values feel uniform to the human eye. The numerator <span
+class="math inline">\(\alpha^2\)</span> scales the peak intensity of the
+specular highlight.</li>
+<li><strong>Alignment Factor (<span class="math inline">\((N \cdot
+H)^2\)</span>):</strong> When the surface normal and half-vector are
+parallel, <span class="math inline">\(N \cdot H = 1\)</span>. As the
+microfacets deviate from the normal, this value approaches <span
+class="math inline">\(0\)</span>.</li>
+<li><strong>Denominator Scaling (<span class="math inline">\(((N \cdot
+H)^2 (\alpha^2 - 1) + 1)^2\)</span>):</strong>
+<ul>
+<li>When roughness is very low (<span class="math inline">\(\alpha \to
+0\)</span>) and alignment is high (<span class="math inline">\(N \cdot H
+\to 1\)</span>), the denominator becomes extremely small, causing the
+function to spike into a sharp, tight reflection.</li>
+<li>When <span class="math inline">\(N \cdot H\)</span> decreases, the
+denominator expands rapidly, producing the characteristic GGX
+falloff.</li>
+</ul></li>
+<li><strong>Energy Conservation (<span
+class="math inline">\(\pi\)</span>):</strong> Multiplying the squared
+denominator by <span class="math inline">\(\pi\)</span> normalizes the
+integral of the distribution over the hemisphere to ensure the
+microfacets do not reflect more light than they receive.</li>
+</ol>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>Below is the standard, optimized GLSL implementation of the
+Trowbridge-Reitz NDF:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> PI <span class="op">=</span> <span class="fl">3.14159265359</span><span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">DistributionGGX</span><span class="op">(</span><span class="dt">vec3</span> N<span class="op">,</span> <span class="dt">vec3</span> H<span class="op">,</span> <span class="dt">float</span> roughness<span class="op">)</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Remap perceptual roughness to alpha</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a <span class="op">=</span> roughness <span class="op">*</span> roughness<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a2 <span class="op">=</span> a <span class="op">*</span> a<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate the dot product between normal and half-vector</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotH <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> H<span class="op">),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotH2 <span class="op">=</span> NdotH <span class="op">*</span> NdotH<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate the denominator</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denom <span class="op">=</span> <span class="op">(</span>NdotH2 <span class="op">*</span> <span class="op">(</span>a2 <span class="op">-</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">+</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    denom <span class="op">=</span> PI <span class="op">*</span> denom <span class="op">*</span> denom<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Prevent division by zero for completely smooth surfaces</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> a2 <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>denom<span class="op">,</span> <span class="fl">0.0000001</span><span class="op">);</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="numerical-stability-considerations">Numerical Stability
+Considerations</h3>
+<p>In real-time fragment shaders, very low roughness values (e.g., <span
+class="math inline">\(0.0\)</span>) cause floating-point instability and
+division by zero. Clamping perceptual roughness to a minimum threshold
+(such as <span class="math inline">\(0.001\)</span> or <span
+class="math inline">\(0.045\)</span> depending on precision formats like
+FP16 or FP32) prevents visual artifacts, black spots, or NaNs during
+rendering.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

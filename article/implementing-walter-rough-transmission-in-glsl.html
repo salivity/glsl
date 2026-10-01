@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Implementing Walter Rough Transmission in GLSL - glsl</title>
+    <meta name="description" content="This article outlines how to implement the Walter et al. (2007) microfacet transmission model for rough dielectrics in GLSL. Microfacet refraction extends standard reflection models by accounting for light scattering as it passes through rough surface in">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/implementing-walter-rough-transmission-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Implementing Walter Rough Transmission in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/implementing-walter-rough-transmission-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article outlines how to implement the Walter et al. (2007) microfacet transmission model for rough dielectrics in GLSL. Microfacet refraction extends standard reflection models by accounting for light scattering as it passes through rough surface in" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="implementing-walter-rough-transmission-in-glsl">Implementing
+Walter Rough Transmission in GLSL</h1>
+<p>This article outlines how to implement the Walter et al. (2007)
+microfacet transmission model for rough dielectrics in GLSL. Microfacet
+refraction extends standard reflection models by accounting for light
+scattering as it passes through rough surface interfaces. Below, the
+core mathematical equations for the Generalized Walter transmission BSDF
+are broken down into standard GGX components, followed by a complete,
+optimized GLSL shader function.</p>
+<h3 id="the-microfacet-refraction-formulation">The Microfacet Refraction
+Formulation</h3>
+<p>Unlike reflection, where the half-vector is simply the normalized sum
+of the incident and outgoing vectors, rough transmission requires a
+generalized half-vector <span class="math inline">\(H_t\)</span> that
+depends on the indices of refraction (IOR) of the two media:</p>
+<p><span class="math display">\[H_t = -(\eta_i V + \eta_t
+L)\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(V\)</span> is the incoming view
+direction (pointing away from the surface).</li>
+<li><span class="math inline">\(L\)</span> is the refracted transmission
+direction (pointing away from the surface, into the medium).</li>
+<li><span class="math inline">\(\eta_i\)</span> and <span
+class="math inline">\(\eta_t\)</span> are the refractive indices of the
+incident and transmitting media.</li>
+</ul>
+<p>The rough dielectric transmission BTDF <span
+class="math inline">\(f_t(V, L)\)</span> is defined as:</p>
+<p><span class="math display">\[f_t(V, L) = \frac{|V \cdot H_t| |L \cdot
+H_t|}{|N \cdot V| |N \cdot L|} \frac{\eta_t^2 (1 - F) D(H_t) G(V,
+L)}{(\eta_i (V \cdot H_t) + \eta_t (L \cdot H_t))^2}\]</span></p>
+<ul>
+<li><strong><span class="math inline">\(D(H_t)\)</span></strong>:
+GGX/Trowbridge-Reitz microfacet normal distribution function.</li>
+<li><strong><span class="math inline">\(G(V, L)\)</span></strong>: Smith
+height-correlated or separable masking-shadowing function.</li>
+<li><strong><span class="math inline">\(F\)</span></strong>: Dielectric
+Fresnel transmittance term evaluated at <span class="math inline">\(V
+\cdot H_t\)</span>.</li>
+<li><strong>Denominator term</strong>: The Jacobian determinant
+accounting for the non-linear change of variables during
+refraction.</li>
+</ul>
+<hr />
+<h3 id="glsl-helper-functions">GLSL Helper Functions</h3>
+<p>The standard GGX normal distribution function and the Smith geometry
+term are computed using the surface normal <span
+class="math inline">\(N\)</span>, roughness <span
+class="math inline">\(\alpha\)</span>, and half-vector <span
+class="math inline">\(H\)</span>.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// GGX / Trowbridge-Reitz Microfacet Distribution</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">distributionGGX</span><span class="op">(</span><span class="dt">vec3</span> N<span class="op">,</span> <span class="dt">vec3</span> H<span class="op">,</span> <span class="dt">float</span> roughness<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a <span class="op">=</span> roughness <span class="op">*</span> roughness<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a2 <span class="op">=</span> a <span class="op">*</span> a<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotH <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> H<span class="op">),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotH2 <span class="op">=</span> NdotH <span class="op">*</span> NdotH<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denom <span class="op">=</span> <span class="op">(</span>NdotH2 <span class="op">*</span> <span class="op">(</span>a2 <span class="op">-</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">+</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> a2 <span class="op">/</span> <span class="op">(</span><span class="fl">3.14159265359</span> <span class="op">*</span> denom <span class="op">*</span> denom<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co">// Smith GGX Masking-Shadowing Function (Separable)</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">geometrySchlickGGX</span><span class="op">(</span><span class="dt">float</span> NdotV<span class="op">,</span> <span class="dt">float</span> roughness<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> r <span class="op">=</span> roughness <span class="op">+</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> k <span class="op">=</span> <span class="op">(</span>r <span class="op">*</span> r<span class="op">)</span> <span class="op">/</span> <span class="fl">8.0</span><span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> NdotV <span class="op">/</span> <span class="op">(</span>NdotV <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> k<span class="op">)</span> <span class="op">+</span> k<span class="op">);</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">geometrySmith</span><span class="op">(</span><span class="dt">vec3</span> N<span class="op">,</span> <span class="dt">vec3</span> V<span class="op">,</span> <span class="dt">vec3</span> L<span class="op">,</span> <span class="dt">float</span> roughness<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotV <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> V<span class="op">));</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotL <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> L<span class="op">));</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fu">geometrySchlickGGX</span><span class="op">(</span>NdotV<span class="op">,</span> roughness<span class="op">)</span> <span class="op">*</span> <span class="fu">geometrySchlickGGX</span><span class="op">(</span>NdotL<span class="op">,</span> roughness<span class="op">);</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="co">// Unpolarized Dielectric Fresnel Reflectance</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">fresnelDielectric</span><span class="op">(</span><span class="dt">float</span> cosThetaI<span class="op">,</span> <span class="dt">float</span> etaI<span class="op">,</span> <span class="dt">float</span> etaT<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sinThetaT2 <span class="op">=</span> <span class="op">(</span>etaI <span class="op">/</span> etaT<span class="op">)</span> <span class="op">*</span> <span class="op">(</span>etaI <span class="op">/</span> etaT<span class="op">)</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> cosThetaI <span class="op">*</span> cosThetaI<span class="op">);</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Total internal reflection</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>sinThetaT2 <span class="op">&gt;</span> <span class="fl">1.0</span><span class="op">)</span> <span class="kw">return</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosThetaT <span class="op">=</span> <span class="bu">sqrt</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> sinThetaT2<span class="op">,</span> <span class="fl">0.0</span><span class="op">));</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> rParl <span class="op">=</span> <span class="op">((</span>etaT <span class="op">*</span> cosThetaI<span class="op">)</span> <span class="op">-</span> <span class="op">(</span>etaI <span class="op">*</span> cosThetaT<span class="op">))</span> <span class="op">/</span> <span class="op">((</span>etaT <span class="op">*</span> cosThetaI<span class="op">)</span> <span class="op">+</span> <span class="op">(</span>etaI <span class="op">*</span> cosThetaT<span class="op">));</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> rPerp <span class="op">=</span> <span class="op">((</span>etaI <span class="op">*</span> cosThetaI<span class="op">)</span> <span class="op">-</span> <span class="op">(</span>etaT <span class="op">*</span> cosThetaT<span class="op">))</span> <span class="op">/</span> <span class="op">((</span>etaI <span class="op">*</span> cosThetaI<span class="op">)</span> <span class="op">+</span> <span class="op">(</span>etaT <span class="op">*</span> cosThetaT<span class="op">));</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fl">0.5</span> <span class="op">*</span> <span class="op">(</span>rParl <span class="op">*</span> rParl <span class="op">+</span> rPerp <span class="op">*</span> rPerp<span class="op">);</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<hr />
+<h3 id="full-walter-transmission-implementation">Full Walter
+Transmission Implementation</h3>
+<p>In the following function, <span class="math inline">\(V\)</span> and
+<span class="math inline">\(L\)</span> point away from the shading
+point. Because transmission travels across the interface, <span
+class="math inline">\(N \cdot V\)</span> and <span
+class="math inline">\(N \cdot L\)</span> must have opposite signs.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">evalWalterTransmission</span><span class="op">(</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> N<span class="op">,</span>          <span class="co">// Geometric surface normal</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> V<span class="op">,</span>          <span class="co">// Direction toward incoming ray/camera (pointing away from surface)</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> L<span class="op">,</span>          <span class="co">// Direction of refracted light (pointing away from surface)</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> etaI<span class="op">,</span>      <span class="co">// Index of refraction of the incident medium (e.g., 1.0 for air)</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> etaT<span class="op">,</span>      <span class="co">// Index of refraction of the transmitting medium (e.g., 1.5 for glass)</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> roughness<span class="op">,</span> <span class="co">// Linear roughness parameter</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> transmissionColor <span class="co">// Base material tint</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosThetaV <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> V<span class="op">);</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosThetaL <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> L<span class="op">);</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// V and L must reside on opposite sides of the surface for transmission</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>cosThetaV <span class="op">*</span> cosThetaL <span class="op">&gt;=</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute the Walter refraction half-vector</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> H <span class="op">=</span> <span class="op">-(</span>etaI <span class="op">*</span> V <span class="op">+</span> etaT <span class="op">*</span> L<span class="op">);</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">dot</span><span class="op">(</span>H<span class="op">,</span> H<span class="op">)</span> <span class="op">&lt;</span> <span class="fl">1e-6</span><span class="op">)</span> <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    H <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>H<span class="op">);</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Align half-vector normal to the side of the incoming ray</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> H<span class="op">)</span> <span class="op">&lt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>        H <span class="op">=</span> <span class="op">-</span>H<span class="op">;</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> VdotH <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>V<span class="op">,</span> H<span class="op">));</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> LdotH <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>L<span class="op">,</span> H<span class="op">));</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotV <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span>cosThetaV<span class="op">);</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotL <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span>cosThetaL<span class="op">);</span></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Evaluate microfacet components</span></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> D <span class="op">=</span> <span class="fu">distributionGGX</span><span class="op">(</span>N<span class="op">,</span> H<span class="op">,</span> roughness<span class="op">);</span></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> G <span class="op">=</span> <span class="fu">geometrySmith</span><span class="op">(</span>N<span class="op">,</span> V<span class="op">,</span> L<span class="op">,</span> roughness<span class="op">);</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> F <span class="op">=</span> <span class="fu">fresnelDielectric</span><span class="op">(</span>VdotH<span class="op">,</span> etaI<span class="op">,</span> etaT<span class="op">);</span></span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Transmitted energy fraction</span></span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> transmittance <span class="op">=</span> <span class="fl">1.0</span> <span class="op">-</span> F<span class="op">;</span></span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Evaluate transmission denominator (Jacobian determinant)</span></span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sqrtDenom <span class="op">=</span> etaI <span class="op">*</span> <span class="bu">dot</span><span class="op">(</span>V<span class="op">,</span> H<span class="op">)</span> <span class="op">+</span> etaT <span class="op">*</span> <span class="bu">dot</span><span class="op">(</span>L<span class="op">,</span> H<span class="op">);</span></span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denom <span class="op">=</span> sqrtDenom <span class="op">*</span> sqrtDenom<span class="op">;</span></span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>denom <span class="op">&lt;</span> <span class="fl">1e-6</span><span class="op">)</span> <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Walter BSDF transmission evaluation</span></span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> factor <span class="op">=</span> <span class="op">(</span>VdotH <span class="op">*</span> LdotH<span class="op">)</span> <span class="op">/</span> <span class="op">(</span>NdotV <span class="op">*</span> NdotL<span class="op">);</span></span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> btdf <span class="op">=</span> factor <span class="op">*</span> <span class="op">((</span>etaT <span class="op">*</span> etaT<span class="op">)</span> <span class="op">*</span> transmittance <span class="op">*</span> D <span class="op">*</span> G<span class="op">)</span> <span class="op">/</span> denom<span class="op">;</span></span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> transmissionColor <span class="op">*</span> btdf<span class="op">;</span></span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="integration-notes">Integration Notes</h3>
+<ol type="1">
+<li><strong>Total Internal Reflection (TIR):</strong> The function
+handles TIR automatically within <code>fresnelDielectric</code>. If
+total internal reflection occurs, <span class="math inline">\(F =
+1.0\)</span>, which nullifies the transmission factor <span
+class="math inline">\((1 - F)\)</span>.</li>
+<li><strong>Roughness Mapping:</strong> Linear roughness is mapped to
+perceptual roughness (<span class="math inline">\(\alpha =
+\text{roughness}^2\)</span>) in <code>distributionGGX</code> to match
+standard Disney and glTF PBR workflows.</li>
+<li><strong>Radiance Scaling:</strong> If using this model inside a
+bidirectional path tracer rather than a direct transmission evaluator,
+the term <span class="math inline">\(\frac{\eta_t^2}{\eta_i^2}\)</span>
+must be adjusted to account for non-symmetric radiance transport across
+refractive boundaries.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Dead Code Elimination for Uniform Structures - glsl</title>
+    <meta name="description" content="This article explains how OpenGL Shading Language (GLSL) compilers detect and purge unreferenced uniform structures through dead code elimination (DCE). By tracking data dependencies, constructing use-definition chains, and performing reachability analys">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-dead-code-elimination-for-uniform-structures">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Dead Code Elimination for Uniform Structures - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-dead-code-elimination-for-uniform-structures" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how OpenGL Shading Language (GLSL) compilers detect and purge unreferenced uniform structures through dead code elimination (DCE). By tracking data dependencies, constructing use-definition chains, and performing reachability analys" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-dead-code-elimination-for-uniform-structures">GLSL Dead
+Code Elimination for Uniform Structures</h1>
+<p>This article explains how OpenGL Shading Language (GLSL) compilers
+detect and purge unreferenced uniform structures through dead code
+elimination (DCE). By tracking data dependencies, constructing
+use-definition chains, and performing reachability analysis from shader
+entry points, the compiler removes unnecessary uniform variables to
+reduce register pressure, shrink the interface footprint, and optimize
+GPU memory allocation.</p>
+<h3 id="the-parsing-and-intermediate-representation-phase">The Parsing
+and Intermediate Representation Phase</h3>
+<p>When a GLSL shader is compiled, the front-end parser translates the
+human-readable source code into an Abstract Syntax Tree (AST) and
+generates a corresponding symbol table. When a user defines a
+<code>struct</code> and declares a <code>uniform</code> instance of it,
+the compiler registers the type layout, member offsets, and identifiers
+in the symbol table.</p>
+<p>Following syntactic analysis, the AST is lowered into an Intermediate
+Representation (IR), such as LLVM-like static single assignment (SSA)
+form or SPIR-V. In this SSA-based IR, every value is assigned exactly
+once, and relationships between operations are represented as explicit
+directed graph edges.</p>
+<h3 id="constructing-use-definition-chains">Constructing Use-Definition
+Chains</h3>
+<p>To determine whether a uniform structure is needed, the compiler
+generates Use-Definition (use-def) and Definition-Use (def-use)
+chains.</p>
+<ol type="1">
+<li><strong>Definitions:</strong> Declaring
+<code>uniform MyStruct u_data;</code> introduces definitions for the
+structure and its constituent fields into the global scope.</li>
+<li><strong>Uses:</strong> Any expression in the code that accesses
+<code>u_data.member</code> creates an explicit read edge linked back to
+that definition.</li>
+</ol>
+<p>If code within an active function accesses a structure field, the
+compiler links that specific member to the consumer instruction. If no
+instructions reference the variable or its members, the def-use chain
+for that structure remains empty.</p>
+<h3 id="liveness-and-reachability-analysis">Liveness and Reachability
+Analysis</h3>
+<p>Dead code elimination relies on liveness analysis, which begins at
+the shader's root outputs. The compiler identifies critical
+nodes—operations with externally observable side effects. In GLSL, these
+typically include:</p>
+<ul>
+<li>Writes to built-in outputs (e.g., <code>gl_Position</code>,
+<code>gl_FragColor</code>, or user-defined <code>out</code>
+variables).</li>
+<li>Writes to atomic counters, shader storage buffer objects (SSBOs), or
+images.</li>
+</ul>
+<p>The algorithm runs backward from these critical root operations,
+traversing the dependency graph to mark all contributing operations as
+"live." If a uniform structure is never loaded, or if values loaded from
+it only contribute to operations that do not affect the output, the
+uniform structure is flagged as "dead."</p>
+<h3 id="member-level-vs-aggregate-pruning">Member-Level vs. Aggregate
+Pruning</h3>
+<p>Compilers handle uniform structures differently depending on the
+compilation target and interface rules:</p>
+<ul>
+<li><strong>Whole-Structure Elimination:</strong> If no field of a
+uniform structure instance is ever loaded in code reachable from the
+entry point, the entire uniform instance is purged from the symbol table
+and interface block.</li>
+<li><strong>Component-Level Pruning (Dead Field Elimination):</strong>
+In standard uniform packing (non-shared/non-std140 blocks), if code only
+reads <code>u_data.a</code> but never <code>u_data.b</code>, the
+compiler can optimize away member <code>b</code>. This collapses the
+structure layout so the unused member consumes no hardware uniform
+registers. However, when explicit memory layouts are declared (such as
+<code>std140</code> or <code>std430</code> interface blocks), struct
+offsets must remain strictly aligned, meaning the compiler may discard
+internal access operations while preserving required memory
+padding.</li>
+</ul>
+<h3 id="interface-stripping-and-link-time-impact">Interface Stripping
+and Link-Time Impact</h3>
+<p>Once the IR is stripped of dead uniform nodes, the compiler finalizes
+the shader interface:</p>
+<ol type="1">
+<li><strong>Reflection Removal:</strong> The unreferenced uniform
+structure is removed from the shader’s active resource list. API queries
+like <code>glGetActiveUniform</code> will no longer report the dead
+uniform.</li>
+<li><strong>Resource Unbinding:</strong> The uniform is stripped of any
+automatically assigned binding slots, preventing the GPU driver from
+allocating descriptor sets or constant buffer space for it.</li>
+<li><strong>Linker Optimization:</strong> If compilation is split across
+stages (such as separate vertex and fragment units), final link-time
+optimization (LTO) ensures that uniform structures declared in both
+stages, but used in neither, are globally pruned from the GPU's pipeline
+state.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

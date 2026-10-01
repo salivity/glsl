@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bayer Matrix Dithering in GLSL for Color Banding - glsl</title>
+    <meta name="description" content="Color banding occurs when smooth color gradients are quantized into discrete steps due to limited color bit depth, creating harsh, visible lines across a render. In real-time rendering using GLSL (OpenGL Shading Language), dithering algorithms such as Ba">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/bayer-matrix-dithering-in-glsl-for-color-banding">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Bayer Matrix Dithering in GLSL for Color Banding - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/bayer-matrix-dithering-in-glsl-for-color-banding" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Color banding occurs when smooth color gradients are quantized into discrete steps due to limited color bit depth, creating harsh, visible lines across a render. In real-time rendering using GLSL (OpenGL Shading Language), dithering algorithms such as Ba" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="bayer-matrix-dithering-in-glsl-for-color-banding">Bayer Matrix
+Dithering in GLSL for Color Banding</h1>
+<p>Color banding occurs when smooth color gradients are quantized into
+discrete steps due to limited color bit depth, creating harsh, visible
+lines across a render. In real-time rendering using GLSL (OpenGL Shading
+Language), dithering algorithms such as Bayer matrix ordered dithering
+eliminate these artifacts by dispersing quantization errors across
+neighboring pixels. By adding a small, deterministic threshold value to
+fragment colors before quantization, the shader leverages human visual
+perception to blend discrete color boundaries into what appears to be a
+seamless, high-precision gradient.</p>
+<h3 id="the-cause-of-color-banding">The Cause of Color Banding</h3>
+<p>Digital displays and standard render buffers typically operate at 8
+bits per channel (256 shades per color component). When rendering subtle
+lighting, atmospheric fog, or wide gradients across large screen areas,
+the difference between adjacent mathematical color values is often
+smaller than the minimum representable step size (<span
+class="math inline">\(1/255\)</span>). Consequently, continuous values
+are truncated or rounded to the nearest integer, forming visually
+jarring bands of uniform color instead of smooth transitions.</p>
+<h3 id="how-dithering-solves-banding">How Dithering Solves Banding</h3>
+<p>Dithering introduces controlled high-frequency noise into the image
+prior to quantization. Instead of a hard transition where every pixel
+shifts from shade <span class="math inline">\(N\)</span> to <span
+class="math inline">\(N+1\)</span> simultaneously, dithering causes
+pixels near the threshold to intersperse both values.</p>
+<p>The human visual system naturally performs low-pass spatial
+filtering, averaging adjacent pixels at a distance. As a result, an area
+with an alternating 50/50 mix of shade <span
+class="math inline">\(N\)</span> and shade <span
+class="math inline">\(N+1\)</span> is perceived as an intermediate tone
+(<span class="math inline">\(N + 0.5\)</span>), effectively simulating
+higher bit depths without increasing the frame buffer's memory
+footprint.</p>
+<h3 id="the-bayer-matrix-in-glsl">The Bayer Matrix in GLSL</h3>
+<p>While error-diffusion algorithms (like Floyd-Steinberg) propagate
+quantization errors to neighboring pixels, they are inherently
+sequential and unsuitable for the parallel architecture of GPUs. GLSL
+shaders process fragments simultaneously and independently, making
+ordered dithering via a Bayer matrix the industry standard for real-time
+graphics.</p>
+<p>The Bayer matrix is an <span class="math inline">\(N \times
+N\)</span> grid of normalized threshold values (commonly <span
+class="math inline">\(2 \times 2\)</span>, <span class="math inline">\(4
+\times 4\)</span>, or <span class="math inline">\(8 \times 8\)</span>)
+defined recursively to maximize the spatial distance between similar
+values. This spatial distribution minimizes low-frequency clumping,
+producing a subtle cross-hatch pattern that the human eye easily
+blends.</p>
+<h3 id="implementation-in-a-fragment-shader">Implementation in a
+Fragment Shader</h3>
+<p>In a GLSL fragment shader, ordered dithering is implemented directly
+on the final output color using the fragment's screen coordinates:</p>
+<ol type="1">
+<li><strong>Coordinate Mapping:</strong> The fragment position
+(<code>gl_FragCoord.xy</code>) is mapped into the Bayer matrix
+dimensions using the modulo operator to tile the pattern seamlessly
+across the screen.</li>
+<li><strong>Threshold Lookup:</strong> The matrix yields a static
+threshold value, typically normalized to a range such as <span
+class="math inline">\([0, 1)\)</span> or <span
+class="math inline">\([-0.5, 0.5)\)</span>.</li>
+<li><strong>Offset Application:</strong> The threshold is scaled by the
+quantization step (for 8-bit color, this is roughly <span
+class="math inline">\(1.0 / 255.0\)</span>) and added to the continuous
+color value.</li>
+<li><strong>Quantization:</strong> The altered color is written to the
+output buffer, where standard hardware rounding converts the offset
+values into the interleaved pixel pattern.</li>
+</ol>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Example of a 4x4 Bayer matrix lookup in GLSL</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">bayer4x4</span><span class="op">(</span><span class="dt">vec2</span> uv<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> x <span class="op">=</span> <span class="dt">int</span><span class="op">(</span><span class="bu">mod</span><span class="op">(</span>uv<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="fl">4.0</span><span class="op">));</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> y <span class="op">=</span> <span class="dt">int</span><span class="op">(</span><span class="bu">mod</span><span class="op">(</span>uv<span class="op">.</span><span class="fu">y</span><span class="op">,</span> <span class="fl">4.0</span><span class="op">));</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> <span class="dt">index</span> <span class="op">=</span> x <span class="op">+</span> y <span class="op">*</span> <span class="dv">4</span><span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> m<span class="op">[</span><span class="dv">16</span><span class="op">]</span> <span class="op">=</span> <span class="dt">float</span><span class="op">[</span><span class="dv">16</span><span class="op">](</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>         <span class="fl">0.0</span><span class="op">,</span>  <span class="fl">8.0</span><span class="op">,</span>  <span class="fl">2.0</span><span class="op">,</span> <span class="fl">10.0</span><span class="op">,</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        <span class="fl">12.0</span><span class="op">,</span>  <span class="fl">4.0</span><span class="op">,</span> <span class="fl">14.0</span><span class="op">,</span>  <span class="fl">6.0</span><span class="op">,</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>         <span class="fl">3.0</span><span class="op">,</span> <span class="fl">11.0</span><span class="op">,</span>  <span class="fl">1.0</span><span class="op">,</span>  <span class="fl">9.0</span><span class="op">,</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="fl">15.0</span><span class="op">,</span>  <span class="fl">7.0</span><span class="op">,</span> <span class="fl">13.0</span><span class="op">,</span>  <span class="fl">5.0</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span>m<span class="op">[</span><span class="dt">index</span><span class="op">]</span> <span class="op">/</span> <span class="fl">16.0</span><span class="op">)</span> <span class="op">-</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> linearColor <span class="op">=</span> <span class="fu">calculateColor</span><span class="op">();</span> <span class="co">// Smooth, banded gradient</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Scale dither by quantization step</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> dither <span class="op">=</span> <span class="fu">bayer4x4</span><span class="op">(</span><span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">xy</span><span class="op">)</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">/</span> <span class="fl">255.0</span><span class="op">);</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="va">gl_FragColor</span> <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>linearColor <span class="op">+</span> dither<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="performance-and-visual-characteristics">Performance and Visual
+Characteristics</h3>
+<p>Bayer matrix dithering delivers an optimal trade-off between
+performance and visual quality. Because the operation relies solely on
+simple arithmetic and screen-space coordinates without dynamic texture
+fetches, the computational cost is virtually negligible. While random
+noise dithering can cause temporal grain or "crawling" when the camera
+moves, ordered Bayer dithering remains visually stable relative to
+screen space, providing a smooth and reliable remedy for gradient
+banding in real-time GLSL applications.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

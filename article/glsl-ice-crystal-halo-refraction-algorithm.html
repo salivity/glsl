@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Ice Crystal Halo Refraction Algorithm - glsl</title>
+    <meta name="description" content="This article provides an overview of the algorithms used to evaluate frost crystal and ice halo refraction rings around light sources in GLSL shaders. Simulating these atmospheric optics requires modeling how light interacts with hexagonal ice crystals,">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-ice-crystal-halo-refraction-algorithm">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Ice Crystal Halo Refraction Algorithm - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-ice-crystal-halo-refraction-algorithm" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of the algorithms used to evaluate frost crystal and ice halo refraction rings around light sources in GLSL shaders. Simulating these atmospheric optics requires modeling how light interacts with hexagonal ice crystals," />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-ice-crystal-halo-refraction-algorithm">GLSL Ice Crystal
+Halo Refraction Algorithm</h1>
+<p>This article provides an overview of the algorithms used to evaluate
+frost crystal and ice halo refraction rings around light sources in GLSL
+shaders. Simulating these atmospheric optics requires modeling how light
+interacts with hexagonal ice crystals, specifically focusing on the
+minimum deviation angle, chromatic dispersion, and angular intensity
+falloff. The following sections break down the underlying mathematical
+model and provide a direct GLSL implementation suitable for real-time
+rendering.</p>
+<h2 id="the-minimum-deviation-algorithm">The Minimum Deviation
+Algorithm</h2>
+<p>Atmospheric halos, such as the common 22° and 46° halos, are produced
+by light refracting through hexagonal prism ice crystals suspended in
+the air. In real-time computer graphics, performing brute-force Monte
+Carlo ray tracing through millions of randomly oriented 3D crystals is
+computationally prohibitive. Instead, GLSL implementations utilize an
+analytical phase function based on the <strong>Prism Minimum Deviation
+Law</strong>.</p>
+<p>When light passes through a crystal prism with an apex angle <span
+class="math inline">\(\alpha\)</span> and a refractive index <span
+class="math inline">\(n\)</span>, the angle of minimum deviation <span
+class="math inline">\(\theta_{min}\)</span> represents the threshold
+below which no light can be refracted. It is determined by:</p>
+<p><span class="math display">\[\theta_{min} = 2 \arcsin\left(n
+\sin\left(\frac{\alpha}{2}\right)\right) - \alpha\]</span></p>
+<ul>
+<li><strong>22° Halo:</strong> Light passes through alternating prism
+faces with an apex angle of <span class="math inline">\(\alpha =
+60^\circ\)</span> (<span class="math inline">\(\pi/3\)</span> radians).
+For ice (<span class="math inline">\(n \approx 1.309\)</span>), <span
+class="math inline">\(\theta_{min} \approx 21.84^\circ\)</span>.</li>
+<li><strong>46° Halo:</strong> Light passes between a prism face and a
+basal face with an apex angle of <span class="math inline">\(\alpha =
+90^\circ\)</span> (<span class="math inline">\(\pi/2\)</span> radians),
+yielding <span class="math inline">\(\theta_{min} \approx
+45.7^\circ\)</span>.</li>
+</ul>
+<p>Because light rays pile up at this minimum deviation threshold before
+dropping off gradually at wider angles, the intensity profile features a
+sharp inner boundary and a diffused outer tail.</p>
+<h2 id="chromatic-dispersion-modeling">Chromatic Dispersion
+Modeling</h2>
+<p>The characteristic red inner edge and blue/white outer fringe of an
+ice halo occur because the refractive index of ice varies with
+wavelength. This dispersion can be modeled using Cauchy's equation:</p>
+<p><span class="math display">\[n(\lambda) = A +
+\frac{B}{\lambda^2}\]</span></p>
+<p>In a fragment shader, evaluating three distinct wavelengths (red:
+~650 nm, green: ~532 nm, blue: ~450 nm) allows the calculation of
+separate minimum deviation angles for each color channel:</p>
+<ul>
+<li><span class="math inline">\(n_{red} \approx 1.307 \rightarrow
+\theta_{min} \approx 21.6^\circ\)</span></li>
+<li><span class="math inline">\(n_{green} \approx 1.310 \rightarrow
+\theta_{min} \approx 21.9^\circ\)</span></li>
+<li><span class="math inline">\(n_{blue} \approx 1.317 \rightarrow
+\theta_{min} \approx 22.5^\circ\)</span></li>
+</ul>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>The following fragment shader function calculates the scattering
+intensity of an ice halo around a point or directional light source. It
+calculates the angular separation between the view vector and the light
+vector, evaluates the deviation profile across the RGB spectrum, and
+produces the ring effect.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Computes halo intensity for a given scattering angle and refractive index</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">evaluateHaloComponent</span><span class="op">(</span><span class="dt">float</span> cosTheta<span class="op">,</span> <span class="dt">float</span> n<span class="op">,</span> <span class="dt">float</span> apexAngle<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate minimum deviation angle for the given refractive index</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sinHalfAlpha <span class="op">=</span> <span class="bu">sin</span><span class="op">(</span>apexAngle <span class="op">*</span> <span class="fl">0.5</span><span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sinVal <span class="op">=</span> n <span class="op">*</span> sinHalfAlpha<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Total internal reflection check</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>sinVal <span class="op">&gt;</span> <span class="fl">1.0</span><span class="op">)</span> <span class="kw">return</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> thetaMin <span class="op">=</span> <span class="fl">2.0</span> <span class="op">*</span> <span class="bu">asin</span><span class="op">(</span>sinVal<span class="op">)</span> <span class="op">-</span> apexAngle<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> currentAngle <span class="op">=</span> <span class="bu">acos</span><span class="op">(</span><span class="bu">clamp</span><span class="op">(</span>cosTheta<span class="op">,</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">));</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Light cannot refract below the minimum deviation angle</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>currentAngle <span class="op">&lt;</span> thetaMin<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Angular distance from minimum deviation peak</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> deltaTheta <span class="op">=</span> currentAngle <span class="op">-</span> thetaMin<span class="op">;</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Intensity spikes at thetaMin and decays asymptotically (1 / sqrt(deltaTheta))</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Softened with an epsilon to prevent division by zero</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> peakIntensity <span class="op">=</span> <span class="fl">1.0</span> <span class="op">/</span> <span class="bu">sqrt</span><span class="op">(</span>deltaTheta <span class="op">+</span> <span class="fl">0.001</span><span class="op">);</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Exponential falloff for larger angles</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> falloff <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>deltaTheta <span class="op">*</span> <span class="fl">12.0</span><span class="op">);</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> peakIntensity <span class="op">*</span> falloff<span class="op">;</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a><span class="co">// Main evaluation function for the 22-degree ice halo</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">evaluateIceHalo</span><span class="op">(</span><span class="dt">vec3</span> viewDir<span class="op">,</span> <span class="dt">vec3</span> lightDir<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Cosine of the angle between view and light directions</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosTheta <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span><span class="bu">normalize</span><span class="op">(</span>viewDir<span class="op">),</span> <span class="bu">normalize</span><span class="op">(</span>lightDir<span class="op">));</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Apex angle for 22-degree halo (60 degrees in radians)</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> alpha <span class="op">=</span> <span class="fl">1.04719755</span><span class="op">;</span> </span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Wavelength-dependent refractive indices for ice (RGB)</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">vec3</span> nIce <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.307</span><span class="op">,</span> <span class="fl">1.310</span><span class="op">,</span> <span class="fl">1.317</span><span class="op">);</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> haloColor<span class="op">;</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    haloColor<span class="op">.</span><span class="fu">r</span> <span class="op">=</span> <span class="fu">evaluateHaloComponent</span><span class="op">(</span>cosTheta<span class="op">,</span> nIce<span class="op">.</span><span class="fu">r</span><span class="op">,</span> alpha<span class="op">);</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>    haloColor<span class="op">.</span><span class="fu">g</span> <span class="op">=</span> <span class="fu">evaluateHaloComponent</span><span class="op">(</span>cosTheta<span class="op">,</span> nIce<span class="op">.</span><span class="fu">g</span><span class="op">,</span> alpha<span class="op">);</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    haloColor<span class="op">.</span><span class="fu">b</span> <span class="op">=</span> <span class="fu">evaluateHaloComponent</span><span class="op">(</span>cosTheta<span class="op">,</span> nIce<span class="op">.</span><span class="fu">b</span><span class="op">,</span> alpha<span class="op">);</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Scale intensity</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> haloColor <span class="op">*</span> <span class="fl">0.15</span><span class="op">;</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="integration-into-atmospheric-scattering">Integration into
+Atmospheric Scattering</h2>
+<p>To integrate this algorithm into a sky or lens shader:</p>
+<ol type="1">
+<li>Normalize the interpolated view ray and the vector pointing toward
+the light source.</li>
+<li>Call <code>evaluateIceHalo(viewDir, lightDir)</code>.</li>
+<li>Modulate the returned color by the atmospheric optical depth
+(crystal concentration) and light source radiance.</li>
+<li>Add the resulting halo value directly to the ambient sky color and
+forward Mie scattering contributions before tone mapping.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

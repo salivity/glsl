@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mesh Shader Output to Fragment Shader Input in GLSL - glsl</title>
+    <meta name="description" content="This article explains how GLSL mesh shaders route per-vertex output attributes to fragment shader location bindings. In modern GPU pipelines using GLEXTmeshshader, mesh shaders replace traditional vertex and geometry stages by explicitly generating primi">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/mesh-shader-output-to-fragment-shader-input-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Mesh Shader Output to Fragment Shader Input in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/mesh-shader-output-to-fragment-shader-input-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how GLSL mesh shaders route per-vertex output attributes to fragment shader location bindings. In modern GPU pipelines using GLEXTmeshshader, mesh shaders replace traditional vertex and geometry stages by explicitly generating primi" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="mesh-shader-output-to-fragment-shader-input-in-glsl">Mesh Shader
+Output to Fragment Shader Input in GLSL</h1>
+<p>This article explains how GLSL mesh shaders route per-vertex output
+attributes to fragment shader location bindings. In modern GPU pipelines
+using <code>GL_EXT_mesh_shader</code>, mesh shaders replace traditional
+vertex and geometry stages by explicitly generating primitives and
+vertex data. By declaring per-vertex output blocks with specified
+location qualifiers and writing vertex topology through primitive index
+arrays, the hardware rasterizer interpolates these outputs and binds
+them seamlessly to matching fragment shader input locations.</p>
+<h3 id="declaring-per-vertex-outputs-in-the-mesh-shader">Declaring
+Per-Vertex Outputs in the Mesh Shader</h3>
+<p>In GLSL mesh shaders, per-vertex outputs are defined using an
+interface block or individual variables qualified with the
+<code>out vertices</code> storage qualifier. To route data predictably
+to the fragment stage, each attribute is assigned an explicit index
+using <code>layout(location = N)</code>.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_mesh_shader : require</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">32</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">triangles</span><span class="op">,</span> <span class="dt">max_vertices</span> <span class="op">=</span> <span class="dv">64</span><span class="op">,</span> max_primitives <span class="op">=</span> <span class="dv">126</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Explicit location assignment on a per-vertex interface block</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> VertexOutput <span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> normal<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> uv<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> v_out<span class="op">[];</span></span></code></pre></div>
+<p>In this setup, <code>v_out[]</code> is an array sized by
+<code>max_vertices</code>. The attribute <code>normal</code> consumes
+<code>location = 0</code>, while <code>uv</code> automatically
+increments to <code>location = 1</code> unless explicitly assigned
+otherwise.</p>
+<h3 id="populating-the-outputs-and-defining-topology">Populating the
+Outputs and Defining Topology</h3>
+<p>Mesh shaders decouple vertex generation from primitive connectivity.
+You must set the actual output counts at runtime via
+<code>SetMeshOutputsEXT(numVertices, numPrimitives)</code>. Mesh shader
+invocations then write directly to individual vertex indices within the
+output arrays:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> vID <span class="op">=</span> <span class="bu">gl_LocalInvocationIndex</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>vID <span class="op">&lt;</span> numVertices<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    gl_MeshVerticesEXT<span class="op">[</span>vID<span class="op">].</span><span class="fu">gl_Position</span> <span class="op">=</span> transform <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>inPositions<span class="op">[</span>vID<span class="op">],</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    v_out<span class="op">[</span>vID<span class="op">].</span><span class="fu">normal</span> <span class="op">=</span> inNormals<span class="op">[</span>vID<span class="op">];</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    v_out<span class="op">[</span>vID<span class="op">].</span><span class="fu">uv</span> <span class="op">=</span> inUVs<span class="op">[</span>vID<span class="op">];</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>To form geometry, primitive indices are populated using the built-in
+index array (such as <code>gl_PrimitiveTriangleIndicesEXT</code>):</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span><span class="bu">gl_LocalInvocationIndex</span> <span class="op">&lt;</span> numPrimitives<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    gl_PrimitiveTriangleIndicesEXT<span class="op">[</span><span class="bu">gl_LocalInvocationIndex</span><span class="op">]</span> <span class="op">=</span> <span class="dt">uvec3</span><span class="op">(</span>i0<span class="op">,</span> i1<span class="op">,</span> i2<span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="rasterization-and-interpolation">Rasterization and
+Interpolation</h3>
+<p>The hardware rasterizer reads the indices stored in
+<code>gl_PrimitiveTriangleIndicesEXT</code> to gather vertex positions
+from <code>gl_MeshVerticesEXT</code> and corresponding attributes from
+<code>v_out[]</code>.</p>
+<p>For each fragment covered by a generated primitive, the rasterizer
+performs perspective-correct interpolation on the attributes defined at
+<code>v_out[i0]</code>, <code>v_out[i1]</code>, and
+<code>v_out[i2]</code>. Unless qualified with the <code>flat</code>
+interpolation modifier, floating-point vectors are interpolated across
+the face of the primitive according to the fragment's barycentric
+coordinates.</p>
+<h3 id="binding-to-fragment-shader-inputs">Binding to Fragment Shader
+Inputs</h3>
+<p>The fragment shader receives the interpolated attributes by declaring
+input variables with matching location qualifiers. The variable names in
+the fragment shader do not need to match those in the mesh shader; the
+linkage is determined solely by the <code>location</code> layout:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> inNormal<span class="op">;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec2</span> inUV<span class="op">;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> fragColor<span class="op">;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>inNormal <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Because <code>inNormal</code> is bound to <code>location = 0</code>,
+it automatically receives the interpolated values of
+<code>v_out[].normal</code>. Similarly, <code>inUV</code> maps directly
+to <code>location = 1</code>.</p>
+<h3 id="key-rules-for-mesh-to-fragment-routing">Key Rules for
+Mesh-to-Fragment Routing</h3>
+<ol type="1">
+<li><strong>Location Matching:</strong> The layout
+<code>location = N</code> in the fragment shader must match the base
+location assigned to the corresponding attribute in the mesh
+shader.</li>
+<li><strong>Type and Qualifier Matching:</strong> The data type and
+interpolation qualifiers (such as <code>flat</code>,
+<code>noperspective</code>, or <code>centroid</code>) must match between
+the mesh shader's per-vertex output and the fragment shader's
+input.</li>
+<li><strong>Distinction from Per-Primitive Data:</strong> Mesh shaders
+can also emit per-primitive attributes using the
+<code>perprimitiveEXT</code> qualifier. Per-primitive attributes also
+use <code>layout(location = N)</code>, but their location namespace is
+shared with per-vertex attributes. You cannot assign the same location
+number to both a per-vertex and a per-primitive output within the same
+pipeline.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>dFdxFine in GLSL for Un-aliased Normal Gradients - glsl</title>
+    <meta name="description" content="This article explores how the GLSL derivative function dFdxFine is utilized to compute accurate, un-aliased normal gradients across high-frequency geometry. In modern GPU fragment pipelines, screen-space derivatives frequently introduce blocky artifacts">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/d-fdx-fine-in-glsl-for-un-aliased-normal-gradients">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="dFdxFine in GLSL for Un-aliased Normal Gradients - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/d-fdx-fine-in-glsl-for-un-aliased-normal-gradients" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores how the GLSL derivative function dFdxFine is utilized to compute accurate, un-aliased normal gradients across high-frequency geometry. In modern GPU fragment pipelines, screen-space derivatives frequently introduce blocky artifacts" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="dfdxfine-in-glsl-for-un-aliased-normal-gradients">dFdxFine in
+GLSL for Un-aliased Normal Gradients</h1>
+<p>This article explores how the GLSL derivative function
+<code>dFdxFine</code> is utilized to compute accurate, un-aliased normal
+gradients across high-frequency geometry. In modern GPU fragment
+pipelines, screen-space derivatives frequently introduce blocky
+artifacts and specular aliasing on dense geometric detail. By generating
+fine-grained differences instead of coarse quad-averaged values,
+<code>dFdxFine</code> preserves local surface variations, stabilizes
+normal reconstruction, and suppresses high-frequency rendering
+artifacts.</p>
+<p>Modern GPUs execute fragment shaders concurrently within 2x2 pixel
+groupings called quads. Standard screen-space derivative functions, such
+as <code>dFdx</code>, approximate partial derivatives by taking finite
+differences between neighboring fragments within this quad. However, the
+OpenGL and Vulkan specifications allow the driver to implement standard
+<code>dFdx</code> as <code>dFdxCoarse</code>, meaning a single
+difference is calculated across the entire quad and replicated across
+all four pixels.</p>
+<p>When applied to high-frequency geometry—such as dense triangle
+meshes, procedural height fields, or sharp geometric edges—this coarse
+approximation causes severe spatial aliasing. Because four adjacent
+fragments share identical derivative vectors, derived surface properties
+show noticeable 2x2 pixel stepping patterns. When computing analytical
+normals directly from screen-space position data via cross products,
+coarse derivatives produce a flat, faceted appearance across curved or
+high-frequency details. This artificial faceting results in unstable
+specular highlights that flicker during camera movement.</p>
+<p>The <code>dFdxFine</code> function eliminates this behavior by
+enforcing independent finite differences for each horizontal pair within
+the 2x2 quad. Rather than distributing a single calculated slope across
+the whole quad, <code>dFdxFine</code> calculates:</p>
+<ul>
+<li>The difference between fragment (0,0) and fragment (1,0) for the top
+row.</li>
+<li>The difference between fragment (0,1) and fragment (1,1) for the
+bottom row.</li>
+</ul>
+<p>Combined with <code>dFdyFine</code>, this approach yields per-row and
+per-column gradients that accurately reflect local sub-quad curvature.
+When reconstructing geometric normals dynamically:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> dPdx <span class="op">=</span> <span class="bu">dFdxFine</span><span class="op">(</span>vPosition<span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> dPdy <span class="op">=</span> <span class="bu">dFdyFine</span><span class="op">(</span>vPosition<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> normal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="bu">cross</span><span class="op">(</span>dPdx<span class="op">,</span> dPdy<span class="op">));</span></span></code></pre></div>
+<p>This ensures that the normal gradient aligns directly with the
+geometric change occurring at that exact pixel boundary.</p>
+<p>In high-frequency displacement and bump mapping,
+<code>dFdxFine</code> is equally critical. Procedural noise functions
+and detailed normal maps frequently oscillate at or near the Nyquist
+frequency of the display buffer. Evaluating these gradients with coarse
+derivatives amplifies discontinuities, whereas <code>dFdxFine</code>
+provides the exact slope of the parameter across adjacent pixels. This
+localized precision prevents normal gradients from snapping abruptly
+between quads, preserving smooth shading transitions.</p>
+<p>While <code>dFdxFine</code> can introduce minor compute overhead
+compared to coarse derivatives on select architectures, its use is
+essential whenever geometry frequency exceeds quad resolution. It
+replaces uniform quad approximations with distinct sample-to-sample
+deltas, serving as the foundational mechanism for artifact-free,
+dynamically generated normal fields on intricate 3D surfaces.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marching Tetrahedra in GLSL: Solving Ambiguities - glsl</title>
+    <meta name="description" content="This article explains how to implement the Marching Tetrahedra algorithm in GLSL to eliminate the topological ambiguities and hole artifacts common to Marching Cubes. It details the mathematical cause of these ambiguities, demonstrates how decomposing cu">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/marching-tetrahedra-in-glsl-solving-ambiguities">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Marching Tetrahedra in GLSL: Solving Ambiguities - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/marching-tetrahedra-in-glsl-solving-ambiguities" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to implement the Marching Tetrahedra algorithm in GLSL to eliminate the topological ambiguities and hole artifacts common to Marching Cubes. It details the mathematical cause of these ambiguities, demonstrates how decomposing cu" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="marching-tetrahedra-in-glsl-solving-ambiguities">Marching
+Tetrahedra in GLSL: Solving Ambiguities</h1>
+<p>This article explains how to implement the Marching Tetrahedra
+algorithm in GLSL to eliminate the topological ambiguities and hole
+artifacts common to Marching Cubes. It details the mathematical cause of
+these ambiguities, demonstrates how decomposing cubic cells into
+tetrahedra solves the problem, and provides a structured approach for
+implementing lookup tables, edge interpolation, and triangle generation
+in GPU shaders.</p>
+<h3 id="the-topological-ambiguity-problem-in-marching-cubes">The
+Topological Ambiguity Problem in Marching Cubes</h3>
+<p>The standard Marching Cubes algorithm evaluates a scalar field at the
+eight vertices of a grid cell to approximate an isosurface. Because each
+vertex can be either inside or outside the surface, there are <span
+class="math inline">\(2^8 = 256\)</span> possible configurations,
+typically reduced to 15 canonical cases via symmetry.</p>
+<p>Ambiguities occur when diagonally opposite vertices on a shared
+square face have identical signs while the remaining two vertices have
+the opposite sign (notably in cases 3, 6, 7, 10, 12, and 13). Because a
+square face can be legitimately contoured in two conflicting ways,
+adjacent cubes evaluating the shared face independently can choose
+mismatched surface topologies. This mismatch introduces visible cracks
+and non-manifold geometry in the rendered mesh unless complex asymptotic
+deciders or extended 33-case lookup tables are applied.</p>
+<h3 id="how-marching-tetrahedra-resolves-ambiguity">How Marching
+Tetrahedra Resolves Ambiguity</h3>
+<p>Marching Tetrahedra circumvents this issue by subdividing each cubic
+cell into smaller simplices (tetrahedra). A tetrahedron has only four
+vertices, yielding <span class="math inline">\(2^4 = 16\)</span>
+possible binary states. When reduced by rotational symmetry, only three
+distinct geometric topologies exist:</p>
+<ol type="1">
+<li><strong>All vertices inside or outside (0 or 4 active):</strong> No
+surface passes through the tetrahedron (0 triangles).</li>
+<li><strong>One vertex inside or outside (1 or 3 active):</strong> The
+surface cuts off one corner, producing a single triangle (1
+triangle).</li>
+<li><strong>Two vertices inside and two outside (2 active):</strong> The
+surface cuts through four edges, forming a quadrilateral that splits
+into two triangles (2 triangles).</li>
+</ol>
+<p>Because every shared face between tetrahedra is a triangle, no
+configuration allows alternating diagonal signs across a face. A
+triangular face can only ever have zero, one, or two vertices marked
+active, each having a mathematically unique intersection line.
+Consequently, topological ambiguity is impossible, and generated meshes
+are inherently manifold and watertight.</p>
+<h3 id="cell-decomposition-strategies">Cell Decomposition
+Strategies</h3>
+<p>A regular cube can be partitioned into tetrahedra in two primary
+ways:</p>
+<ul>
+<li><strong>5-Tetrahedra Decomposition:</strong> Requires alternating
+the orientation of the subdivision across adjacent cells (using a 3D
+parity check: <code>(x + y + z) % 2</code>) to ensure that internal
+diagonal cuts align across cube boundaries.</li>
+<li><strong>6-Tetrahedra Decomposition:</strong> Standardizes edge
+alignment across all cells along a primary diagonal axis without
+requiring parity alternating. While it produces more triangles, it is
+often simpler to vectorize in compute shaders.</li>
+</ul>
+<p>For the 6-tetrahedron approach, a cube with local corners labeled 0
+to 7 can be split into six tetrahedra using consistent index tuples:</p>
+<ul>
+<li>Tet 0: <code>(0, 5, 1, 6)</code></li>
+<li>Tet 1: <code>(0, 1, 2, 6)</code></li>
+<li>Tet 2: <code>(0, 2, 3, 6)</code></li>
+<li>Tet 3: <code>(0, 3, 7, 6)</code></li>
+<li>Tet 4: <code>(0, 7, 4, 6)</code></li>
+<li>Tet 5: <code>(0, 4, 5, 6)</code></li>
+</ul>
+<h3 id="glsl-implementation-architecture">GLSL Implementation
+Architecture</h3>
+<p>Because modern GLSL implementations typically process volumetric data
+in Compute Shaders or Geometry Shaders, Marching Tetrahedra can be
+implemented cleanly with constant lookup tables.</p>
+<h4 id="1-case-and-edge-tables">1. Case and Edge Tables</h4>
+<p>A 16-element lookup table determines the edge intersections for any
+4-bit configuration. Each tetrahedron contains six edges:</p>
+<ul>
+<li>Edge 0: Vertex 0–1</li>
+<li>Edge 1: Vertex 1–2</li>
+<li>Edge 2: Vertex 2–0</li>
+<li>Edge 3: Vertex 0–3</li>
+<li>Edge 4: Vertex 1–3</li>
+<li>Edge 5: Vertex 2–3</li>
+</ul>
+<p>The table maps the active vertex bitmask to the edges forming the
+resulting triangles (terminated by <code>-1</code>):</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Format: Up to 2 triangles per tetrahedron (6 edge indices max)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> tetTriTable<span class="op">[</span><span class="dv">16</span><span class="op">][</span><span class="dv">7</span><span class="op">]</span> <span class="op">=</span> <span class="dt">int</span><span class="op">[</span><span class="dv">16</span><span class="op">][</span><span class="dv">7</span><span class="op">](</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 0000: None</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](</span> <span class="dv">0</span><span class="op">,</span>  <span class="dv">2</span><span class="op">,</span>  <span class="dv">3</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 0001: 1 triangle</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](</span> <span class="dv">0</span><span class="op">,</span>  <span class="dv">1</span><span class="op">,</span>  <span class="dv">4</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 0010: 1 triangle</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](</span> <span class="dv">1</span><span class="op">,</span>  <span class="dv">4</span><span class="op">,</span>  <span class="dv">2</span><span class="op">,</span>  <span class="dv">2</span><span class="op">,</span>  <span class="dv">4</span><span class="op">,</span>  <span class="dv">3</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 0011: 2 triangles</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](</span> <span class="dv">1</span><span class="op">,</span>  <span class="dv">2</span><span class="op">,</span>  <span class="dv">5</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 0100: 1 triangle</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](</span> <span class="dv">0</span><span class="op">,</span>  <span class="dv">5</span><span class="op">,</span>  <span class="dv">3</span><span class="op">,</span>  <span class="dv">0</span><span class="op">,</span>  <span class="dv">1</span><span class="op">,</span>  <span class="dv">5</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 0101: 2 triangles</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](</span> <span class="dv">0</span><span class="op">,</span>  <span class="dv">2</span><span class="op">,</span>  <span class="dv">4</span><span class="op">,</span>  <span class="dv">4</span><span class="op">,</span>  <span class="dv">2</span><span class="op">,</span>  <span class="dv">5</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 0110: 2 triangles</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](</span> <span class="dv">3</span><span class="op">,</span>  <span class="dv">4</span><span class="op">,</span>  <span class="dv">5</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 0111: 1 triangle</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](</span> <span class="dv">3</span><span class="op">,</span>  <span class="dv">4</span><span class="op">,</span>  <span class="dv">5</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 1000: 1 triangle</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](</span> <span class="dv">0</span><span class="op">,</span>  <span class="dv">4</span><span class="op">,</span>  <span class="dv">2</span><span class="op">,</span>  <span class="dv">4</span><span class="op">,</span>  <span class="dv">5</span><span class="op">,</span>  <span class="dv">2</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 1001: 2 triangles</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](</span> <span class="dv">0</span><span class="op">,</span>  <span class="dv">3</span><span class="op">,</span>  <span class="dv">5</span><span class="op">,</span>  <span class="dv">0</span><span class="op">,</span>  <span class="dv">5</span><span class="op">,</span>  <span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 1010: 2 triangles</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](</span> <span class="dv">1</span><span class="op">,</span>  <span class="dv">5</span><span class="op">,</span>  <span class="dv">2</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 1011: 1 triangle</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](</span> <span class="dv">1</span><span class="op">,</span>  <span class="dv">2</span><span class="op">,</span>  <span class="dv">4</span><span class="op">,</span>  <span class="dv">2</span><span class="op">,</span>  <span class="dv">3</span><span class="op">,</span>  <span class="dv">4</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 1100: 2 triangles</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](</span> <span class="dv">0</span><span class="op">,</span>  <span class="dv">4</span><span class="op">,</span>  <span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 1101: 1 triangle</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](</span> <span class="dv">0</span><span class="op">,</span>  <span class="dv">3</span><span class="op">,</span>  <span class="dv">2</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="co">// 1110: 1 triangle</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">[</span><span class="dv">7</span><span class="op">](-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">)</span>  <span class="co">// 1111: None</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<h4 id="2-linear-edge-interpolation">2. Linear Edge Interpolation</h4>
+<p>When an edge crosses the isosurface threshold, the vertex position is
+linearly interpolated based on the scalar field values at the edge
+endpoints:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">interpolateEdge</span><span class="op">(</span><span class="dt">vec3</span> p1<span class="op">,</span> <span class="dt">vec3</span> p2<span class="op">,</span> <span class="dt">float</span> v1<span class="op">,</span> <span class="dt">float</span> v2<span class="op">,</span> <span class="dt">float</span> isoLevel<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">abs</span><span class="op">(</span>isoLevel <span class="op">-</span> v1<span class="op">)</span> <span class="op">&lt;</span> <span class="fl">0.00001</span><span class="op">)</span> <span class="kw">return</span> p1<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">abs</span><span class="op">(</span>isoLevel <span class="op">-</span> v2<span class="op">)</span> <span class="op">&lt;</span> <span class="fl">0.00001</span><span class="op">)</span> <span class="kw">return</span> p2<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">abs</span><span class="op">(</span>v1 <span class="op">-</span> v2<span class="op">)</span> <span class="op">&lt;</span> <span class="fl">0.00001</span><span class="op">)</span> <span class="kw">return</span> p1<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> t <span class="op">=</span> <span class="op">(</span>isoLevel <span class="op">-</span> v1<span class="op">)</span> <span class="op">/</span> <span class="op">(</span>v2 <span class="op">-</span> v1<span class="op">);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">mix</span><span class="op">(</span>p1<span class="op">,</span> p2<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h4 id="3-tetrahedron-evaluation-loop">3. Tetrahedron Evaluation
+Loop</h4>
+<p>In the main shader routine (such as a compute invocation per voxel),
+sample the eight corners of the current voxel, assemble the tetrahedra,
+and process each individually:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">processTetrahedron</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">[</span><span class="dv">4</span><span class="op">],</span> <span class="dt">float</span> v<span class="op">[</span><span class="dv">4</span><span class="op">],</span> <span class="dt">float</span> isoLevel<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> caseIndex <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>v<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">&gt;</span> isoLevel<span class="op">)</span> caseIndex <span class="op">|=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>v<span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">&gt;</span> isoLevel<span class="op">)</span> caseIndex <span class="op">|=</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>v<span class="op">[</span><span class="dv">2</span><span class="op">]</span> <span class="op">&gt;</span> isoLevel<span class="op">)</span> caseIndex <span class="op">|=</span> <span class="dv">4</span><span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>v<span class="op">[</span><span class="dv">3</span><span class="op">]</span> <span class="op">&gt;</span> isoLevel<span class="op">)</span> caseIndex <span class="op">|=</span> <span class="dv">8</span><span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Edge-to-vertex index mappings</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">ivec2</span> edgeVerts<span class="op">[</span><span class="dv">6</span><span class="op">]</span> <span class="op">=</span> <span class="dt">ivec2</span><span class="op">[</span><span class="dv">6</span><span class="op">](</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        <span class="dt">ivec2</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">),</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">),</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="dv">0</span><span class="op">),</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        <span class="dt">ivec2</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">3</span><span class="op">),</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">3</span><span class="op">),</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">)</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">6</span><span class="op">;</span> i <span class="op">+=</span> <span class="dv">3</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>tetTriTable<span class="op">[</span>caseIndex<span class="op">][</span>i<span class="op">]</span> <span class="op">==</span> <span class="op">-</span><span class="dv">1</span><span class="op">)</span> <span class="kw">break</span><span class="op">;</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Generate triangle vertices by interpolating along active edges</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> j <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> j<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int</span> edge <span class="op">=</span> tetTriTable<span class="op">[</span>caseIndex<span class="op">][</span>i <span class="op">+</span> j<span class="op">];</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int</span> e0 <span class="op">=</span> edgeVerts<span class="op">[</span>edge<span class="op">].</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int</span> e1 <span class="op">=</span> edgeVerts<span class="op">[</span>edge<span class="op">].</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec3</span> vertPos <span class="op">=</span> <span class="fu">interpolateEdge</span><span class="op">(</span>p<span class="op">[</span>e0<span class="op">],</span> p<span class="op">[</span>e1<span class="op">],</span> v<span class="op">[</span>e0<span class="op">],</span> v<span class="op">[</span>e1<span class="op">],</span> isoLevel<span class="op">);</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Output vertex to Shader Storage Buffer Object (SSBO) or append stream</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>            <span class="fu">writeVertex</span><span class="op">(</span>vertPos<span class="op">);</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="performance-and-trade-offs">Performance and Trade-Offs</h3>
+<p>While Marching Tetrahedra guarantees manifold, hole-free meshes
+without branch-heavy ambiguity deciders, it comes with specific
+architectural considerations:</p>
+<ul>
+<li><strong>Triangle Count:</strong> Marching Tetrahedra generates
+approximately 1.5 to 2 times more triangles than Marching Cubes for the
+same volume resolution.</li>
+<li><strong>Vertex Redundancy:</strong> The 6-fold decomposition creates
+shared internal diagonals, which can produce skinny or poorly
+conditioned triangles without post-generation smoothing or vertex
+welding via compute-based hash tables.</li>
+<li><strong>Instruction Simplicity:</strong> The lookup logic contains
+only 16 cases and simple branch-free bit operations, which execute with
+high warp coherence on modern GPUs compared to the 256-entry table
+lookups and conditional tests of disambiguated Marching Cubes
+variants.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

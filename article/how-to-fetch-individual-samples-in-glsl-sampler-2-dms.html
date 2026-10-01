@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Fetch Individual Samples in GLSL sampler2DMS - glsl</title>
+    <meta name="description" content="Multisample antialiasing (MSAA) stores multiple color, depth, or stencil samples per pixel, requiring dedicated handling in shaders to access individual subpixel data. In GLSL, multisample textures bound to samplers such as sampler2DMS bypass standard te">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-to-fetch-individual-samples-in-glsl-sampler-2-dms">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How to Fetch Individual Samples in GLSL sampler2DMS - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-to-fetch-individual-samples-in-glsl-sampler-2-dms" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Multisample antialiasing (MSAA) stores multiple color, depth, or stencil samples per pixel, requiring dedicated handling in shaders to access individual subpixel data. In GLSL, multisample textures bound to samplers such as sampler2DMS bypass standard te" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-to-fetch-individual-samples-in-glsl-sampler2dms">How to
+Fetch Individual Samples in GLSL sampler2DMS</h1>
+<p>Multisample antialiasing (MSAA) stores multiple color, depth, or
+stencil samples per pixel, requiring dedicated handling in shaders to
+access individual subpixel data. In GLSL, multisample textures bound to
+samplers such as <code>sampler2DMS</code> bypass standard texture
+filtering and cannot be sampled using the traditional
+<code>texture()</code> function. Instead, shaders must use the
+<code>texelFetch</code> function with non-normalized integer coordinates
+and an explicit sample index to retrieve discrete sample points for
+custom resolving, edge detection, or deferred shading.</p>
+<h3 id="the-sampler2dms-sampler-type">The <code>sampler2DMS</code>
+Sampler Type</h3>
+<p>Standard 2D textures are accessed via <code>sampler2D</code>, which
+supports normalized coordinates <code>[0.0, 1.0]</code> and hardware
+filtering like bilinear or trilinear interpolation. Multisample textures
+do not support standard filtering or mipmaps because each texel holds
+multiple distinct color or depth values.</p>
+<p>GLSL provides specialized multisample sampler types:</p>
+<ul>
+<li><code>sampler2DMS</code> (floating-point data)</li>
+<li><code>isampler2DMS</code> (signed integer data)</li>
+<li><code>usampler2DMS</code> (unsigned integer data)</li>
+<li><code>sampler2DMSArray</code> (multisample texture arrays)</li>
+</ul>
+<h3 id="retrieving-samples-with-texelfetch">Retrieving Samples with
+<code>texelFetch</code></h3>
+<p>To access an individual sample point from a <code>sampler2DMS</code>,
+use the built-in <code>texelFetch</code> function overload:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>gvec4 <span class="bu">texelFetch</span><span class="op">(</span>gsampler2DMS <span class="dt">sampler</span><span class="op">,</span> <span class="dt">ivec2</span> P<span class="op">,</span> <span class="dt">int</span> <span class="dt">sample</span><span class="op">);</span></span></code></pre></div>
+<h4 id="parameters">Parameters:</h4>
+<ol type="1">
+<li><strong><code>sampler</code></strong>: The multisample texture
+uniform (e.g., <code>uniform sampler2DMS u_TextureMS;</code>).</li>
+<li><strong><code>P</code></strong>: The texel coordinate as an integer
+vector (<code>ivec2</code>). Unlike <code>texture()</code>, which uses
+normalized coordinates (<code>0.0</code> to <code>1.0</code>),
+<code>texelFetch</code> expects non-normalized pixel coordinates ranging
+from <code>(0, 0)</code> to <code>(width - 1, height - 1)</code>.</li>
+<li><strong><code>sample</code></strong>: A zero-based integer
+specifying which subpixel sample to fetch, ranging from <code>0</code>
+to <code>N - 1</code>, where <code>N</code> is the total number of
+samples allocated for the texture (e.g., 2, 4, 8, or 16).</li>
+</ol>
+<h3 id="querying-sample-count-dynamically">Querying Sample Count
+Dynamically</h3>
+<p>To iterate over all samples without hardcoding the sample count in
+your shader, GLSL provides the <code>textureSamples</code> function
+(available in GLSL 4.0 and later):</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> numSamples <span class="op">=</span> <span class="bu">textureSamples</span><span class="op">(</span>u_TextureMS<span class="op">);</span></span></code></pre></div>
+<h3 id="example-manual-resolve-in-a-fragment-shader">Example: Manual
+Resolve in a Fragment Shader</h3>
+<p>A standard MSAA resolve averages all subpixel samples to produce the
+final pixel color. The following fragment shader demonstrates manual
+resolving using <code>texelFetch</code>:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2DMS</span> u_MultisampleTexture<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Convert normalized screen coordinates to integer pixel coordinates</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span> texCoord <span class="op">=</span> <span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">xy</span><span class="op">);</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Query or define the number of samples</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">int</span> NUM_SAMPLES <span class="op">=</span> <span class="dv">4</span><span class="op">;</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> accumulatedColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Retrieve and accumulate each sample individually</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> NUM_SAMPLES<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">{</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec4</span> sampleColor <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>u_MultisampleTexture<span class="op">,</span> texCoord<span class="op">,</span> i<span class="op">);</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>        accumulatedColor <span class="op">+=</span> sampleColor<span class="op">;</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute the box-filter average</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> accumulatedColor <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>NUM_SAMPLES<span class="op">);</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="why-manual-sample-retrieval-matters">Why Manual Sample Retrieval
+Matters</h3>
+<p>Using <code>texelFetch</code> on <code>sampler2DMS</code> gives
+graphics pipelines granular control over subpixel data:</p>
+<ul>
+<li><strong>Custom Resolves:</strong> Allows non-linear tone mapping,
+HDR luminance-weighted averaging, or depth-preserving filters that
+prevent high-luminance aliasing or color bleeding.</li>
+<li><strong>Deferred Shading with MSAA:</strong> Enables running
+expensive lighting calculations once per pixel for non-edge fragments,
+and per-sample only along silhouette edges where sample colors
+diverge.</li>
+<li><strong>Depth and Stencil Testing:</strong> Permits manual
+per-sample depth testing in custom post-processing effects and
+screen-space ambient occlusion (SSAO).</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPIR-V OpEntryPoint: Execution Models & Interfaces - glsl</title>
+    <meta name="description" content="This article examines the function and significance of the OpEntryPoint instruction within SPIR-V binaries compiled from OpenGL Shading Language (GLSL). It details how OpEntryPoint establishes the execution model for a shader stage, defines the module's">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/spir-v-op-entry-point-execution-models-interfaces">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="SPIR-V OpEntryPoint: Execution Models & Interfaces - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/spir-v-op-entry-point-execution-models-interfaces" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article examines the function and significance of the OpEntryPoint instruction within SPIR-V binaries compiled from OpenGL Shading Language (GLSL). It details how OpEntryPoint establishes the execution model for a shader stage, defines the module's" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="spir-v-opentrypoint-execution-models--interfaces">SPIR-V
+OpEntryPoint: Execution Models &amp; Interfaces</h1>
+<p>This article examines the function and significance of the
+<code>OpEntryPoint</code> instruction within SPIR-V binaries compiled
+from OpenGL Shading Language (GLSL). It details how
+<code>OpEntryPoint</code> establishes the execution model for a shader
+stage, defines the module's entry point function, and explicitly
+declares the interface variables used for hardware input and output
+communication.</p>
+<h3 id="what-is-opentrypoint">What is OpEntryPoint?</h3>
+<p>In SPIR-V, a single binary module can contain multiple functions,
+execution paths, and even multiple shader stages. The
+<code>OpEntryPoint</code> instruction acts as the primary manifest for a
+specific shader's execution. It informs the graphics driver where
+execution begins, which pipeline stage the shader targets, and which
+global variables form the interface for that stage.</p>
+<p>The standard syntax of <code>OpEntryPoint</code> consists of four
+primary components:</p>
+<pre class="text"><code>OpEntryPoint &lt;Execution Model&gt; &lt;Entry Point ID&gt; &quot;&lt;Name&gt;&quot; &lt;Interface IDs...&gt;</code></pre>
+<ul>
+<li><strong>Execution Model:</strong> The hardware stage to run (e.g.,
+<code>Vertex</code>, <code>Fragment</code>,
+<code>GLCompute</code>).</li>
+<li><strong>Entry Point ID:</strong> The SSA ID pointing to the
+<code>OpFunction</code> that serves as the entry function (typically
+compiled from GLSL's <code>void main()</code>).</li>
+<li><strong>Name:</strong> A literal string specifying the export name
+of the entry point (often <code>"main"</code>).</li>
+<li><strong>Interface IDs:</strong> A list of IDs representing all
+global variables that make up the inputs and outputs used by this entry
+point.</li>
+</ul>
+<h3 id="defining-the-execution-model">Defining the Execution Model</h3>
+<p>When a GLSL shader is compiled into SPIR-V, the compiler converts
+stage directives into an explicit <code>ExecutionModel</code> operand
+inside <code>OpEntryPoint</code>.</p>
+<p>Common execution models include:</p>
+<ul>
+<li><code>Vertex</code> (for vertex shaders)</li>
+<li><code>TessellationControl</code> and
+<code>TessellationEvaluation</code></li>
+<li><code>Geometry</code></li>
+<li><code>Fragment</code> (for fragment/pixel shaders)</li>
+<li><code>GLCompute</code> (for compute shaders)</li>
+<li>Ray tracing models such as <code>RayGenerationKHR</code>,
+<code>ClosestHitKHR</code>, and <code>MissKHR</code></li>
+</ul>
+<p>By decoupling the function implementation from the execution model,
+SPIR-V enables modular shader construction. A single SPIR-V file can
+host both a vertex and a fragment entry point. The client API (such as
+Vulkan via <code>VkPipelineShaderStageCreateInfo</code>) references the
+entry point name and execution model to link the correct entry point to
+the intended pipeline stage.</p>
+<h3 id="declaring-the-shader-interface">Declaring the Shader
+Interface</h3>
+<p>The interface list in <code>OpEntryPoint</code> declares all global
+inputs and outputs associated with that execution path. This explicit
+declaration fulfills several roles:</p>
+<ol type="1">
+<li><strong>Static Interface Analysis:</strong> The driver can inspect
+the interface list without traversing the function's control flow graph.
+It identifies which variables must be bound to pipeline registers or
+fixed-function hardware (like rasterizer interpolators or
+framebuffers).</li>
+<li><strong>SPIR-V Version Compatibility:</strong> In SPIR-V 1.0 through
+1.3, the interface list only included variables in the
+<code>Input</code> and <code>Output</code> storage classes. Beginning
+with SPIR-V 1.4, this was expanded to include all global variables
+accessed by the entry point’s call tree, including <code>Uniform</code>,
+<code>StorageBuffer</code>, and <code>UniformConstant</code> (samplers
+and images). This guarantees complete dependency mapping per entry
+point.</li>
+<li><strong>Namespace and Resource Isolation:</strong> When multiple
+entry points reside within the same module, each
+<code>OpEntryPoint</code> declares only the subset of global
+<code>OpVariable</code> nodes it actually touches. This prevents dead
+code or unused descriptor sets from interfering with stages that do not
+reference them.</li>
+</ol>
+<h3 id="compilation-from-glsl">Compilation from GLSL</h3>
+<p>When compilers like <code>glslang</code> process GLSL code:</p>
+<ol type="1">
+<li>The GLSL <code>void main()</code> function is emitted as an
+<code>OpFunction</code>.</li>
+<li>Global variables declared with storage qualifiers (<code>in</code>,
+<code>out</code>, <code>uniform</code>, <code>buffer</code>) are
+allocated via <code>OpVariable</code>.</li>
+<li>An <code>OpEntryPoint</code> is generated, linking the stage defined
+by the GLSL source type (e.g., <code>.vert</code>, <code>.frag</code>)
+to the <code>main</code> <code>OpFunction</code> and listing every
+referenced input/output variable ID.</li>
+<li>Subsequent execution modes—such as local workgroup sizes for compute
+shaders or pixel center configurations for fragment shaders—are linked
+to this entry point via <code>OpExecutionMode</code> instructions
+targeting the same entry point function ID.</li>
+</ol>
+<p>Through <code>OpEntryPoint</code>, the SPIR-V architecture ensures
+that hardware drivers can reliably determine how to set up, bind, and
+execute GLSL shader logic within the rendering pipeline.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

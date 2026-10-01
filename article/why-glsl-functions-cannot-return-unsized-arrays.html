@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why GLSL Functions Cannot Return Unsized Arrays - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), functions are strictly prohibited from returning unsized array types because of the hardware constraints of modern GPUs and the static design of the GLSL compilation model. Returning an unsized array would require a">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/why-glsl-functions-cannot-return-unsized-arrays">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Why GLSL Functions Cannot Return Unsized Arrays - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/why-glsl-functions-cannot-return-unsized-arrays" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), functions are strictly prohibited from returning unsized array types because of the hardware constraints of modern GPUs and the static design of the GLSL compilation model. Returning an unsized array would require a" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="why-glsl-functions-cannot-return-unsized-arrays">Why GLSL
+Functions Cannot Return Unsized Arrays</h1>
+<p>In the OpenGL Shading Language (GLSL), functions are strictly
+prohibited from returning unsized array types because of the hardware
+constraints of modern GPUs and the static design of the GLSL compilation
+model. Returning an unsized array would require a runtime system capable
+of dynamic memory allocation and variable stack sizing—mechanisms that
+do not exist in GPU execution pipelines. Consequently, GLSL requires the
+dimensions of all return types to be explicitly known and fully resolved
+at compile time.</p>
+<h3 id="incomplete-types-and-compile-time-resolution">Incomplete Types
+and Compile-Time Resolution</h3>
+<p>In GLSL, an unsized array (such as <code>float[]</code>) is
+considered an incomplete type. Complete types are required for any
+operation that involves memory allocation, value copying, or function
+interfaces. A GPU executes thousands of threads in parallel, relying on
+flat, fixed-size register files and tightly managed local memory rather
+than traditional CPU-like call stacks. When a function returns a value,
+the compiler must reserve an exact number of hardware registers or local
+memory slots to hold that return value. Because an unsized array does
+not define its length, the compiler cannot calculate the memory
+footprint required for the return payload.</p>
+<h3 id="the-absence-of-a-dynamic-heap">The Absence of a Dynamic
+Heap</h3>
+<p>General-purpose CPU programming languages support variable-length
+returns by allocating memory on a heap and returning a pointer or
+reference to the data. GPUs do not operate with a dynamic heap for
+per-invocation shader logic. Every variable passed or returned must
+reside in statically allocated registers or scratchpad memory. Allowing
+an unsized array as a return type would imply that the size could vary
+at runtime based on conditional execution or loop iterations, requiring
+dynamic allocation mechanisms that GPU hardware does not support.</p>
+<h3 id="function-prototyping-and-static-signatures">Function Prototyping
+and Static Signatures</h3>
+<p>GLSL enforces strict type checking and signature matching across
+shader stages and modules. A function signature defines the exact
+contract between the caller and the callee. Because an unsized array
+lacks dimension information, it fails to produce a fully specified
+function signature. This makes deterministic function overloading,
+linking, and inlining impossible for the driver's shader compiler.</p>
+<h3 id="architectural-workarounds">Architectural Workarounds</h3>
+<p>To handle array data efficiently without unsized return types, GLSL
+developers rely on alternative design patterns:</p>
+<ul>
+<li><strong>Explicitly Sized Arrays:</strong> Functions can return
+arrays as long as the size is explicitly declared with a constant
+expression (for example, <code>vec4[4] calculateOffsets()</code>).</li>
+<li><strong>Output Parameters:</strong> Arrays can be declared with a
+fixed size in the calling scope and passed into the function using the
+<code>out</code> or <code>inout</code> parameter qualifiers, allowing
+in-place modification without return copies.</li>
+<li><strong>Shader Storage Buffer Objects (SSBOs):</strong> If data must
+be unsized or dynamically sized at runtime, it can be accessed through
+SSBOs, which live in global memory and support a dynamically sized array
+as their final member.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

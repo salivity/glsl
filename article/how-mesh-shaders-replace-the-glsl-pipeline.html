@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Mesh Shaders Replace the GLSL Pipeline - glsl</title>
+    <meta name="description" content="Mesh shaders fundamentally transform GPU geometry processing by replacing the legacy, sequential vertex-tessellation-geometry pipeline with a cooperative, compute-centric programming model. By shifting from per-vertex execution to cluster-based execution">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-mesh-shaders-replace-the-glsl-pipeline">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Mesh Shaders Replace the GLSL Pipeline - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-mesh-shaders-replace-the-glsl-pipeline" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Mesh shaders fundamentally transform GPU geometry processing by replacing the legacy, sequential vertex-tessellation-geometry pipeline with a cooperative, compute-centric programming model. By shifting from per-vertex execution to cluster-based execution" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-mesh-shaders-replace-the-glsl-pipeline">How Mesh Shaders
+Replace the GLSL Pipeline</h1>
+<p>Mesh shaders fundamentally transform GPU geometry processing by
+replacing the legacy, sequential vertex-tessellation-geometry pipeline
+with a cooperative, compute-centric programming model. By shifting from
+per-vertex execution to cluster-based execution known as "meshlets," the
+modern GLSL mesh shading pipeline—composed of task (amplification) and
+mesh stages—grants developers direct control over geometry
+amplification, culling, and primitive output. This shift eliminates
+longstanding hardware bottlenecks associated with fixed-function input
+assembly and geometry shaders, resulting in significantly higher
+throughput, lower memory overhead, and more flexible runtime
+level-of-detail (LOD) systems.</p>
+<h3 id="the-limitations-of-the-traditional-pipeline">The Limitations of
+the Traditional Pipeline</h3>
+<p>In the classic rendering pipeline, the GPU relies on the
+fixed-function Input Assembler (IA) to parse index and vertex buffers
+sequentially. The pipeline proceeds linearly:</p>
+<ol type="1">
+<li><strong>Vertex Shader:</strong> Processes one vertex at a time in
+isolation, without awareness of adjacent vertices or triangle
+topology.</li>
+<li><strong>Tessellation Shaders:</strong> Dynamically subdivide
+patches, but rely on specialized, rigid hardware stages.</li>
+<li><strong>Geometry Shader:</strong> Generates or discards primitives
+dynamically, but suffers from unpredictable memory allocation overhead
+because the hardware cannot anticipate the exact number of primitives a
+thread will emit.</li>
+</ol>
+<p>Because the geometry shader allocates memory dynamically to
+accommodate worst-case output scenarios, it frequently causes pipeline
+bubbles and performance drops. Furthermore, early visibility culling is
+limited; whole objects or individual primitives can rarely be culled
+before the GPU fetches and transforms their constituent vertices.</p>
+<h3 id="the-meshlet-model">The Meshlet Model</h3>
+<p>The mesh shading architecture replaces monolithic index buffers with
+<strong>meshlets</strong>—small, localized sub-meshes containing a fixed
+maximum number of vertices and primitives (typically up to 64 vertices
+and 126 primitives).</p>
+<p>Because meshlets are pre-clustered, vertex reuse is localized,
+drastically reducing the memory footprint of index buffers. Instead of
+32-bit global indices driving vertex fetching, meshlets use compact
+8-bit local indices referencing their internal vertex arrays.</p>
+<h3 id="the-two-stage-replacement">The Two-Stage Replacement</h3>
+<p>GLSL exposes this paradigm primarily through the
+<code>GL_EXT_mesh_shader</code> extension (and historically via
+<code>GL_NV_mesh_shader</code>), introducing two programmable
+stages:</p>
+<h4 id="1-the-task-shader-amplification">1. The Task Shader
+(Amplification)</h4>
+<p>The task shader replaces coarse-grained CPU frustum culling and
+hardware draw-call expansion. It operates like a compute shader:</p>
+<ul>
+<li>Groups of threads examine bounding volumes for an array of
+meshlets.</li>
+<li>Threads perform fast frustum, occlusion, and back-face cluster
+culling.</li>
+<li>The shader dynamically determines how many mesh shader workgroups to
+dispatch using the built-in function
+<code>EmitMeshTasksEXT()</code>.</li>
+<li>It passes custom payload data directly to the downstream mesh shader
+workgroups through shared memory.</li>
+</ul>
+<p>If a cluster is entirely outside the camera's view, the task shader
+emits zero tasks, completely halting work before any vertex
+transformation occurs.</p>
+<h4 id="2-the-mesh-shader">2. The Mesh Shader</h4>
+<p>The mesh shader replaces the vertex, tessellation, and geometry
+stages entirely. It operates as a cooperative thread group responsible
+for generating a complete meshlet directly for the rasterizer.</p>
+<ul>
+<li><strong>Thread Cooperation:</strong> Threads within a workgroup
+collaborate using shared memory (<code>shared</code>) to load, unpack,
+and transform meshlet data in parallel.</li>
+<li><strong>Explicit Output Allocation:</strong> Instead of emitting
+vertices one by one, the shader declares its total output allocation
+upfront using
+<code>SetMeshOutputsEXT(maxVertices, maxPrimitives)</code>. This
+predictable memory footprint solves the severe latency and serialization
+issues inherent to geometry shaders.</li>
+<li><strong>Direct Primitive Topology Generation:</strong> The workgroup
+writes transformed positions to output arrays like
+<code>gl_MeshVerticesEXT[].gl_Position</code> and assigns triangle
+indices directly using
+<code>gl_PrimitiveTriangleIndicesEXT[]</code>.</li>
+</ul>
+<h3 id="key-technical-advantages-over-the-legacy-pipeline">Key Technical
+Advantages Over the Legacy Pipeline</h3>
+<ul>
+<li><strong>Compute-like Flexibility:</strong> Developers can use
+compute idioms—such as shared memory, wave intrinsics (subgroups), and
+barrier synchronization—directly within the geometry processing
+stage.</li>
+<li><strong>Hardware-Friendly Memory Access:</strong> Mesh shaders
+bypass the fixed-function Input Assembler. Geometry data can be
+compressed, procedural, or streamed from custom data structures without
+binding rigid vertex buffer layouts.</li>
+<li><strong>Fine-Grained Cluster Culling:</strong> Instead of paying the
+transformation cost for off-screen triangles, geometry is culled at the
+meshlet level before vertex shading takes place.</li>
+<li><strong>Consistent Scheduling:</strong> By setting strict upper
+bounds on per-workgroup primitive emission, hardware schedulers can
+interleave and balance geometry tasks with rasterization units far more
+efficiently than with legacy geometry or tessellation shaders.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Is Shared Memory in GLSL Compute Shaders? - glsl</title>
+    <meta name="description" content="In GLSL compute shaders, the shared memory qualifier declares variables that are allocated in fast on-chip memory and shared among all invocations within a single workgroup. This article explains the role of shared memory, how it drastically reduces high">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-is-shared-memory-in-glsl-compute-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Is Shared Memory in GLSL Compute Shaders? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-is-shared-memory-in-glsl-compute-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL compute shaders, the shared memory qualifier declares variables that are allocated in fast on-chip memory and shared among all invocations within a single workgroup. This article explains the role of shared memory, how it drastically reduces high" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-is-shared-memory-in-glsl-compute-shaders">What Is Shared
+Memory in GLSL Compute Shaders?</h1>
+<p>In GLSL compute shaders, the <code>shared</code> memory qualifier
+declares variables that are allocated in fast on-chip memory and shared
+among all invocations within a single workgroup. This article explains
+the role of shared memory, how it drastically reduces high-latency
+global memory access, the synchronization mechanisms required to prevent
+race conditions, and practical best practices for optimizing compute
+shader performance.</p>
+<h2 id="understanding-shared-memory-storage">Understanding Shared Memory
+Storage</h2>
+<p>When executing compute shaders in OpenGL or Vulkan, invocations are
+grouped into local workgroups. By default, variables declared globally
+or within shader storage buffer objects (SSBOs) either reside in private
+registers or global device memory (VRAM).</p>
+<p>Declaring a variable with the <code>shared</code> storage qualifier
+allocates it in high-speed, on-chip scratchpad memory (often termed
+Local Data Share or Shared Memory in GPU hardware architectures).</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">16</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">16</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Shared memory array accessible by all 256 invocations in this workgroup</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">shared</span> <span class="dt">float</span> tileData<span class="op">[</span><span class="dv">16</span><span class="op">][</span><span class="dv">16</span><span class="op">];</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Each invocation accesses the shared data</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> x <span class="op">=</span> <span class="bu">gl_LocalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> y <span class="op">=</span> <span class="bu">gl_LocalInvocationID</span><span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    tileData<span class="op">[</span>x<span class="op">][</span>y<span class="op">]</span> <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="primary-functions-and-benefits">Primary Functions and
+Benefits</h2>
+<p>The shared memory storage qualifier provides several essential
+capabilities for compute pipelines:</p>
+<ul>
+<li><strong>Inter-Thread Communication:</strong> It serves as a
+scratchpad allowing threads inside the same workgroup to exchange
+intermediate calculation results without round-tripping through global
+memory.</li>
+<li><strong>Latency Reduction (Tiling/Caching):</strong> Global GPU
+memory bandwidth is often the main performance bottleneck. Threads can
+cooperatively load a patch of data (a tile) from an SSBO or texture into
+<code>shared</code> memory once, reuse it multiple times for local
+stencils or convolutions, and avoid redundant global memory reads.</li>
+<li><strong>Cooperative Algorithms:</strong> It enables workgroup-wide
+algorithms such as parallel reductions (finding min/max/sum), prefix
+sums (scan operations), sorting, and matrix multiplication.</li>
+</ul>
+<h2 id="synchronization-and-memory-barriers">Synchronization and Memory
+Barriers</h2>
+<p>Because shared memory is concurrently read and written by multiple
+invocations running asynchronously, uncoordinated access causes data
+race conditions. GLSL provides built-in barrier functions to coordinate
+execution and memory visibility:</p>
+<ul>
+<li><code>barrier()</code>: Acts as an execution barrier. Every
+invocation in the workgroup must reach this instruction before any
+invocation is allowed to proceed.</li>
+<li><code>memoryBarrierShared()</code>: Ensures that all previous writes
+to <code>shared</code> variables by the calling invocation are completed
+and visible to other invocations in the workgroup.</li>
+<li><code>groupMemoryBarrier()</code>: Combines ordering for shared
+variables and all other memory accesses across the local workgroup.</li>
+</ul>
+<p>In typical compute algorithms, threads load data into shared arrays,
+execute <code>barrier()</code>, process the shared data, and often
+synchronize again before writing results back to global buffers.</p>
+<h2 id="limitations-and-constraints">Limitations and Constraints</h2>
+<p>While shared memory is substantially faster than global memory, it is
+a finite resource:</p>
+<ul>
+<li><strong>Capacity Limits:</strong> Hardware limits the maximum size
+of shared storage (often 32 KB or 64 KB per workgroup, queryable via
+<code>GL_MAX_COMPUTE_SHARED_MEMORY_SIZE</code>). Exceeding this limit
+causes shader compilation failures.</li>
+<li><strong>Occupancy Impact:</strong> Allocating large amounts of
+shared memory per workgroup limits how many active workgroups the GPU
+can schedule concurrently on a single compute unit or streaming
+multiprocessor, potentially lowering overall GPU occupancy.</li>
+<li><strong>Scope Restriction:</strong> Shared variables cannot be
+initialized at declaration and are strictly isolated to the executing
+workgroup; threads in different workgroups cannot read or write to each
+other's shared storage.</li>
+<li><strong>Bank Conflicts:</strong> Shared memory is organized into
+memory banks. If multiple threads within the same execution sub-group
+(warp or wavefront) access different memory addresses located on the
+same memory bank simultaneously, access is serialized, reducing
+throughput.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

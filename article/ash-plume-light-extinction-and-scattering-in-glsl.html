@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ash Plume Light Extinction and Scattering in GLSL - glsl</title>
+    <meta name="description" content="This article details the mathematical formulation and GLSL implementation of light extinction and scattering through dense volcanic ash plumes. Volcanic ash presents unique optical properties compared to standard water-droplet clouds, characterized by hi">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/ash-plume-light-extinction-and-scattering-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Ash Plume Light Extinction and Scattering in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/ash-plume-light-extinction-and-scattering-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article details the mathematical formulation and GLSL implementation of light extinction and scattering through dense volcanic ash plumes. Volcanic ash presents unique optical properties compared to standard water-droplet clouds, characterized by hi" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="ash-plume-light-extinction-and-scattering-in-glsl">Ash Plume
+Light Extinction and Scattering in GLSL</h1>
+<p>This article details the mathematical formulation and GLSL
+implementation of light extinction and scattering through dense volcanic
+ash plumes. Volcanic ash presents unique optical properties compared to
+standard water-droplet clouds, characterized by high optical depth,
+strong absorption from pulverized rock and glass, and heavy
+forward-to-backward anisotropic scattering. Below, we break down the
+Radiative Transfer Equation (RTE) adapted for dense particulate media,
+discuss the Beer-Lambert law and empirical multiple scattering models,
+and provide an optimized GLSL raymarching implementation.</p>
+<hr />
+<h3 id="radiative-transfer-and-extinction-formulation">Radiative
+Transfer and Extinction Formulation</h3>
+<p>Light traveling through a participating medium like a volcanic ash
+plume loses energy via extinction (absorption and out-scattering) and
+gains energy via in-scattering. The change in radiance <span
+class="math inline">\(L\)</span> at position <span
+class="math inline">\(\mathbf{x}\)</span> along direction <span
+class="math inline">\(\mathbf{\omega}\)</span> is defined by the
+Radiative Transfer Equation:</p>
+<p><span class="math display">\[\frac{dL(\mathbf{x},
+\mathbf{\omega})}{ds} = -\mu_e(\mathbf{x}) L(\mathbf{x},
+\mathbf{\omega}) + \mu_s(\mathbf{x}) L_i(\mathbf{x},
+\mathbf{\omega})\]</span></p>
+<p>Where:</p>
+<ul>
+<li><strong><span class="math inline">\(\mu_e = \mu_a +
+\mu_s\)</span></strong>: The extinction coefficient, composed of the
+absorption coefficient <span class="math inline">\(\mu_a\)</span> and
+the scattering coefficient <span
+class="math inline">\(\mu_s\)</span>.</li>
+<li><strong>Albedo (<span class="math inline">\(\alpha =
+\frac{\mu_s}{\mu_e}\)</span>)</strong>: Volcanic ash has a significantly
+lower single-scattering albedo (<span class="math inline">\(\alpha
+\approx 0.1 - 0.3\)</span>) than water clouds (<span
+class="math inline">\(\alpha \approx 0.99\)</span>), causing rapid
+darkening and light attenuation.</li>
+</ul>
+<h4 id="transmittance-beer-lambert-law">Transmittance (Beer-Lambert
+Law)</h4>
+<p>The fractional light transmitted between two points over distance
+<span class="math inline">\(d\)</span> through a homogeneous segment is
+calculated using the Beer-Lambert Law:</p>
+<p><span class="math display">\[T = e^{-\int_0^d \mu_e(s) \, ds} \approx
+e^{-\mu_e \cdot \rho \cdot d}\]</span></p>
+<p>Where <span class="math inline">\(\rho\)</span> is the sampled
+particulate density at step <span class="math inline">\(s\)</span>.</p>
+<h4 id="phase-function-henyey-greenstein">Phase Function
+(Henyey-Greenstein)</h4>
+<p>The directional distribution of scattered light is driven by the
+phase function <span class="math inline">\(P(\theta)\)</span>. For
+volcanic ash, a two-lobe Henyey-Greenstein phase function accounts for
+forward diffraction around ash particles and backward reflection off
+jagged mineral surfaces:</p>
+<p><span class="math display">\[P(\theta, g) = \frac{1 - g^2}{4\pi (1 +
+g^2 - 2g \cos\theta)^{3/2}}\]</span></p>
+<p><span class="math display">\[P_{\text{ash}}(\theta) = k \cdot
+P(\theta, g_{\text{forward}}) + (1 - k) \cdot P(\theta,
+g_{\text{backward}})\]</span></p>
+<p>Where <span class="math inline">\(g \in (-1, 1)\)</span> represents
+the asymmetry parameter, with <span
+class="math inline">\(g_{\text{forward}} \approx 0.6\)</span> to <span
+class="math inline">\(0.8\)</span>, <span
+class="math inline">\(g_{\text{backward}} \approx -0.2\)</span>, and
+weight <span class="math inline">\(k \approx 0.7\)</span>.</p>
+<h4 id="dense-particulate-multiple-scattering-approximation">Dense
+Particulate Multiple Scattering Approximation</h4>
+<p>In dense ash, multiple scattering normally requires expensive path
+tracing. In real-time GLSL rendering, this is approximated using a
+combination of:</p>
+<ol type="1">
+<li><strong>The "Powder Effect"</strong>: Darkens edges when looking
+through dense layers away from light: <span
+class="math display">\[S_{\text{powder}} = 1.0 - e^{-2 \cdot \rho \cdot
+d}\]</span></li>
+<li><strong>Multi-Octave Scattering</strong>: Blurs out-scattering into
+lower extinction tiers to mimic forward multiple-scattered light
+penetration.</li>
+</ol>
+<hr />
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>The following GLSL fragment shader functions demonstrate how to
+calculate light extinction, in-scattering, and direct transmittance
+along a view ray march through a density field.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Material Constants for Volcanic Ash</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> ABSORPTION_COEFF <span class="op">=</span> <span class="fl">0.85</span><span class="op">;</span>  <span class="co">// Strong absorption (dark silicates/basalt)</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> SCATTERING_COEFF <span class="op">=</span> <span class="fl">0.35</span><span class="op">;</span>  <span class="co">// Single scattering</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> EXTINCTION_COEFF <span class="op">=</span> ABSORPTION_COEFF <span class="op">+</span> SCATTERING_COEFF<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> ALBEDO           <span class="op">=</span> SCATTERING_COEFF <span class="op">/</span> EXTINCTION_COEFF<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Henyey-Greenstein Phase Function</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">PhaseHenyeyGreenstein</span><span class="op">(</span><span class="dt">float</span> cosTheta<span class="op">,</span> <span class="dt">float</span> g<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> g2 <span class="op">=</span> g <span class="op">*</span> g<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> g2<span class="op">)</span> <span class="op">/</span> <span class="op">(</span><span class="fl">4.0</span> <span class="op">*</span> <span class="fl">3.14159265</span> <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">+</span> g2 <span class="op">-</span> <span class="fl">2.0</span> <span class="op">*</span> g <span class="op">*</span> cosTheta<span class="op">,</span> <span class="fl">1.5</span><span class="op">));</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="co">// Dual-Lobe Phase Function for Ash Particulates</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">AshPhase</span><span class="op">(</span><span class="dt">float</span> cosTheta<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> forward  <span class="op">=</span> <span class="fu">PhaseHenyeyGreenstein</span><span class="op">(</span>cosTheta<span class="op">,</span>  <span class="fl">0.65</span><span class="op">);</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> backward <span class="op">=</span> <span class="fu">PhaseHenyeyGreenstein</span><span class="op">(</span>cosTheta<span class="op">,</span> <span class="op">-</span><span class="fl">0.25</span><span class="op">);</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">mix</span><span class="op">(</span>backward<span class="op">,</span> forward<span class="op">,</span> <span class="fl">0.75</span><span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="co">// Powder effect to approximate dense particulate back-scattering</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">PowderEffect</span><span class="op">(</span><span class="dt">float</span> density<span class="op">,</span> <span class="dt">float</span> stepSize<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fl">1.0</span> <span class="op">-</span> <span class="bu">exp</span><span class="op">(-</span>density <span class="op">*</span> stepSize <span class="op">*</span> <span class="fl">2.0</span><span class="op">);</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="co">// Sample density field (e.g., 3D procedural noise or texture)</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">SampleAshDensity</span><span class="op">(</span><span class="dt">vec3</span> pos<span class="op">);</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a><span class="co">// Shadow Ray: Computes optical depth toward the light source</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">LightTransmittance</span><span class="op">(</span><span class="dt">vec3</span> samplePos<span class="op">,</span> <span class="dt">vec3</span> lightDir<span class="op">,</span> <span class="dt">float</span> shadowStepSize<span class="op">,</span> <span class="dt">int</span> shadowSteps<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> opticalDepth <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> shadowSteps<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>        samplePos <span class="op">+=</span> lightDir <span class="op">*</span> shadowStepSize<span class="op">;</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> d <span class="op">=</span> <span class="fu">SampleAshDensity</span><span class="op">(</span>samplePos<span class="op">);</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>        opticalDepth <span class="op">+=</span> d <span class="op">*</span> EXTINCTION_COEFF <span class="op">*</span> shadowStepSize<span class="op">;</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">exp</span><span class="op">(-</span>opticalDepth<span class="op">);</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a><span class="co">// View Raymarching Function</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> <span class="fu">RenderAshPlume</span><span class="op">(</span><span class="dt">vec3</span> rayOrigin<span class="op">,</span> <span class="dt">vec3</span> rayDir<span class="op">,</span> <span class="dt">vec3</span> lightDir<span class="op">,</span> <span class="dt">vec3</span> lightColor<span class="op">,</span> <span class="dt">float</span> maxDist<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">int</span> STEPS <span class="op">=</span> <span class="dv">64</span><span class="op">;</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">int</span> SHADOW_STEPS <span class="op">=</span> <span class="dv">6</span><span class="op">;</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> stepSize <span class="op">=</span> maxDist <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>STEPS<span class="op">);</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> shadowStepSize <span class="op">=</span> stepSize <span class="op">*</span> <span class="fl">1.5</span><span class="op">;</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> currentPos <span class="op">=</span> rayOrigin<span class="op">;</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> transmittance <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> totalScattering <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosTheta <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>rayDir<span class="op">,</span> lightDir<span class="op">);</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> phase <span class="op">=</span> <span class="fu">AshPhase</span><span class="op">(</span>cosTheta<span class="op">);</span></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> STEPS<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> density <span class="op">=</span> <span class="fu">SampleAshDensity</span><span class="op">(</span>currentPos<span class="op">);</span></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>density <span class="op">&gt;</span> <span class="fl">0.001</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Local extinction step</span></span>
+<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a>            <span class="dt">float</span> stepExtinction <span class="op">=</span> density <span class="op">*</span> EXTINCTION_COEFF <span class="op">*</span> stepSize<span class="op">;</span></span>
+<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a>            <span class="dt">float</span> stepTransmittance <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>stepExtinction<span class="op">);</span></span>
+<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Light extinction from the primary light source</span></span>
+<span id="cb1-66"><a href="#cb1-66" aria-hidden="true" tabindex="-1"></a>            <span class="dt">float</span> lightAtten <span class="op">=</span> <span class="fu">LightTransmittance</span><span class="op">(</span>currentPos<span class="op">,</span> lightDir<span class="op">,</span> shadowStepSize<span class="op">,</span> SHADOW_STEPS<span class="op">);</span></span>
+<span id="cb1-67"><a href="#cb1-67" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb1-68"><a href="#cb1-68" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Direct in-scattering with powder effect for high density</span></span>
+<span id="cb1-69"><a href="#cb1-69" aria-hidden="true" tabindex="-1"></a>            <span class="dt">float</span> powder <span class="op">=</span> <span class="fu">PowderEffect</span><span class="op">(</span>density<span class="op">,</span> stepSize<span class="op">);</span></span>
+<span id="cb1-70"><a href="#cb1-70" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec3</span> inScatteredLight <span class="op">=</span> lightColor <span class="op">*</span> lightAtten <span class="op">*</span> phase <span class="op">*</span> powder <span class="op">*</span> ALBEDO<span class="op">;</span></span>
+<span id="cb1-71"><a href="#cb1-71" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb1-72"><a href="#cb1-72" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Energy-conserving integration over current step</span></span>
+<span id="cb1-73"><a href="#cb1-73" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec3</span> stepScattering <span class="op">=</span> inScatteredLight <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> stepTransmittance<span class="op">);</span></span>
+<span id="cb1-74"><a href="#cb1-74" aria-hidden="true" tabindex="-1"></a>            totalScattering <span class="op">+=</span> transmittance <span class="op">*</span> stepScattering<span class="op">;</span></span>
+<span id="cb1-75"><a href="#cb1-75" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb1-76"><a href="#cb1-76" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Accumulate transmittance loss along view ray</span></span>
+<span id="cb1-77"><a href="#cb1-77" aria-hidden="true" tabindex="-1"></a>            transmittance <span class="op">*=</span> stepTransmittance<span class="op">;</span></span>
+<span id="cb1-78"><a href="#cb1-78" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb1-79"><a href="#cb1-79" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Early exit if the medium becomes completely opaque</span></span>
+<span id="cb1-80"><a href="#cb1-80" aria-hidden="true" tabindex="-1"></a>            <span class="kw">if</span> <span class="op">(</span>transmittance <span class="op">&lt;</span> <span class="fl">0.005</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-81"><a href="#cb1-81" aria-hidden="true" tabindex="-1"></a>                <span class="kw">break</span><span class="op">;</span></span>
+<span id="cb1-82"><a href="#cb1-82" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb1-83"><a href="#cb1-83" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-84"><a href="#cb1-84" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb1-85"><a href="#cb1-85" aria-hidden="true" tabindex="-1"></a>        currentPos <span class="op">+=</span> rayDir <span class="op">*</span> stepSize<span class="op">;</span></span>
+<span id="cb1-86"><a href="#cb1-86" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-87"><a href="#cb1-87" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-88"><a href="#cb1-88" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec4</span><span class="op">(</span>totalScattering<span class="op">,</span> <span class="fl">1.0</span> <span class="op">-</span> transmittance<span class="op">);</span></span>
+<span id="cb1-89"><a href="#cb1-89" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="integration-details">Integration Details</h3>
+<ul>
+<li><strong>Step Sizing:</strong> Due to steep extinction gradients in
+volcanic plumes, uniform step sizes often cause visual banding. Applying
+a small randomized offset (dither) to the ray starting point
+<code>rayOrigin += rayDir * stepSize * InterleavedGradientNoise()</code>
+mitigates stepping artifacts.</li>
+<li><strong>Ambient Term:</strong> Ash clouds block nearly all indirect
+sky light. Multiply ambient contributions by the integrated
+transmittance to prevent flat ambient colors deep within the inner core
+of the plume.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

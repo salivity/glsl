@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GLSL floatBitsToInt Converts Floats to Ints - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), the floatBitsToInt built-in function extracts the exact bit-level representation of a 32-bit floating-point number and returns it as a signed 32-bit integer. Unlike standard numerical type casting, which truncates o">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-glsl-float-bits-to-int-converts-floats-to-ints">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GLSL floatBitsToInt Converts Floats to Ints - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-glsl-float-bits-to-int-converts-floats-to-ints" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), the floatBitsToInt built-in function extracts the exact bit-level representation of a 32-bit floating-point number and returns it as a signed 32-bit integer. Unlike standard numerical type casting, which truncates o" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-glsl-floatbitstoint-converts-floats-to-ints">How GLSL
+floatBitsToInt Converts Floats to Ints</h1>
+<p>In the OpenGL Shading Language (GLSL), the
+<code>floatBitsToInt</code> built-in function extracts the exact
+bit-level representation of a 32-bit floating-point number and returns
+it as a signed 32-bit integer. Unlike standard numerical type casting,
+which truncates or rounds decimal values, <code>floatBitsToInt</code>
+performs no arithmetic transformation; instead, it preserves the
+underlying binary encoding defined by the IEEE 754 standard. This
+article explains the difference between bitwise reinterpretation and
+value casting, details the layout of IEEE 754 single-precision values,
+analyzes how special cases like zeros and infinities are converted, and
+outlines practical use cases for shaders.</p>
+<h2 id="bitwise-reinterpretation-vs-value-casting">Bitwise
+Reinterpretation vs. Value Casting</h2>
+<p>In GLSL, using a standard constructor cast like <code>int(1.0)</code>
+instructs the GPU to convert the numerical value <span
+class="math inline">\(1.0\)</span> into the integer value <span
+class="math inline">\(1\)</span>.</p>
+<p>In contrast, <code>floatBitsToInt(1.0)</code> treats the underlying
+32-bit pattern of the float as if it were a signed two's complement
+integer. The 32-bit IEEE 754 representation of <span
+class="math inline">\(1.0\)</span> in hexadecimal is
+<code>0x3F800000</code>. When interpreted as a signed 32-bit integer,
+<code>0x3F800000</code> evaluates to the decimal integer
+<code>1065353216</code>. The hardware accomplishes this operation
+without floating-point arithmetic logic units (ALUs); it simply moves or
+re-labels the bits from a floating-point register to an integer
+register.</p>
+<h2 id="ieee-754-single-precision-format-mapping">IEEE 754
+Single-Precision Format Mapping</h2>
+<p>A single-precision float consists of 32 bits divided into three
+distinct segments:</p>
+<ol type="1">
+<li><strong>Sign bit (Bit 31):</strong> Determines whether the number is
+positive (0) or negative (1).</li>
+<li><strong>Exponent (Bits 30–23):</strong> An 8-bit field biased by
+127.</li>
+<li><strong>Mantissa / Fraction (Bits 22–0):</strong> A 23-bit field
+representing the fractional precision.</li>
+</ol>
+<p>When passed through <code>floatBitsToInt</code>, these bits map
+directly into a 32-bit two's complement integer:</p>
+<ul>
+<li><strong>Bit 31</strong> becomes the two's complement sign bit. If
+the floating-point value is negative, the resulting integer will also be
+negative because bit 31 is set to 1.</li>
+<li><strong>Bits 30–0</strong> form the remaining magnitude bits of the
+integer.</li>
+</ul>
+<p>Because bit 31 indicates the sign in both systems, the sign maps
+naturally, but the magnitude is entirely detached from the original
+decimal value.</p>
+<h2 id="handling-special-values">Handling Special Values</h2>
+<p>Because <code>floatBitsToInt</code> preserves the exact binary
+pattern, it reveals the unique binary representations of IEEE 754
+special states:</p>
+<ul>
+<li><strong>Positive Zero (<code>+0.0</code>):</strong> Represented by
+all zeros (<code>0x00000000</code>), converting to integer
+<code>0</code>.</li>
+<li><strong>Negative Zero (<code>-0.0</code>):</strong> Represented with
+only the sign bit set (<code>0x80000000</code>), converting to integer
+<code>-2147483648</code>.</li>
+<li><strong>Positive Infinity (<code>+inf</code>):</strong> Encoded as
+<code>0x7F800000</code>, converting to integer
+<code>2139095040</code>.</li>
+<li><strong>Negative Infinity (<code>-inf</code>):</strong> Encoded as
+<code>0xFF800000</code>, converting to integer
+<code>-8388608</code>.</li>
+<li><strong>NaN (Not a Number):</strong> Retains its quiet or signaling
+payload bits (an exponent of all ones with a non-zero mantissa),
+producing integer values that depend on the specific NaN bitmask
+generated by the hardware.</li>
+</ul>
+<h2 id="floatbitstoint-vs-floatbitstouint"><code>floatBitsToInt</code>
+vs. <code>floatBitsToUint</code></h2>
+<p>GLSL also provides <code>floatBitsToUint</code>, which maps the float
+to an unsigned 32-bit integer (<code>uint</code>). In many low-level
+data manipulation tasks, <code>floatBitsToUint</code> is preferred over
+<code>floatBitsToInt</code> because bitwise operations (such as bit
+shifts and masking) on signed integers can occasionally introduce
+implementation-dependent sign-extension behavior. The inverse function,
+<code>intBitsToFloat</code> (and <code>uintBitsToFloat</code>), reverses
+the process, reconstructing the original float from the raw bits.</p>
+<h2 id="primary-use-cases">Primary Use Cases</h2>
+<ol type="1">
+<li><strong>Bitwise Packing and Encoding:</strong> Shaders frequently
+pack multiple low-precision attributes into single 32-bit channels to
+save memory bandwidth.</li>
+<li><strong>Pseudorandom Number Generation and Hashing:</strong> Integer
+bit-manipulation algorithms (like hash functions or linear congruential
+generators) can operate directly on float inputs without converting
+ranges mathematically.</li>
+<li><strong>Lossless Data Serialization:</strong> Preserving raw vertex
+or texture data across pipeline stages without risking precision
+degradation from float-to-int rounding.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How OpControlBarrier Works in GLSL SPIR-V Targets - glsl</title>
+    <meta name="description" content="In GPU compute programming, synchronizing concurrent invocations and managing memory visibility are essential for data consistency. The OpControlBarrier instruction in SPIR-V—represented in GLSL via built-ins like barrier() and the fine-grained control">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-op-control-barrier-works-in-glsl-spir-v-targets">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How OpControlBarrier Works in GLSL SPIR-V Targets - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-op-control-barrier-works-in-glsl-spir-v-targets" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GPU compute programming, synchronizing concurrent invocations and managing memory visibility are essential for data consistency. The OpControlBarrier instruction in SPIR-V—represented in GLSL via built-ins like barrier() and the fine-grained control" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-opcontrolbarrier-works-in-glsl-spir-v-targets">How
+OpControlBarrier Works in GLSL SPIR-V Targets</h1>
+<p>In GPU compute programming, synchronizing concurrent invocations and
+managing memory visibility are essential for data consistency. The
+<code>OpControlBarrier</code> instruction in SPIR-V—represented in GLSL
+via built-ins like <code>barrier()</code> and the fine-grained
+<code>controlBarrier()</code> function—serves as the core mechanism to
+align invocation execution and enforce memory ordering. This article
+explains how <code>OpControlBarrier</code> operates by breaking down its
+three fundamental parameters: execution scopes, memory scopes, and
+memory semantics, demonstrating how compute pipelines coordinate
+workgroups and device memory safely.</p>
+<h3 id="the-components-of-opcontrolbarrier">The Components of
+OpControlBarrier</h3>
+<p>Unlike simple CPU-style barriers that implicitly synchronize all
+visible resources, SPIR-V's <code>OpControlBarrier</code> separates
+execution flow from memory visibility. The instruction takes three
+explicit operands:</p>
+<ol type="1">
+<li><strong>Execution Scope</strong>: Determines which group of
+invocations must reach the barrier before any are allowed to
+proceed.</li>
+<li><strong>Memory Scope</strong>: Defines the domain of invocations
+that observe synchronized memory writes.</li>
+<li><strong>Memory Semantics</strong>: Specifies the memory ordering
+model (e.g., Acquire, Release, AcquireRelease) and the specific storage
+classes (e.g., Workgroup, Uniform, Image) affected by the
+synchronization.</li>
+</ol>
+<h3 id="coordinating-execution-via-execution-scopes">Coordinating
+Execution via Execution Scopes</h3>
+<p>The execution scope operand halts the calling invocation until all
+other invocations within that designated scope reach the barrier. In
+compute shaders targeting GLSL and SPIR-V, common execution scopes
+include:</p>
+<ul>
+<li><strong>Workgroup (<code>ScopeWorkgroup</code>)</strong>: All
+invocations within the same local workgroup must reach the barrier.
+Invocations in other workgroups are unaffected.</li>
+<li><strong>Subgroup (<code>ScopeSubgroup</code>)</strong>: Only
+invocations within the physical SIMD hardware unit (wavefront or warp)
+wait for each other. This creates a lightweight barrier without stalling
+the entire workgroup.</li>
+</ul>
+<p>If an invocation enters a code branch containing an
+<code>OpControlBarrier</code> while another invocation in the same
+execution scope cannot reach it due to divergent control flow, execution
+hangs, leading to a GPU timeout or undefined behavior.</p>
+<h3 id="synchronizing-memory-via-memory-scopes">Synchronizing Memory via
+Memory Scopes</h3>
+<p>Execution convergence alone does not guarantee that memory operations
+are visible across invocations because modern GPUs utilize multi-level
+caches (L1 per compute unit, shared L2, global VRAM).</p>
+<p>The memory scope operand dictates the visibility boundary for memory
+writes initiated prior to the barrier:</p>
+<ul>
+<li><strong>Workgroup Scope (<code>ScopeWorkgroup</code>)</strong>:
+Ensures that modifications made to shared memory (workgroup storage) or
+global memory by an invocation are flushed and made visible to all other
+invocations inside the same workgroup.</li>
+<li><strong>Device Scope (<code>ScopeDevice</code>)</strong>: Guarantees
+that writes are visible to all invocations across the entire GPU device,
+which is necessary when multiple workgroups communicate through global
+storage buffers or images.</li>
+<li><strong>Queue Family Scope (<code>ScopeQueueFamily</code>)</strong>:
+Extends visibility across commands submitted to the same queue family in
+APIs such as Vulkan.</li>
+</ul>
+<p>By constraining the memory scope to <code>ScopeWorkgroup</code>
+instead of <code>ScopeDevice</code> when only local communication is
+required, the GPU avoids unnecessary cache flushes to global memory,
+preserving high throughput.</p>
+<h3 id="memory-semantics-and-storage-classes">Memory Semantics and
+Storage Classes</h3>
+<p>The memory semantics mask controls the synchronization relationship
+between reads and writes across the barrier boundary:</p>
+<ul>
+<li><strong>Acquire</strong>: Subsequent reads and writes cannot be
+reordered before the barrier.</li>
+<li><strong>Release</strong>: Prior reads and writes cannot be reordered
+after the barrier, ensuring that previous writes are committed before
+other invocations read them.</li>
+<li><strong>AcquireRelease</strong>: Combines both behaviors,
+establishing a bidirectional fence.</li>
+<li><strong>Sequentially Consistent</strong>: Imposes a globally uniform
+order across all participating invocations.</li>
+</ul>
+<p>Alongside ordering constraints, the semantics bitmask specifies the
+storage classes being synchronized, such as
+<code>WorkgroupMemory</code>, <code>UniformMemory</code>, or
+<code>ImageMemory</code>. An <code>OpControlBarrier</code> targeted
+solely at <code>WorkgroupMemory</code> does not invalidate caches for
+global buffers, enabling granular performance optimization.</p>
+<h3 id="glsl-mapping-and-execution-flow">GLSL Mapping and Execution
+Flow</h3>
+<p>In standard GLSL, the traditional <code>barrier()</code> statement
+translates directly to an <code>OpControlBarrier</code> in SPIR-V
+with:</p>
+<ul>
+<li><strong>Execution Scope</strong>: <code>Workgroup</code></li>
+<li><strong>Memory Scope</strong>: <code>Workgroup</code></li>
+<li><strong>Memory Semantics</strong>:
+<code>AcquireRelease | WorkgroupMemory</code></li>
+</ul>
+<p>When using the <code>GL_KHR_memory_scope_semantics</code> extension,
+GLSL exposes explicit control:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">controlBarrier</span><span class="op">(</span>gl_ScopeWorkgroup<span class="op">,</span> gl_ScopeDevice<span class="op">,</span> gl_StorageSemanticsBuffer<span class="op">,</span> gl_SemanticsAcquireRelease<span class="op">);</span></span></code></pre></div>
+<p>This compiles into an <code>OpControlBarrier</code> that halts
+invocations within the workgroup while flushing buffer memory writes
+across the entire device. In this sequence, the barrier acts as an
+execution rendezvous point for the workgroup and a visibility bridge for
+device-level cache hierarchies, ensuring deterministic parallel
+computation.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

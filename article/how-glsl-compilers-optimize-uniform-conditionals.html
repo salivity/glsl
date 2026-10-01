@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GLSL Compilers Optimize Uniform Conditionals - glsl</title>
+    <meta name="description" content="This article examines how graphics processing units (GPUs) and OpenGL Shading Language (GLSL) compilers handle uniform conditionals to eliminate execution overhead. Because uniform variables remain invariant across all parallel invocations in a draw call">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-glsl-compilers-optimize-uniform-conditionals">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GLSL Compilers Optimize Uniform Conditionals - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-glsl-compilers-optimize-uniform-conditionals" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article examines how graphics processing units (GPUs) and OpenGL Shading Language (GLSL) compilers handle uniform conditionals to eliminate execution overhead. Because uniform variables remain invariant across all parallel invocations in a draw call" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-glsl-compilers-optimize-uniform-conditionals">How GLSL
+Compilers Optimize Uniform Conditionals</h1>
+<p>This article examines how graphics processing units (GPUs) and OpenGL
+Shading Language (GLSL) compilers handle uniform conditionals to
+eliminate execution overhead. Because uniform variables remain invariant
+across all parallel invocations in a draw call, compilers and modern GPU
+hardware can execute dynamic branches without suffering from thread
+divergence. By leveraging scalar execution units, instruction skipping,
+and runtime driver-level optimizations, GPUs dynamically bypass inactive
+instructions, ensuring that inactive execution paths consume virtually
+no compute cycles.</p>
+<h3 id="uniform-invariance-and-branch-divergence">Uniform Invariance and
+Branch Divergence</h3>
+<p>In modern graphics architectures, execution occurs across wide
+single-instruction, multiple-data (SIMD) or single-instruction,
+multiple-thread (SIMT) groups, known as warps on NVIDIA hardware or
+wavefronts on AMD hardware. Branch divergence occurs when adjacent
+threads within the same group take conflicting paths at a conditional
+boundary, forcing the hardware to serialize execution and execute both
+branches while masking inactive threads.</p>
+<p>Uniform variables, by definition, remain identical across all
+vertices, fragments, or compute invocations within a single dispatch or
+draw call. When a GLSL compiler evaluates a condition that depends
+entirely on a uniform variable, such as
+<code>if (u_enableLighting)</code>, it guarantees that every thread
+across the entire warp will evaluate the boolean expression to the exact
+same result. Consequently, the conditional never introduces thread
+divergence.</p>
+<h3 id="instruction-skipping-and-program-counter-offsets">Instruction
+Skipping and Program Counter Offsets</h3>
+<p>Because uniform branches never diverge within a warp, the GPU does
+not need to execute both sides of the branch using execution masks.
+Instead, the compiler emits instructions that update the hardware
+program counter (PC) directly.</p>
+<p>When the uniform condition evaluates to false, the execution unit
+jumps over the instruction block corresponding to that branch. The
+instructions contained within the inactive code path are completely
+bypassed: they are never fetched, decoded, or issued to the arithmetic
+logic units (ALUs). This dynamic instruction skipping means the
+performance cost of the unselected block drops to near zero, requiring
+only the single cycle necessary to evaluate the jump condition.</p>
+<h3 id="utilization-of-scalar-execution-engines">Utilization of Scalar
+Execution Engines</h3>
+<p>Modern GPU architectures frequently implement dedicated scalar
+execution units alongside their primary vector pipelines. Examples
+include AMD’s Scalar Arithmetic Logic Units (SALU) in GCN and RDNA
+architectures, as well as uniform datapath hardware in modern NVIDIA
+architectures.</p>
+<p>When compiling GLSL shaders, the compiler routes uniform operations
+and uniform conditionals to these scalar processors rather than the wide
+vector ALUs. The scalar unit calculates the uniform condition once for
+the entire wave, rather than redundantly across 32 or 64 individual
+vector lanes. This frees the primary vector pipelines to continue
+processing arithmetic workloads, reducing both latency and dynamic
+register pressure.</p>
+<h3 id="driver-level-dynamic-specialization">Driver-Level Dynamic
+Specialization</h3>
+<p>Beyond hardware-level jumping, some GPU drivers employ runtime
+optimization techniques based on bound pipeline states. When a draw call
+is initiated, the driver inspects the current uniform configuration. If
+a performance-critical shader repeatedly executes with identical uniform
+state values, advanced drivers may dynamically recompile or hot-patch
+the shader binary in the background.</p>
+<p>Through this dynamic specialization, the driver effectively converts
+dynamic uniform conditions into static constants at runtime. Inactive
+branches are entirely pruned from the pipeline via dead-code elimination
+(DCE), eliminating the jump instruction itself and allowing aggressive
+cross-block optimizations, such as constant propagation and loop
+unrolling, across what was previously a conditional boundary.</p>
+<h3 id="uniform-conditionals-versus-specialization-constants">Uniform
+Conditionals Versus Specialization Constants</h3>
+<p>While uniform branches dynamically bypass execution, they do not
+inherently strip code from the binary before runtime. In contrast to
+SPIR-V specialization constants or preprocessor directives
+(<code>#ifdef</code>), which strip dead code at compilation time to
+minimize register pressure and memory footprint, uniform branches exist
+inside the compiled program.</p>
+<p>However, because uniform paths avoid thread divergence and trigger
+hardware-level instruction skipping, the GLSL compiler treats them as
+low-cost control structures. This allows developers to use a single
+"uber-shader" without suffering the severe performance penalties
+typically associated with dynamic runtime branching.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

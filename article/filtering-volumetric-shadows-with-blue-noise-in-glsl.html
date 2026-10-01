@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Filtering Volumetric Shadows with Blue Noise in GLSL - glsl</title>
+    <meta name="description" content="Rendering volumetric shadows efficiently requires raymarching through participating media with a minimal number of steps. To avoid uniform stepping artifacts like slice banding, ray origins are offset along the view ray using blue noise. The standard alg">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/filtering-volumetric-shadows-with-blue-noise-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Filtering Volumetric Shadows with Blue Noise in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/filtering-volumetric-shadows-with-blue-noise-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Rendering volumetric shadows efficiently requires raymarching through participating media with a minimal number of steps. To avoid uniform stepping artifacts like slice banding, ray origins are offset along the view ray using blue noise. The standard alg" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="filtering-volumetric-shadows-with-blue-noise-in-glsl">Filtering
+Volumetric Shadows with Blue Noise in GLSL</h1>
+<p>Rendering volumetric shadows efficiently requires raymarching through
+participating media with a minimal number of steps. To avoid uniform
+stepping artifacts like slice banding, ray origins are offset along the
+view ray using blue noise. The standard algorithm used to resolve and
+filter these jittered samples into a smooth result is <strong>Temporal
+Reprojection with Spatial Cross-Bilateral Filtering</strong> (commonly
+integrated as part of a Spatio-Temporal Variance-Guided Filter, or
+SVGF). This article explains how this spatio-temporal filtering pipeline
+works in GLSL to eliminate blue noise dither while preserving geometric
+and volumetric edges.</p>
+<h3 id="the-problem-banding-vs-high-frequency-noise">The Problem:
+Banding vs. High-Frequency Noise</h3>
+<p>Volumetric shadow rendering calculates in-scattering along light
+paths using raymarching. Using fixed step lengths causes severe aliasing
+and banding artifacts where steps intersect light boundaries
+uniformly.</p>
+<p>To eliminate banding, developers apply a phase offset to each ray
+using a blue noise texture:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Offset the ray starting position using blue noise</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> blueNoise <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_BlueNoiseTex<span class="op">,</span> <span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">xy</span> <span class="op">/</span> u_BlueNoiseResolution<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> rayStart <span class="op">=</span> cameraPosition <span class="op">+</span> rayDir <span class="op">*</span> <span class="op">(</span>stepSize <span class="op">*</span> blueNoise<span class="op">);</span></span></code></pre></div>
+<p>While blue noise breaks up coherent banding by distributing errors
+into high-frequency, stochastic noise, this noise must be filtered out
+before final composition.</p>
+<h3 id="step-1-temporal-reprojection-and-accumulation">Step 1: Temporal
+Reprojection and Accumulation</h3>
+<p>Because blue noise has minimal low-frequency energy, it resolves
+rapidly when integrated across multiple frames. The temporal pass
+reprojects the current pixel’s world position back into the previous
+frame's screen coordinates:</p>
+<ol type="1">
+<li>Calculate the current world position of the volumetric sample.</li>
+<li>Reproject it using the previous frame's View-Projection matrix:
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> prevClip <span class="op">=</span> u_PrevViewProj <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>worldPos<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> prevUV <span class="op">=</span> <span class="op">(</span>prevClip<span class="op">.</span><span class="fu">xy</span> <span class="op">/</span> prevClip<span class="op">.</span><span class="fu">w</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span></code></pre></div></li>
+<li>Sample the previous frame's accumulated volumetric buffer.</li>
+<li>Blend the current noisy sample with the history buffer using an
+exponential moving average:
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> blendFactor <span class="op">=</span> <span class="fl">0.05</span><span class="op">;</span> <span class="co">// 95% history, 5% new sample</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> finalVolumetric <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>prevHistory<span class="op">,</span> currentSample<span class="op">,</span> blendFactor<span class="op">);</span></span></code></pre></div></li>
+</ol>
+<p>To prevent ghosting when camera movement or lighting changes rapidly,
+the history is clamped to a neighborhood bounding box (derived from
+minimum and maximum values of adjacent pixels in the current frame).</p>
+<h3 id="step-2-edge-aware-cross-bilateral-filtering">Step 2: Edge-Aware
+Cross-Bilateral Filtering</h3>
+<p>Temporal accumulation handles stationary noise, but fast camera
+motion reduces the temporal sample count, revealing underlying blue
+noise grain. A spatial <strong>Cross-Bilateral Filter</strong> (or
+Guided Bilateral Filter) is used to smooth remaining spatial noise
+without blurring hard shadow boundaries or depth discontinuities.</p>
+<p>In GLSL, the bilateral filter calculates weights based on two
+metrics:</p>
+<ul>
+<li><strong>Spatial distance:</strong> Standard Gaussian distribution
+based on pixel distance.</li>
+<li><strong>Depth/Range similarity:</strong> Discards neighbor samples
+that lie across geometry edges using the linear depth buffer.</li>
+</ul>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> filteredColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> totalWeight <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> centerDepth <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_DepthTex<span class="op">,</span> v_UV<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">=</span> <span class="op">-</span><span class="dv">2</span><span class="op">;</span> x <span class="op">&lt;=</span> <span class="dv">2</span><span class="op">;</span> <span class="op">++</span>x<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> y <span class="op">=</span> <span class="op">-</span><span class="dv">2</span><span class="op">;</span> y <span class="op">&lt;=</span> <span class="dv">2</span><span class="op">;</span> <span class="op">++</span>y<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span> <span class="dt">offset</span> <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span>x<span class="op">,</span> y<span class="op">)</span> <span class="op">*</span> u_TexelSize<span class="op">;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span> sampleUV <span class="op">=</span> v_UV <span class="op">+</span> <span class="dt">offset</span><span class="op">;</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> sampleDepth <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_DepthTex<span class="op">,</span> sampleUV<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec4</span> sampleColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_VolumetricTex<span class="op">,</span> sampleUV<span class="op">);</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Compute weights</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> spatialWeight <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span><span class="bu">dot</span><span class="op">(</span><span class="dt">offset</span><span class="op">,</span> <span class="dt">offset</span><span class="op">)</span> <span class="op">/</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">*</span> sigmaSpatial <span class="op">*</span> sigmaSpatial<span class="op">));</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> depthDiff <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span>centerDepth <span class="op">-</span> sampleDepth<span class="op">);</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> depthWeight <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>depthDiff <span class="op">/</span> sigmaDepth<span class="op">);</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> weight <span class="op">=</span> spatialWeight <span class="op">*</span> depthWeight<span class="op">;</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>        filteredColor <span class="op">+=</span> sampleColor <span class="op">*</span> weight<span class="op">;</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>        totalWeight <span class="op">+=</span> weight<span class="op">;</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> finalFiltered <span class="op">=</span> filteredColor <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>totalWeight<span class="op">,</span> <span class="fl">0.0001</span><span class="op">);</span></span></code></pre></div>
+<h3 id="separable-implementation-for-performance">Separable
+Implementation for Performance</h3>
+<p>Full 2D kernel bilateral filtering can be computationally expensive
+at higher resolutions. Modern real-time engines split the spatial filter
+into two passes:</p>
+<ol type="1">
+<li><strong>Horizontal 1D bilateral blur</strong> written to an
+intermediate buffer.</li>
+<li><strong>Vertical 1D bilateral blur</strong> sampling from the
+intermediate buffer.</li>
+</ol>
+<p>By combining Temporal Anti-Aliasing (TAA) accumulation with a
+separable cross-bilateral pass, blue noise jittered volumetric shadows
+converge into a smooth, temporal-stable volumetric fog at a fraction of
+the computational cost of high-sample raymarching.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding gl_WorldRayDirectionEXT in GLSL - glsl</title>
+    <meta name="description" content="In hardware-accelerated ray tracing with GLSL, glWorldRayDirectionEXT is a built-in input variable that provides the direction vector of the currently evaluated ray in world-space coordinates. Available within stages such as hit shaders (closest-hit and">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-gl-world-ray-direction-ext-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding gl_WorldRayDirectionEXT in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-gl-world-ray-direction-ext-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In hardware-accelerated ray tracing with GLSL, glWorldRayDirectionEXT is a built-in input variable that provides the direction vector of the currently evaluated ray in world-space coordinates. Available within stages such as hit shaders (closest-hit and" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-gl_worldraydirectionext-in-glsl">Understanding
+gl_WorldRayDirectionEXT in GLSL</h1>
+<p>In hardware-accelerated ray tracing with GLSL,
+<code>gl_WorldRayDirectionEXT</code> is a built-in input variable that
+provides the direction vector of the currently evaluated ray in
+world-space coordinates. Available within stages such as hit shaders
+(closest-hit and any-hit) and miss shaders, this variable is fundamental
+for evaluating lighting models, sampling environment maps, and
+calculating view-dependent shading effects.</p>
+<h3 id="definition-and-functionality">Definition and Functionality</h3>
+<p>In GLSL (via the <code>GL_EXT_ray_tracing</code> extension),
+<code>gl_WorldRayDirectionEXT</code> is defined as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> gl_WorldRayDirectionEXT<span class="op">;</span></span></code></pre></div>
+<p>It contains the exact direction vector supplied to the
+<code>traceRayEXT()</code> call that spawned the traversal. Because this
+vector is represented in world coordinates, it is unaffected by the
+instance transformations of any geometries encountered along the ray's
+path.</p>
+<h3 id="role-in-hit-shaders">Role in Hit Shaders</h3>
+<p>Within closest-hit (<code>rchit</code>) and any-hit
+(<code>rahit</code>) shaders, <code>gl_WorldRayDirectionEXT</code>
+represents the incoming path of the ray relative to the scene:</p>
+<ul>
+<li><strong>View Vector Calculations:</strong> Shaders typically negate
+<code>gl_WorldRayDirectionEXT</code>
+(<code>-gl_WorldRayDirectionEXT</code>) to construct the view direction
+vector (<span class="math inline">\(V\)</span>) used in standard BRDFs
+(Bidirectional Reflectance Distribution Functions), specular highlights,
+and Fresnel equations.</li>
+<li><strong>Secondary Ray Spawning:</strong> When computing reflections
+or refractions, <code>gl_WorldRayDirectionEXT</code> serves as the
+incident vector passed to GLSL functions such as <code>reflect()</code>
+or <code>refract()</code> alongside the world-space surface normal.</li>
+<li><strong>Contrast with Object Space:</strong> While
+<code>gl_WorldRayDirectionEXT</code> remains in the global coordinate
+frame, GLSL also provides <code>gl_ObjectRayDirectionEXT</code>, which
+transforms the direction into the local coordinate system of the hit
+instance. <code>gl_WorldRayDirectionEXT</code> avoids the need to
+manually transform vectors back to world space for lighting
+calculations.</li>
+</ul>
+<h3 id="role-in-miss-shaders">Role in Miss Shaders</h3>
+<p>In miss shaders (<code>rmiss</code>), which execute when a ray fails
+to intersect any geometry within the acceleration structure:</p>
+<ul>
+<li><strong>Environment Mapping:</strong>
+<code>gl_WorldRayDirectionEXT</code> provides the direction required to
+sample equirectangular or cubemap environment textures (skyboxes).</li>
+<li><strong>Atmospheric Effects:</strong> It allows procedural
+calculations, such as sun-sky gradients, horizon blending, or
+distance-based fog, based purely on the direction in which the camera or
+surface was looking.</li>
+</ul>
+<h3 id="normalization-caveat">Normalization Caveat</h3>
+<p>The value stored in <code>gl_WorldRayDirectionEXT</code> preserves
+the exact magnitude and normalization state of the vector originally
+passed to <code>traceRayEXT()</code>. If the ray was cast using a
+non-normalized direction, <code>gl_WorldRayDirectionEXT</code> will also
+be non-normalized. For operations requiring unit vectors—such as dot
+products for diffuse and specular lighting—the vector should be
+explicitly normalized using
+<code>normalize(gl_WorldRayDirectionEXT)</code>.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

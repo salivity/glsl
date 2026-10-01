@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How gl_SampleID Identifies Samples in GLSL - glsl</title>
+    <meta name="description" content="This article explains how the built-in glSampleID input variable operates within OpenGL Shading Language (GLSL) to identify specific sub-pixel samples. It covers the transition from standard pixel-frequency shading to per-sample frequency shading, the ze">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-gl-sample-id-identifies-samples-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How gl_SampleID Identifies Samples in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-gl-sample-id-identifies-samples-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the built-in glSampleID input variable operates within OpenGL Shading Language (GLSL) to identify specific sub-pixel samples. It covers the transition from standard pixel-frequency shading to per-sample frequency shading, the ze" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-gl_sampleid-identifies-samples-in-glsl">How gl_SampleID
+Identifies Samples in GLSL</h1>
+<p>This article explains how the built-in <code>gl_SampleID</code> input
+variable operates within OpenGL Shading Language (GLSL) to identify
+specific sub-pixel samples. It covers the transition from standard
+pixel-frequency shading to per-sample frequency shading, the zero-based
+indexing mechanism used by the graphics pipeline, and how
+<code>gl_SampleID</code> interacts with related sample-rate built-ins
+during multisample anti-aliasing (MSAA) rendering.</p>
+<h3 id="the-role-of-gl_sampleid">The Role of gl_SampleID</h3>
+<p>In GLSL, <code>gl_SampleID</code> is a built-in fragment shader input
+variable defined as a signed integer (<code>in int gl_SampleID;</code>).
+Its primary role is to serve as an integer index that uniquely
+identifies the sub-pixel sample currently being processed by the
+fragment shader instance.</p>
+<p>In standard rendering workflows using Multisample Anti-Aliasing
+(MSAA), the fragment shader executes only once per pixel covered by a
+geometric primitive, and the resulting color is shared across all
+covered sub-pixel sample points. However, when sample-specific
+operations or custom anti-aliasing algorithms are required, the fragment
+shader must evaluate each sub-pixel sample point individually. The
+<code>gl_SampleID</code> variable provides the shader with direct
+knowledge of which distinct sample point within the pixel grid is being
+shaded.</p>
+<h3 id="how-identification-works">How Identification Works</h3>
+<p>When a multisample framebuffer is bound, each pixel is divided into a
+fixed number of sub-pixel sample positions, determined by the total
+sample count (accessible in GLSL via the <code>gl_NumSamples</code>
+built-in variable).</p>
+<ol type="1">
+<li><strong>Zero-Based Indexing:</strong> The graphics hardware assigns
+an integer index to each sample point, starting at <code>0</code> and
+ending at <code>gl_NumSamples - 1</code>. If an 8x MSAA configuration is
+active, the samples are indexed sequentially from <code>0</code> through
+<code>7</code>.</li>
+<li><strong>Sub-Pixel Assignment:</strong> Each integer index
+corresponds to a specific fixed sub-pixel offset within the bounds of
+the pixel. When the GPU schedules a fragment thread to evaluate a
+specific sample location, it loads that sample's index directly into the
+<code>gl_SampleID</code> register for that invocation.</li>
+<li><strong>Execution Context:</strong> The current execution thread can
+then use this integer directly to index into arrays, determine
+sample-specific parameters, or fetch data from multisample textures via
+the <code>texelFetch</code> function.</li>
+</ol>
+<h3 id="implicit-activation-of-sample-rate-shading">Implicit Activation
+of Sample-Rate Shading</h3>
+<p>Using <code>gl_SampleID</code> modifies the execution frequency of
+the fragment shader:</p>
+<ul>
+<li><strong>Triggering Per-Sample Execution:</strong> Simply reading
+from <code>gl_SampleID</code> anywhere inside the fragment shader
+implicitly forces the GPU to execute the fragment shader at sample
+frequency rather than pixel frequency.</li>
+<li><strong>Invocation Multiplicity:</strong> Instead of running once
+per covered pixel, the shader automatically runs once per covered
+sample. For a 4x MSAA buffer where all four samples are covered by a
+triangle, the fragment shader executes four separate times for that
+single pixel, with <code>gl_SampleID</code> sequentially resolving to
+<code>0</code>, <code>1</code>, <code>2</code>, and <code>3</code>.</li>
+<li><strong>Performance Impact:</strong> Because this increases the
+total fragment shader invocations up to the number of samples per pixel,
+relying on <code>gl_SampleID</code> substantially increases GPU workload
+compared to standard MSAA.</li>
+</ul>
+<h3 id="relationship-with-gl_sampleposition">Relationship with
+gl_SamplePosition</h3>
+<p>While <code>gl_SampleID</code> identifies <em>which</em> sample is
+being evaluated by index, it does not directly convey the geometric
+coordinates of that sample. To obtain the physical sub-pixel offset,
+<code>gl_SampleID</code> is often used alongside
+<code>gl_SamplePosition</code>, a <code>vec2</code> containing the
+two-dimensional sub-pixel coordinates of the current sample scaled to
+the range <code>[0.0, 1.0]</code>, where <code>(0.5, 0.5)</code>
+represents the exact center of the pixel. Together, these variables
+allow shaders to perform precise procedural filtering, custom
+anti-aliasing resolves, and sample-correct lighting evaluations.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

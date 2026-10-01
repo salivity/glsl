@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapping GLSL Push Constants to SPIR-V OpTypePointer - glsl</title>
+    <meta name="description" content="This article examines how GLSL push constant uniform blocks are compiled into SPIR-V intermediate representation, focusing specifically on how compilers map these declarations to the OpTypePointer instruction using the PushConstant storage class. It cove">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/mapping-glsl-push-constants-to-spir-v-op-type-pointer">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Mapping GLSL Push Constants to SPIR-V OpTypePointer - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/mapping-glsl-push-constants-to-spir-v-op-type-pointer" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article examines how GLSL push constant uniform blocks are compiled into SPIR-V intermediate representation, focusing specifically on how compilers map these declarations to the OpTypePointer instruction using the PushConstant storage class. It cove" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="mapping-glsl-push-constants-to-spir-v-optypepointer">Mapping
+GLSL Push Constants to SPIR-V OpTypePointer</h1>
+<p>This article examines how GLSL push constant uniform blocks are
+compiled into SPIR-V intermediate representation, focusing specifically
+on how compilers map these declarations to the
+<code>OpTypePointer</code> instruction using the
+<code>PushConstant</code> storage class. It covers the declaration
+syntax in GLSL, the sequential generation of SPIR-V layout decorations,
+structural type definitions, and how the resulting pointer type is
+utilized by <code>OpVariable</code> and access chain operations.</p>
+<h2 id="the-glsl-push-constant-block">The GLSL Push Constant Block</h2>
+<p>In Vulkan GLSL, push constants represent a lightweight mechanism for
+passing small amounts of frequently updated data directly to shaders
+without updating descriptor sets. A push constant block is declared
+using the <code>push_constant</code> layout qualifier on a uniform
+block:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>push_constant<span class="op">)</span> <span class="kw">uniform</span> PushBlock <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> modelMatrix<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> customColor<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> pushConstants<span class="op">;</span></span></code></pre></div>
+<p>A shader can have at most one push constant block. When a compiler
+such as <code>glslang</code> targets SPIR-V, it must map this construct
+into the memory and type system defined by the SPIR-V specification.</p>
+<h2 id="spir-v-type-and-layout-generation">SPIR-V Type and Layout
+Generation</h2>
+<p>The compiler translates the GLSL block into SPIR-V through a sequence
+of specific instructions that define the memory layout, struct
+composition, and pointer type.</p>
+<h3 id="1-structure-definition-and-member-layout">1. Structure
+Definition and Member Layout</h3>
+<p>The compiler first defines the underlying memory layout of the block
+as a struct using <code>OpTypeStruct</code>. Because the block must
+adhere to standard layout rules (like <code>std430</code>), the compiler
+decorates each struct member with explicit byte offsets using
+<code>OpMemberDecorate</code>:</p>
+<pre class="spirv"><code>OpMemberDecorate %PushBlock 0 Offset 0
+OpMemberDecorate %PushBlock 1 Offset 64
+OpDecorate %PushBlock Block
+%PushBlock = OpTypeStruct %mat4v4float %v4float</code></pre>
+<p>The <code>OpDecorate %PushBlock Block</code> decoration indicates
+that this structure represents an interface block matching Vulkan memory
+layout rules.</p>
+<h3 id="2-the-optypepointer-declaration">2. The OpTypePointer
+Declaration</h3>
+<p>SPIR-V uses typed pointers that are bound to an explicit storage
+class. The <code>PushConstant</code> storage class defines uniform
+memory provided by the API that is read-only within the shader.</p>
+<p>To create a pointer to the structure within this storage class, the
+compiler emits an <code>OpTypePointer</code> instruction:</p>
+<pre class="spirv"><code>%_ptr_PushConstant_PushBlock = OpTypePointer PushConstant %PushBlock</code></pre>
+<p>Here, <code>OpTypePointer</code> takes two primary operands:</p>
+<ul>
+<li><strong>Storage Class:</strong> Set to <code>PushConstant</code>
+(enumerated as value <code>9</code> in the SPIR-V specification).</li>
+<li><strong>Type:</strong> The ID of the composite type being referenced
+(in this case, <code>%PushBlock</code>).</li>
+</ul>
+<h3 id="3-variable-declaration-with-opvariable">3. Variable Declaration
+with OpVariable</h3>
+<p>Once the pointer type is defined, the compiler instantiates the
+global variable representing the push constant block using
+<code>OpVariable</code>:</p>
+<pre class="spirv"><code>%pushConstants = OpVariable %_ptr_PushConstant_PushBlock PushConstant</code></pre>
+<p>The variable declaration requires:</p>
+<ul>
+<li>The result type, which must match the pointer type declared by
+<code>OpTypePointer PushConstant %PushBlock</code>.</li>
+<li>The storage class literal, which must strictly match the storage
+class of the pointer type (<code>PushConstant</code>).</li>
+</ul>
+<p>Because push constants are populated by the Vulkan host environment
+via commands like <code>vkCmdPushConstants</code>, the variable cannot
+have an initializer and must have module-level (global) scope.</p>
+<h2 id="accessing-push-constant-members">Accessing Push Constant
+Members</h2>
+<p>To read data from the block, the shader generates an intermediate
+pointer to the specific member using <code>OpAccessChain</code>. The
+intermediate pointer must also belong to the <code>PushConstant</code>
+storage class:</p>
+<pre class="spirv"><code>%_ptr_PushConstant_v4float = OpTypePointer PushConstant %v4float
+%customColor_ptr = OpAccessChain %_ptr_PushConstant_v4float %pushConstants %int_1
+%customColor_val = OpLoad %v4float %customColor_ptr</code></pre>
+<p>The memory chain preserves the <code>PushConstant</code> storage
+class across pointer dereferences until an <code>OpLoad</code>
+instruction reads the value directly into a register, enforcing the
+read-only semantics at the SPIR-V validation level.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

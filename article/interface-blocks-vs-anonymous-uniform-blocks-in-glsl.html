@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interface Blocks vs Anonymous Uniform Blocks in GLSL - glsl</title>
+    <meta name="description" content="In GLSL (OpenGL Shading Language), organizing shader inputs, outputs, and buffers is essential for building modular and maintainable graphics pipelines. This article breaks down the distinction between interface blocks and anonymous uniform blocks, detai">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/interface-blocks-vs-anonymous-uniform-blocks-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Interface Blocks vs Anonymous Uniform Blocks in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/interface-blocks-vs-anonymous-uniform-blocks-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL (OpenGL Shading Language), organizing shader inputs, outputs, and buffers is essential for building modular and maintainable graphics pipelines. This article breaks down the distinction between interface blocks and anonymous uniform blocks, detai" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="interface-blocks-vs-anonymous-uniform-blocks-in-glsl">Interface
+Blocks vs Anonymous Uniform Blocks in GLSL</h1>
+<p>In GLSL (OpenGL Shading Language), organizing shader inputs, outputs,
+and buffers is essential for building modular and maintainable graphics
+pipelines. This article breaks down the distinction between interface
+blocks and anonymous uniform blocks, detailing how their syntax,
+variable scoping, and memory backings differ, and when to use each in
+your shaders.</p>
+<h3 id="categorical-distinction">Categorical Distinction</h3>
+<p>An <strong>interface block</strong> is an umbrella language feature
+in GLSL designed to group related variables together. Interface blocks
+can be used across multiple storage qualifiers:</p>
+<ul>
+<li><code>in</code> and <code>out</code> blocks for transferring data
+between pipeline stages (e.g., from vertex to fragment shaders).</li>
+<li><code>uniform</code> blocks (Uniform Buffer Objects, or UBOs) for
+read-only data shared across stages.</li>
+<li><code>buffer</code> blocks (Shader Storage Buffer Objects, or SSBOs)
+for read-write memory storage.</li>
+</ul>
+<p>An <strong>anonymous uniform block</strong>, by contrast, is a
+specific implementation of an interface block. It uses the
+<code>uniform</code> qualifier and explicitly omits an instance name at
+the end of the block declaration.</p>
+<h3 id="scoping-and-namespacing">Scoping and Namespacing</h3>
+<p>The primary functional difference inside shader code lies in how
+internal variables are referenced:</p>
+<ul>
+<li><p><strong>Named Interface Blocks (Instanced):</strong> When an
+interface block includes an instance name after the closing brace, its
+members exist within a nested namespace.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Named uniform block</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std140</span><span class="op">)</span> <span class="kw">uniform</span> CameraData <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> view<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> projection<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> camera<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Access requires the instance name</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="bu">gl_Position</span> <span class="op">=</span> camera<span class="op">.</span><span class="fu">projection</span> <span class="op">*</span> camera<span class="op">.</span><span class="fu">view</span> <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>position<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span></code></pre></div></li>
+<li><p><strong>Anonymous Uniform Blocks:</strong> When the block lacks
+an instance name, all enclosed variables are imported directly into the
+shader's global namespace.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Anonymous uniform block</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std140</span><span class="op">)</span> <span class="kw">uniform</span> CameraData <span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> view<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> projection<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Access is direct, without a prefix</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="bu">gl_Position</span> <span class="op">=</span> projection <span class="op">*</span> view <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>position<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span></code></pre></div></li>
+</ul>
+<p>Because anonymous blocks place variables in the global scope,
+variable names inside the block must not conflict with any other global
+declarations or variables in other anonymous blocks.</p>
+<h3 id="pipeline-communication-vs-buffer-storage">Pipeline Communication
+vs. Buffer Storage</h3>
+<p>Interface blocks defined with <code>in</code> or <code>out</code>
+qualifiers are exclusively used for stage-to-stage communication. They
+are not backed by buffer objects and do not require memory layout
+qualifiers like <code>std140</code> or <code>std430</code>. These blocks
+are frequently named, particularly in geometry shaders where input
+interface blocks must be instantiated as arrays to handle multi-vertex
+primitives (e.g.,
+<code>in VertexData { vec3 normal; } v_in[];</code>).</p>
+<p>Uniform blocks—whether anonymous or named—are always backed by
+hardware Uniform Buffer Objects. The host application interacts with the
+block using its type name (e.g., <code>CameraData</code>) via functions
+like <code>glGetUniformBlockIndex</code>, regardless of whether an
+instance name is declared in the shader.</p>
+<h3 id="summary-of-differences">Summary of Differences</h3>
+<ul>
+<li><strong>Scope:</strong> Interface blocks can be instanced to prevent
+namespace collisions; anonymous uniform blocks expose all members
+directly into the global scope.</li>
+<li><strong>Usage:</strong> Interface blocks span <code>in</code>,
+<code>out</code>, <code>uniform</code>, and <code>buffer</code>
+qualifiers; anonymous uniform blocks specifically refer to buffer-backed
+<code>uniform</code> blocks lacking an instance name.</li>
+<li><strong>Array Support:</strong> Named interface blocks can be
+arrayed (essential for geometry shaders or binding arrays); anonymous
+blocks cannot be declared as arrays.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

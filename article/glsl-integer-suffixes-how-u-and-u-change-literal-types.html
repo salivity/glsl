@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Integer Suffixes: How u and U Change Literal Types - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), integer literals default to the signed 32-bit integer type (int). Appending the lowercase u or uppercase U suffix directly alters the scalar literal's compile-time type, transforming it into an unsigned 32-bit integ">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-integer-suffixes-how-u-and-u-change-literal-types">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Integer Suffixes: How u and U Change Literal Types - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-integer-suffixes-how-u-and-u-change-literal-types" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), integer literals default to the signed 32-bit integer type (int). Appending the lowercase u or uppercase U suffix directly alters the scalar literal's compile-time type, transforming it into an unsigned 32-bit integ" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-integer-suffixes-how-u-and-u-change-literal-types">GLSL
+Integer Suffixes: How u and U Change Literal Types</h1>
+<p>In the OpenGL Shading Language (GLSL), integer literals default to
+the signed 32-bit integer type (<code>int</code>). Appending the
+lowercase <code>u</code> or uppercase <code>U</code> suffix directly
+alters the scalar literal's compile-time type, transforming it into an
+unsigned 32-bit integer (<code>uint</code>). This article covers how
+this suffix functions within the GLSL grammar, why it is critical for
+preventing type-mismatch compilation errors, and how it alters
+arithmetic, bitwise logic, and function resolution in shader
+pipelines.</p>
+<h3 id="default-integer-typing-vs-the-unsigned-suffix">Default Integer
+Typing vs. The Unsigned Suffix</h3>
+<p>When an integer literal is written without a suffix or decimal point
+in GLSL (such as <code>10</code> or <code>0xFF</code>), the compiler
+interprets it as a signed 32-bit integer (<code>int</code>), bounded by
+the range <code>[-2,147,483,648, 2,147,483,647]</code>.</p>
+<p>Appending <code>u</code> or <code>U</code> (such as <code>10u</code>
+or <code>0x80000000u</code>) explicitly tells the compiler's lexer and
+parser to treat the token as a <code>uint</code>. This shifts the range
+of the literal to <code>[0, 4,294,967,295]</code>. If a literal value
+exceeds <code>2,147,483,647</code> without the <code>u</code> or
+<code>U</code> suffix, the compiler will trigger an integer overflow
+error, because the value cannot fit into a standard signed 32-bit
+integer.</p>
+<h3 id="strict-type-enforcement-and-implicit-conversions">Strict Type
+Enforcement and Implicit Conversions</h3>
+<p>GLSL is a strictly typed language. While later versions of the
+specification introduced implicit conversions from <code>int</code> to
+<code>uint</code>, earlier versions (prior to GLSL 4.00) or strict
+profile configurations require explicit type matching.</p>
+<p>Consider the following assignment:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="dt">index</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>  <span class="co">// May fail in GLSL versions lacking implicit promotion</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="dt">index</span> <span class="op">=</span> <span class="dv">0</span>u<span class="op">;</span> <span class="co">// Guaranteed valid across all GLSL versions supporting uint</span></span></code></pre></div>
+<p>Without the <code>u</code> suffix, assigning an <code>int</code>
+literal to a <code>uint</code> variable creates a type mismatch. Using
+<code>0u</code> ensures the literal matches the variable's type directly
+without relying on implicit widening or conversion rules.</p>
+<p>Similarly, binary operations require matching operand types:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> mask <span class="op">=</span> <span class="bn">0xFF</span>u<span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> result <span class="op">=</span> mask <span class="op">&amp;</span> <span class="dv">1</span><span class="op">;</span>  <span class="co">// Error: bitwise AND between &#39;uint&#39; and &#39;int&#39;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> result <span class="op">=</span> mask <span class="op">&amp;</span> <span class="dv">1</span>u<span class="op">;</span> <span class="co">// Valid: both operands are &#39;uint&#39;</span></span></code></pre></div>
+<h3 id="impact-on-function-overloading">Impact on Function
+Overloading</h3>
+<p>GLSL supports function overloading based on exact parameter types.
+When a function has both signed and unsigned variants, the literal
+suffix dictates which implementation the compiler invokes:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">process</span><span class="op">(</span><span class="dt">int</span> value<span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">process</span><span class="op">(</span><span class="dt">uint</span> value<span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="fu">process</span><span class="op">(</span><span class="dv">42</span><span class="op">);</span>  <span class="co">// Calls process(int)</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="fu">process</span><span class="op">(</span><span class="dv">42</span>u<span class="op">);</span> <span class="co">// Calls process(uint)</span></span></code></pre></div>
+<p>Omitting the suffix calls the signed version. If only the
+<code>uint</code> version exists and the GLSL version in use does not
+support implicit conversion from <code>int</code> to <code>uint</code>,
+passing an unsuffixed literal will result in a compile-time error.</p>
+<h3 id="bitwise-and-shift-operations">Bitwise and Shift Operations</h3>
+<p>The data type of a literal dictates how bitwise shifts and arithmetic
+operations evaluate:</p>
+<ul>
+<li><strong>Right Shift (<code>&gt;&gt;</code>):</strong> Shifting a
+signed <code>int</code> performs an arithmetic right shift (preserving
+the sign bit by sign-extension). Shifting a <code>uint</code> performs a
+logical right shift (filling high-order bits with zeroes). Using
+<code>u</code> or <code>U</code> ensures that bits shifted into the most
+significant positions are always zeroes.</li>
+<li><strong>Division and Modulo (<code>/</code>,
+<code>%</code>):</strong> Signed integer division truncates toward zero
+and handles negative values differently than unsigned division.
+Specifying <code>u</code> guarantees unsigned mathematical
+operations.</li>
+</ul>
+<p>In summary, the <code>u</code> and <code>U</code> suffixes in GLSL
+explicitly assign the <code>uint</code> scalar type to numeric literals.
+This eliminates ambiguity in function overloading, ensures compatibility
+with <code>uint</code> variables and expressions, enables representation
+of values beyond <span class="math inline">\(2^{31}-1\)</span>, and
+enforces unsigned semantics for bitwise and mathematical operations.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

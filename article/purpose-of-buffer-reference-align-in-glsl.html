@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purpose of buffer_reference_align in GLSL - glsl</title>
+    <meta name="description" content="The bufferreferencealign layout qualifier in GLSL specifies the minimum byte alignment for physical storage buffer pointers introduced by the GLEXTbufferreference extension. This article covers the operational role of bufferreferencealign, explains why e">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/purpose-of-buffer-reference-align-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Purpose of buffer_reference_align in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/purpose-of-buffer-reference-align-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The bufferreferencealign layout qualifier in GLSL specifies the minimum byte alignment for physical storage buffer pointers introduced by the GLEXTbufferreference extension. This article covers the operational role of bufferreferencealign, explains why e" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="purpose-of-buffer_reference_align-in-glsl">Purpose of
+buffer_reference_align in GLSL</h1>
+<p>The <code>buffer_reference_align</code> layout qualifier in GLSL
+specifies the minimum byte alignment for physical storage buffer
+pointers introduced by the <code>GL_EXT_buffer_reference</code>
+extension. This article covers the operational role of
+<code>buffer_reference_align</code>, explains why explicit memory
+alignment is essential when dealing with raw GPU pointers, and outlines
+how setting this value properly prevents performance degradation and
+hardware faults during shader execution.</p>
+<h3 id="background-physical-storage-buffer-pointers">Background:
+Physical Storage Buffer Pointers</h3>
+<p>With the introduction of the physical storage buffer feature in GLSL
+(via <code>GL_EXT_buffer_reference</code> or Vulkan 1.2), shaders can
+treat 64-bit GPU addresses as pointers, closely mirroring C-style
+pointers. Instead of accessing buffers through conventional descriptors,
+shaders cast 64-bit integers into buffer references and dereference them
+directly to read or write structured data.</p>
+<p>Because the GPU operates directly on raw memory addresses, the
+compiler needs to make assumptions about how the memory at the targeted
+address is aligned. This is where <code>buffer_reference_align</code>
+becomes necessary.</p>
+<h3 id="the-purpose-of-buffer_reference_align">The Purpose of
+<code>buffer_reference_align</code></h3>
+<p>The primary purpose of <code>buffer_reference_align</code> is to
+explicitly declare the byte alignment of the memory address represented
+by a buffer reference. It informs the GLSL compiler and the GPU driver
+that any memory address assigned to that reference is guaranteed to be
+an integer multiple of the specified value.</p>
+<p>The syntax is declared within the layout qualifier of the buffer
+block:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>buffer_reference<span class="op">,</span> buffer_reference_align <span class="op">=</span> <span class="dv">16</span><span class="op">)</span> <span class="kw">buffer</span> NodeBlock <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> position<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> nextNode<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>In this example, <code>buffer_reference_align = 16</code> informs the
+compiler that any instance of <code>NodeBlock</code> begins at a memory
+address that is aligned to at least 16 bytes.</p>
+<h3 id="why-explicit-alignment-is-critical">Why Explicit Alignment is
+Critical</h3>
+<h4 id="1-enabling-vectorized-memory-instructions">1. Enabling
+Vectorized Memory Instructions</h4>
+<p>Modern GPUs feature vectorized memory pipelines capable of loading or
+storing 32, 64, or 128 bits in a single transaction. These
+high-throughput instructions typically require memory operands to be
+aligned to their total width (e.g., a 128-bit load requiring 16-byte
+alignment).</p>
+<p>If the compiler is not guaranteed a specific alignment, it must
+generate conservative code. This often involves emitting multiple
+smaller, scalar read instructions (such as four individual 32-bit loads
+instead of one 128-bit load) followed by register packing. Specifying an
+adequate <code>buffer_reference_align</code> enables the compiler to
+generate wide, vectorized load/store instructions safely.</p>
+<h4 id="2-preventing-hardware-faults-and-undefined-behavior">2.
+Preventing Hardware Faults and Undefined Behavior</h4>
+<p>Certain GPU architectures strictly enforce alignment rules at the
+hardware level. Dereferencing an unaligned pointer using an instruction
+that expects aligned memory can lead to hardware-level exceptions,
+device loss, or silent data corruption. Stating the alignment ensures
+the shader operates within the bounds supported by the target
+architecture.</p>
+<h4 id="3-overriding-layout-defaults">3. Overriding Layout Defaults</h4>
+<p>By default, buffer blocks follow standard alignment rules such as
+<code>std430</code>. However, the alignment of the base address itself
+might differ from the internal member layout. While <code>std430</code>
+governs the relative offsets of fields inside the structure,
+<code>buffer_reference_align</code> governs the base address of the
+block itself. It allows developers to specify higher alignment values
+(e.g., 32, 64, or 128 bytes) to match specific host-side allocation
+patterns or specialized cache-line boundaries.</p>
+<h3 id="rules-and-usage-constraints">Rules and Usage Constraints</h3>
+<p>When using <code>buffer_reference_align</code>, several constraints
+apply:</p>
+<ul>
+<li><strong>Power of Two:</strong> The value assigned to
+<code>buffer_reference_align</code> must be a power of two (e.g., 4, 8,
+16, 32, 64).</li>
+<li><strong>Minimum Requirement:</strong> The alignment value must be at
+least as large as the natural alignment required by the largest scalar
+or vector type in the block according to the block's layout rules (such
+as <code>std430</code>). Setting an alignment smaller than the block's
+internal requirements results in a compilation error.</li>
+<li><strong>Host Synchronization:</strong> The host application (such as
+Vulkan or OpenGL via external memory) is responsible for ensuring that
+all addresses passed to the shader actually satisfy the declared
+alignment. If a host application supplies a pointer that violates this
+alignment, the resulting shader behavior is undefined.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL God Rays: Radial Blur Post-Processing - glsl</title>
+    <meta name="description" content="This article explains how to implement screen-space volumetric light shafts, commonly known as god rays or crepuscular rays, using a radial blur post-processing shader in GLSL. It covers the core concept of directional radial sampling from a screen-space">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-god-rays-radial-blur-post-processing">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL God Rays: Radial Blur Post-Processing - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-god-rays-radial-blur-post-processing" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to implement screen-space volumetric light shafts, commonly known as god rays or crepuscular rays, using a radial blur post-processing shader in GLSL. It covers the core concept of directional radial sampling from a screen-space" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-god-rays-radial-blur-post-processing">GLSL God Rays: Radial
+Blur Post-Processing</h1>
+<p>This article explains how to implement screen-space volumetric light
+shafts, commonly known as god rays or crepuscular rays, using a radial
+blur post-processing shader in GLSL. It covers the core concept of
+directional radial sampling from a screen-space light source, the
+preparation of the occlusion buffer, the complete GLSL fragment shader
+implementation, and the key parameters used to fine-tune the visual
+quality and performance of the effect.</p>
+<h2 id="the-core-concept">The Core Concept</h2>
+<p>Volumetric light shafts occur in nature when sunlight is scattered by
+atmospheric particles and partially blocked by obstacles like clouds or
+trees. Simulating full 3D participating media is computationally
+expensive for real-time rendering.</p>
+<p>The radial blur approach, popularized by Kenny Mitchell in <em>GPU
+Gems 3</em>, approximates this effect entirely in 2D post-processing.
+The algorithm operates on the assumption that light shafts stream
+outward radially from the light source's position on the screen. By
+repeatedly sampling along a vector pointing from the current pixel
+toward the screen-space light position, accumulating the sampled values,
+and applying exponential falloff, the shader creates the optical
+illusion of volumetric light shafts piercing through silhouettes.</p>
+<h2 id="prerequisites-the-occlusion-map">Prerequisites: The Occlusion
+Map</h2>
+<p>Before applying the radial blur pass, you must render a simplified
+version of the scene known as the occlusion texture (or light-mask
+buffer):</p>
+<ol type="1">
+<li><strong>Light Emitters / Sky:</strong> Render the light source
+(e.g., the sun or an emissive bulb) and unobstructed sky as bright,
+unshaded colors.</li>
+<li><strong>Occluding Geometry:</strong> Render all foreground objects
+and scene geometry as completely black (<code>vec3(0.0)</code>).</li>
+</ol>
+<p>This high-contrast buffer isolates the light that directly reaches
+the camera from the light that is blocked.</p>
+<h2 id="the-algorithm-breakdown">The Algorithm Breakdown</h2>
+<ol type="1">
+<li><strong>Transform Light to Screen Space:</strong> Project the
+world-space light position into clip space, then divide by the <span
+class="math inline">\(w\)</span> component to obtain Normalized Device
+Coordinates (NDC). Remap these coordinates to UV space range <span
+class="math inline">\([0.0, 1.0]\)</span>.</li>
+<li><strong>Calculate Step Vector:</strong> For every pixel, compute a
+directional vector heading toward the screen-space light position: <span
+class="math display">\[\vec{D} = \frac{\text{UV} -
+\text{LightUV}}{\text{SampleCount}} \times \text{Density}\]</span></li>
+<li><strong>Iterative Sampling:</strong> Step backward along <span
+class="math inline">\(\vec{D}\)</span> across multiple iterations.</li>
+<li><strong>Decay and Weighting:</strong> Multiply each sample by a
+decaying attenuation factor (<span
+class="math inline">\(\text{Decay}^i\)</span>) and an initial weight,
+then add it to an accumulation buffer.</li>
+<li><strong>Exposure Adjustment:</strong> Scale the final accumulated
+color by an exposure constant.</li>
+</ol>
+<h2 id="glsl-fragment-shader-implementation">GLSL Fragment Shader
+Implementation</h2>
+<p>Below is a complete GLSL fragment shader demonstrating the radial
+blur pass:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec2</span> v_TexCoord<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> u_OcclusionTexture<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec2</span> u_LightScreenPos<span class="op">;</span> <span class="co">// Light position in UV coordinates [0.0, 1.0]</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Adjustable algorithm parameters</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> NUM_SAMPLES <span class="op">=</span> <span class="dv">64</span><span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_Density <span class="op">=</span> <span class="fl">0.84</span><span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_Weight <span class="op">=</span> <span class="fl">5.65</span><span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_Decay <span class="op">=</span> <span class="fl">0.97</span><span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_Exposure <span class="op">=</span> <span class="fl">0.24</span><span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Direction vector pointing from the light source toward the current pixel</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> deltaTexCoord <span class="op">=</span> <span class="op">(</span>v_TexCoord <span class="op">-</span> u_LightScreenPos<span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Scale the step vector by sample count and user-defined density</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    deltaTexCoord <span class="op">*=</span> <span class="fl">1.0</span> <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>NUM_SAMPLES<span class="op">)</span> <span class="op">*</span> u_Density<span class="op">;</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> currentTexCoord <span class="op">=</span> v_TexCoord<span class="op">;</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> illuminationDecay <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> accumulatedColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="co">// March along the ray toward the light source</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> NUM_SAMPLES<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="op">{</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>        currentTexCoord <span class="op">-=</span> deltaTexCoord<span class="op">;</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Sample the occlusion buffer</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec4</span> sampleColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_OcclusionTexture<span class="op">,</span> currentTexCoord<span class="op">);</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Apply decay and weight attenuation</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>        sampleColor <span class="op">*=</span> illuminationDecay <span class="op">*</span> u_Weight<span class="op">;</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Accumulate result</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>        accumulatedColor <span class="op">+=</span> sampleColor<span class="op">;</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Update decay factor for the next sample</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>        illuminationDecay <span class="op">*=</span> u_Decay<span class="op">;</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Apply final exposure tone</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> accumulatedColor <span class="op">*</span> u_Exposure<span class="op">;</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="parameter-definitions">Parameter Definitions</h2>
+<ul>
+<li><strong><code>NUM_SAMPLES</code>:</strong> The number of texture
+lookups along the ray. Higher values (64–128) yield smooth rays, while
+lower values (16–32) improve frame rates but can cause visible
+banding.</li>
+<li><strong><code>u_Density</code>:</strong> Controls the separation
+distance between individual samples along the ray. Higher values stretch
+the reach of the rays across the screen.</li>
+<li><strong><code>u_Weight</code>:</strong> Controls the brightness
+contribution of each individual texture tap.</li>
+<li><strong><code>u_Decay</code>:</strong> A value between <span
+class="math inline">\(0.0\)</span> and <span
+class="math inline">\(1.0\)</span> that dictates how quickly the light
+fades as it travels further away from its origin.</li>
+<li><strong><code>u_Exposure</code>:</strong> A global multiplier that
+tunes the overall intensity of the final output.</li>
+</ul>
+<h2 id="final-compositing">Final Compositing</h2>
+<p>The output of the radial blur shader represents only the light
+shafts. To integrate the effect into the final frame:</p>
+<ol type="1">
+<li>Render the main scene normally to an HDR framebuffer.</li>
+<li>Render the radial blur pass to an offscreen buffer (frequently at
+half or quarter resolution to reduce texture fill-rate overhead).</li>
+<li>Combine both textures in a final composite pass using additive
+blending:</li>
+</ol>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> sceneColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_MainSceneTexture<span class="op">,</span> v_TexCoord<span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> godRayColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_GodRayTexture<span class="op">,</span> v_TexCoord<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>FragColor <span class="op">=</span> sceneColor <span class="op">+</span> godRayColor<span class="op">;</span></span></code></pre></div>
+<p>When the light source is behind the camera, the screen-space position
+falls outside the visible viewport; you must clamp, fade out, or disable
+the effect to avoid inverted visual artifacts.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

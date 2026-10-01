@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zero-Initializing GLSL with GL_EXT_null_initializer - glsl</title>
+    <meta name="description" content="This article provides an overview of the GLEXTnullinitializer extension in GLSL and its primary function: simplifying the zero-initialization of composite data types such as structures and arrays. You will learn the limitations of traditional GLSL initia">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/zero-initializing-glsl-with-gl-ext-null-initializer">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Zero-Initializing GLSL with GL_EXT_null_initializer - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/zero-initializing-glsl-with-gl-ext-null-initializer" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of the GLEXTnullinitializer extension in GLSL and its primary function: simplifying the zero-initialization of composite data types such as structures and arrays. You will learn the limitations of traditional GLSL initia" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="zero-initializing-glsl-with-gl_ext_null_initializer">Zero-Initializing
+GLSL with GL_EXT_null_initializer</h1>
+<p>This article provides an overview of the
+<code>GL_EXT_null_initializer</code> extension in GLSL and its primary
+function: simplifying the zero-initialization of composite data types
+such as structures and arrays. You will learn the limitations of
+traditional GLSL initialization, how this extension introduces
+empty-brace syntax, and the compile-time and runtime performance
+benefits it offers, particularly when targeting SPIR-V.</p>
+<h3 id="the-challenge-of-initialization-in-standard-glsl">The Challenge
+of Initialization in Standard GLSL</h3>
+<p>In core GLSL, initializing composite structures—especially deeply
+nested structs or multi-element arrays—requires explicit, verbose
+constructor syntax. Every member must be populated manually with zero
+literals, as shown below:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Transform <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> model<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> scale<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> rotation<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Standard GLSL requirement:</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>Transform t <span class="op">=</span> <span class="fu">Transform</span><span class="op">(</span><span class="dt">mat4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">),</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">),</span> <span class="fl">0.0</span><span class="op">);</span></span></code></pre></div>
+<p>For large structs or nested arrays, this requirement increases
+boilerplate, creates maintenance issues when struct definitions change,
+and leads to inflated shader binary sizes due to extensive constant
+definition trees.</p>
+<h3 id="how-gl_ext_null_initializer-solves-this">How
+GL_EXT_null_initializer Solves This</h3>
+<p>The <code>GL_EXT_null_initializer</code> extension introduces a
+concise null-initialization syntax via empty braces (<code>{}</code>).
+By enabling the extension:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_null_initializer : enable</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>Transform t <span class="op">=</span> <span class="op">{};</span></span></code></pre></div>
+<p>Using <code>{}</code> instructs the compiler to zero-initialize the
+variable according to its underlying scalar components:</p>
+<ul>
+<li>Floating-point types (<code>float</code>, <code>vecN</code>,
+<code>matN</code>) are initialized to <code>0.0</code>.</li>
+<li>Integer types (<code>int</code>, <code>uint</code>,
+<code>ivecN</code>, <code>uvecN</code>) are initialized to
+<code>0</code>.</li>
+<li>Boolean types (<code>bool</code>, <code>bvecN</code>) are
+initialized to <code>false</code>.</li>
+<li>Nested structures and arrays have all their constituent elements
+recursively set to zero.</li>
+</ul>
+<h3 id="direct-mapping-to-spir-v-opconstantnull">Direct Mapping to
+SPIR-V OpConstantNull</h3>
+<p>Beyond cleaner shader code, the critical architectural role of
+<code>GL_EXT_null_initializer</code> lies in its interaction with
+intermediate representations like SPIR-V.</p>
+<p>When compiling GLSL without this extension, a composite structure
+initialized with explicit zeroes generates distinct constant definitions
+for every field and sub-field (e.g., <code>OpConstant</code>,
+<code>OpConstantComposite</code>). In contrast, a struct initialized
+using the <code>{}</code> syntax maps directly to the SPIR-V instruction
+<code>OpConstantNull</code>.</p>
+<p><code>OpConstantNull</code> defines a null/zero value for any
+composite, scalar, or pointer type using a single instruction. This
+provides two key advantages:</p>
+<ol type="1">
+<li><strong>Reduced Module Size:</strong> It removes redundant constant
+definitions, drastically shrinking shader intermediate representation
+files.</li>
+<li><strong>Faster Driver Compilation:</strong> Graphics drivers can
+allocate and clear memory blocks in a single operation rather than
+parsing complex construction trees, lowering shader loading and pipeline
+creation overhead.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

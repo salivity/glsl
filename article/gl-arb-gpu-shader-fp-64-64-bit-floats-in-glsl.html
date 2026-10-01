@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GL_ARB_gpu_shader_fp64: 64-Bit Floats in GLSL - glsl</title>
+    <meta name="description" content="The GLARBgpushaderfp64 extension introduces native 64-bit double-precision floating-point arithmetic to the OpenGL Shading Language (GLSL). By adding dedicated scalar, vector, and matrix types alongside matching mathematical built-ins, this extension all">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gl-arb-gpu-shader-fp-64-64-bit-floats-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GL_ARB_gpu_shader_fp64: 64-Bit Floats in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gl-arb-gpu-shader-fp-64-64-bit-floats-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The GLARBgpushaderfp64 extension introduces native 64-bit double-precision floating-point arithmetic to the OpenGL Shading Language (GLSL). By adding dedicated scalar, vector, and matrix types alongside matching mathematical built-ins, this extension all" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="gl_arb_gpu_shader_fp64-64-bit-floats-in-glsl">GL_ARB_gpu_shader_fp64:
+64-Bit Floats in GLSL</h1>
+<p>The <code>GL_ARB_gpu_shader_fp64</code> extension introduces native
+64-bit double-precision floating-point arithmetic to the OpenGL Shading
+Language (GLSL). By adding dedicated scalar, vector, and matrix types
+alongside matching mathematical built-ins, this extension allows
+graphics and compute pipelines to process high-precision data directly
+on the GPU without custom multi-pass emulations. This article details
+the syntax, memory mechanics, vector configurations, and operational
+trade-offs of using 64-bit floating-point vectors in GLSL.</p>
+<h2 id="enabling-the-extension">Enabling the Extension</h2>
+<p>To use 64-bit floating-point constructs in GLSL, the shader stage
+must explicitly declare support for the extension at the top of the
+source file:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 400 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_ARB_gpu_shader_fp64 : require</span></span></code></pre></div>
+<p>While core OpenGL 4.0 and later versions integrated this feature
+natively, enabling it via the extension directive ensures backward
+compatibility and explicit compiler enforcement on hardware supporting
+the extension.</p>
+<h2 id="64-bit-types-and-vector-definitions">64-Bit Types and Vector
+Definitions</h2>
+<p>Prior to this extension, GLSL handled floating-point operations using
+32-bit single precision (<code>float</code>, <code>vec2</code>,
+<code>vec3</code>, <code>vec4</code>).
+<code>GL_ARB_gpu_shader_fp64</code> introduces the 64-bit scalar type
+<code>double</code> and corresponding vector types:</p>
+<ul>
+<li><code>dvec2</code>: A two-component vector of 64-bit floats (128
+bits total).</li>
+<li><code>dvec3</code>: A three-component vector of 64-bit floats (192
+bits total).</li>
+<li><code>dvec4</code>: A four-component vector of 64-bit floats (256
+bits total).</li>
+</ul>
+<p>Double-precision floating-point literals are identified with the
+<code>lf</code> or <code>LF</code> suffix:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> scalarVal <span class="op">=</span> <span class="fl">1.0</span>lf<span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">dvec3</span> precisePosition <span class="op">=</span> <span class="dt">dvec3</span><span class="op">(</span><span class="fl">100000.123456789</span>lf<span class="op">,</span> <span class="fl">200000.987654321</span>lf<span class="op">,</span> <span class="fl">0.0</span>lf<span class="op">);</span></span></code></pre></div>
+<p>The extension also introduces double-precision matrices, such as
+<code>dmat2</code>, <code>dmat3</code>, <code>dmat4</code>, and
+non-square variants like <code>dmat3x2</code>.</p>
+<h2 id="register-allocation-and-varying-locations">Register Allocation
+and Varying Locations</h2>
+<p>Under standard 32-bit floating-point processing, a vector register
+typically contains four 32-bit channels (128 bits per slot). Because
+<code>double</code> values require 64 bits per component, hardware
+packing rules change significantly:</p>
+<ol type="1">
+<li><strong>Component Consumption</strong>: A <code>dvec2</code>
+consumes the space of a single 32-bit four-component slot
+(<code>vec4</code>). A <code>dvec3</code> or <code>dvec4</code> spans
+across two separate 32-bit four-component input/output locations.</li>
+<li><strong>Varyings and Interpolation</strong>: When passing
+<code>dvec</code> variables between pipeline stages (e.g., from vertex
+to fragment shader), they consume twice as many varying locations. Flat
+interpolation is commonly enforced, as perspective-correct interpolation
+of 64-bit attributes requires dedicated hardware support and may incur
+performance penalties.</li>
+</ol>
+<h2 id="built-in-functions-and-overloads">Built-In Functions and
+Overloads</h2>
+<p><code>GL_ARB_gpu_shader_fp64</code> overloads most core GLSL
+mathematical functions to accept <code>double</code> and
+<code>dvec</code> parameters, including:</p>
+<ul>
+<li><strong>Geometric Functions</strong>: <code>length()</code>,
+<code>distance()</code>, <code>dot()</code>, <code>cross()</code>, and
+<code>normalize()</code>.</li>
+<li><strong>Common Functions</strong>: <code>abs()</code>,
+<code>sign()</code>, <code>floor()</code>, <code>ceil()</code>,
+<code>fract()</code>, <code>min()</code>, <code>max()</code>,
+<code>clamp()</code>, and <code>mix()</code>.</li>
+<li><strong>Exponential and Trigonometric</strong>: <code>sqrt()</code>,
+<code>inversesqrt()</code>, and trigonometric operations where supported
+by hardware.</li>
+</ul>
+<p>Explicit conversions between 32-bit and 64-bit types are fully
+defined. Converting a <code>vec4</code> to a <code>dvec4</code> promotes
+each component to double precision, while casting a <code>dvec4</code>
+to a <code>vec4</code> truncates the mantissa:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">dvec4</span> highPrec <span class="op">=</span> <span class="dt">dvec4</span><span class="op">(</span><span class="fl">1.0</span>lf<span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> lowPrec <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>highPrec<span class="op">);</span> <span class="co">// Explicit downcast</span></span></code></pre></div>
+<h2 id="performance-and-hardware-considerations">Performance and
+Hardware Considerations</h2>
+<p>While <code>GL_ARB_gpu_shader_fp64</code> provides precision
+essential for planetary-scale rendering (GIS), scientific simulations,
+and ray tracing, it alters pipeline throughput:</p>
+<ul>
+<li><strong>Compute Rate</strong>: Consumer GPUs often have a restricted
+ratio of FP64 to FP32 execution units (often 1:32 or 1:16), making
+double-precision calculations considerably slower than single-precision
+equivalents.</li>
+<li><strong>Register Pressure</strong>: Double-precision vectors double
+register usage, reducing the total active warps/wavefronts (occupancy)
+on the GPU multiprocessors.</li>
+</ul>
+<p>Best practices recommend isolating <code>dvec</code> calculations to
+operations where numerical instability is critical—such as camera
+translation matrices relative to distant origins—and downcasting to
+standard single-precision vectors (<code>vec3</code>, <code>vec4</code>)
+for shading and rasterization.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

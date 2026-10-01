@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Calculate a Torus SDF in GLSL Raymarching - glsl</title>
+    <meta name="description" content="This article explains how to define and evaluate the Signed Distance Function (SDF) of a torus inside a GLSL raymarcher. It covers the mathematical reduction of the 3D volume into a 2D cross-section, the derivation of the distance formula, and the standa">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-to-calculate-a-torus-sdf-in-glsl-raymarching">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How to Calculate a Torus SDF in GLSL Raymarching - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-to-calculate-a-torus-sdf-in-glsl-raymarching" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to define and evaluate the Signed Distance Function (SDF) of a torus inside a GLSL raymarcher. It covers the mathematical reduction of the 3D volume into a 2D cross-section, the derivation of the distance formula, and the standa" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-to-calculate-a-torus-sdf-in-glsl-raymarching">How to
+Calculate a Torus SDF in GLSL Raymarching</h1>
+<p>This article explains how to define and evaluate the Signed Distance
+Function (SDF) of a torus inside a GLSL raymarcher. It covers the
+mathematical reduction of the 3D volume into a 2D cross-section, the
+derivation of the distance formula, and the standard GLSL code
+implementation used in real-time sphere tracing loops.</p>
+<h3 id="the-mathematics-behind-the-torus-sdf">The Mathematics Behind the
+Torus SDF</h3>
+<p>A torus centered at the origin is defined by two parameters:</p>
+<ul>
+<li><strong>Major radius (<span
+class="math inline">\(R\)</span>):</strong> The distance from the center
+of the torus to the center of the cross-sectional tube.</li>
+<li><strong>Minor radius (<span
+class="math inline">\(r\)</span>):</strong> The radius of the tube
+itself.</li>
+</ul>
+<p>Evaluating the distance to a 3D torus can be simplified by taking
+advantage of its rotational symmetry around a primary axis
+(conventionally the Y-axis).</p>
+<p>Instead of measuring the distance to the full 3D surface directly,
+the problem is reduced to a 2D distance calculation to a circle:</p>
+<ol type="1">
+<li><p><strong>Radial Projection:</strong> Project the query point <span
+class="math inline">\(P(x, y, z)\)</span> onto the horizontal plane
+(<span class="math inline">\(XZ\)</span>) to determine its radial
+distance from the central axis: <span
+class="math display">\[\text{dist}_{\text{axis}} = \sqrt{x^2 +
+z^2}\]</span></p></li>
+<li><p><strong>Distance to the Core Circle:</strong> Measure the 2D
+offset from the core circle running through the center of the tube.
+Horizontally, this offset is <span
+class="math inline">\(\text{dist}_{\text{axis}} - R\)</span>.
+Vertically, the offset is simply the <span
+class="math inline">\(y\)</span>-coordinate. This forms a 2D vector:
+<span class="math display">\[\vec{q} = (\text{dist}_{\text{axis}} - R,
+y)\]</span></p></li>
+<li><p><strong>Distance to the Surface:</strong> The length of <span
+class="math inline">\(\vec{q}\)</span> gives the distance from point
+<span class="math inline">\(P\)</span> to the nearest point on the core
+ring. Subtracting the tube radius (<span
+class="math inline">\(r\)</span>) produces the signed distance to the
+torus surface: <span class="math display">\[d = \|\vec{q}\| -
+r\]</span></p></li>
+</ol>
+<p>If <span class="math inline">\(d &lt; 0\)</span>, the point is inside
+the torus; if <span class="math inline">\(d &gt; 0\)</span>, it is
+outside; and if <span class="math inline">\(d = 0\)</span>, it lies
+exactly on the surface.</p>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>In a GLSL fragment shader, this logic is implemented cleanly using
+vector swizzling and built-in vector math functions:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">sdTorus</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">,</span> <span class="dt">vec2</span> t<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// t.x = major radius (R)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// t.y = minor radius (r)</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> q <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="bu">length</span><span class="op">(</span>p<span class="op">.</span><span class="fu">xz</span><span class="op">)</span> <span class="op">-</span> t<span class="op">.</span><span class="fu">x</span><span class="op">,</span> p<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">length</span><span class="op">(</span>q<span class="op">)</span> <span class="op">-</span> t<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="integration-into-the-raymarching-loop">Integration into the
+Raymarching Loop</h3>
+<p>In a sphere tracer, a ray is cast from an origin <span
+class="math inline">\(\vec{ro}\)</span> along a normalized direction
+<span class="math inline">\(\vec{rd}\)</span>. At each step, the scene
+distance is evaluated using the torus function. The step distance
+dictates how far the ray can safely advance without passing through
+geometry:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">map</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Defines a torus with R = 1.0 and r = 0.25</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> torusDimensions <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.25</span><span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fu">sdTorus</span><span class="op">(</span>p<span class="op">,</span> torusDimensions<span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">raymarch</span><span class="op">(</span><span class="dt">vec3</span> ro<span class="op">,</span> <span class="dt">vec3</span> rd<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> distTraveled <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">int</span> MAX_STEPS <span class="op">=</span> <span class="dv">100</span><span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> SURF_DIST <span class="op">=</span> <span class="fl">0.001</span><span class="op">;</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> MAX_DIST <span class="op">=</span> <span class="fl">100.0</span><span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> MAX_STEPS<span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> currentPos <span class="op">=</span> ro <span class="op">+</span> rd <span class="op">*</span> distTraveled<span class="op">;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> d <span class="op">=</span> <span class="fu">map</span><span class="op">(</span>currentPos<span class="op">);</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        distTraveled <span class="op">+=</span> d<span class="op">;</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>d <span class="op">&lt;</span> SURF_DIST <span class="op">||</span> distTraveled <span class="op">&gt;</span> MAX_DIST<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>            <span class="kw">break</span><span class="op">;</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> distTraveled<span class="op">;</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Because the mathematical formulation produces an exact Euclidean
+distance, the raymarcher can step efficiently with optimal step sizes
+without suffering from overshooting or visual artifacts.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

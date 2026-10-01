@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding accelerationStructureEXT in GLSL - glsl</title>
+    <meta name="description" content="This article explains how the accelerationStructureEXT uniform type exposes top-level acceleration structures (TLAS) within GLSL for Vulkan ray tracing. It covers the definition and declaration of the uniform type, its connection to the Vulkan API throug">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-acceleration-structure-ext-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding accelerationStructureEXT in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-acceleration-structure-ext-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the accelerationStructureEXT uniform type exposes top-level acceleration structures (TLAS) within GLSL for Vulkan ray tracing. It covers the definition and declaration of the uniform type, its connection to the Vulkan API throug" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-accelerationstructureext-in-glsl">Understanding
+accelerationStructureEXT in GLSL</h1>
+<p>This article explains how the <code>accelerationStructureEXT</code>
+uniform type exposes top-level acceleration structures (TLAS) within
+GLSL for Vulkan ray tracing. It covers the definition and declaration of
+the uniform type, its connection to the Vulkan API through descriptor
+bindings, and how it is utilized within shader stages to execute
+hardware-accelerated ray traversal across scene geometry.</p>
+<h2 id="the-role-of-the-top-level-acceleration-structure">The Role of
+the Top-Level Acceleration Structure</h2>
+<p>Hardware-accelerated ray tracing in Vulkan utilizes a two-level
+hierarchy of acceleration structures: Bottom-Level Acceleration
+Structures (BLAS), which contain actual geometric primitives like
+triangles, and Top-Level Acceleration Structures (TLAS), which contain
+instances of these BLAS with associated transformation matrices. To
+query this hierarchy in shaders, GLSL requires an abstract
+representation of the entire scene graph. The
+<code>accelerationStructureEXT</code> uniform type fulfills this role by
+providing a handle directly to the TLAS.</p>
+<h2 id="enabling-the-extension-and-declaring-the-uniform">Enabling the
+Extension and Declaring the Uniform</h2>
+<p>To use the <code>accelerationStructureEXT</code> type in GLSL, the
+ray tracing extension must first be enabled in the shader preamble:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_ray_tracing : require</span></span></code></pre></div>
+<p>Once enabled, the TLAS is declared as an opaque uniform variable
+using standard descriptor set and binding layouts:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> accelerationStructureEXT topLevelAS<span class="op">;</span></span></code></pre></div>
+<p>Like textures or samplers, <code>accelerationStructureEXT</code> is
+an opaque type. It cannot be instantiated, modified, or mathematically
+manipulated directly within shader code. Instead, it functions purely as
+an input handle to ray traversal operations.</p>
+<h2 id="cpu-side-descriptor-binding">CPU-Side Descriptor Binding</h2>
+<p>In the host application (Vulkan), this uniform corresponds to the
+descriptor type
+<code>VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR</code>.</p>
+<p>The connection between the GLSL uniform and the physical GPU memory
+occurs through descriptor writes. The host application populates a
+<code>VkWriteDescriptorSetAccelerationStructureKHR</code> structure with
+the <code>VkAccelerationStructureKHR</code> handle created for the TLAS,
+chaining it to a standard <code>VkWriteDescriptorSet</code> via the
+<code>pNext</code> pointer. During pipeline execution, the driver
+resolves the opaque uniform in the shader to the 64-bit GPU device
+address where the TLAS data resides.</p>
+<h2 id="utilizing-the-uniform-in-shaders">Utilizing the Uniform in
+Shaders</h2>
+<p>The <code>accelerationStructureEXT</code> handle is passed directly
+into built-in ray-traversal functions depending on whether a full ray
+tracing pipeline or inline ray queries are being used.</p>
+<h3 id="in-ray-tracing-pipelines-ray-generation-closest-hit">In Ray
+Tracing Pipelines (Ray Generation, Closest Hit)</h3>
+<p>In dedicated ray tracing stages, the TLAS is passed as the first
+parameter to the <code>traceRayEXT</code> function:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">traceRayEXT</span><span class="op">(</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    topLevelAS<span class="op">,</span>           <span class="co">// Acceleration structure handle</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    rayFlags<span class="op">,</span>             <span class="co">// Ray flags (e.g., gl_RayFlagsOpaqueEXT)</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    cullMask<span class="op">,</span>             <span class="co">// 8-bit instance inclusion mask</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    sbtRecordOffset<span class="op">,</span>      <span class="co">// Shader binding table offset</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    sbtRecordStride<span class="op">,</span>      <span class="co">// Shader binding table stride</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    missIndex<span class="op">,</span>            <span class="co">// Miss shader index</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    origin<span class="op">,</span>               <span class="co">// Ray origin (vec3)</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    tMin<span class="op">,</span>                 <span class="co">// Minimum ray distance</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    direction<span class="op">,</span>            <span class="co">// Ray direction (vec3)</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    tMax<span class="op">,</span>                 <span class="co">// Maximum ray distance</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    payloadLocation       <span class="co">// Ray payload location identifier</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<h3 id="in-ray-queries-compute-fragment-or-vertex-shaders">In Ray
+Queries (Compute, Fragment, or Vertex Shaders)</h3>
+<p>When using inline ray queries via <code>GL_EXT_ray_query</code>, the
+uniform initializes the query object:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>rayQueryEXT rayQuery<span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">rayQueryInitializeEXT</span><span class="op">(</span>rayQuery<span class="op">,</span> topLevelAS<span class="op">,</span> rayFlags<span class="op">,</span> cullMask<span class="op">,</span> origin<span class="op">,</span> tMin<span class="op">,</span> direction<span class="op">,</span> tMax<span class="op">);</span></span></code></pre></div>
+<h2 id="internal-execution">Internal Execution</h2>
+<p>When <code>traceRayEXT</code> or <code>rayQueryInitializeEXT</code>
+is invoked with an <code>accelerationStructureEXT</code> argument, the
+shader compiler translates the handle into internal SPIR-V instructions
+(<code>OpTypeAccelerationStructureKHR</code>). At execution time, the
+GPU’s fixed-function ray tracing hardware or driver-implemented compute
+loops use the address behind this handle to walk the bounding volume
+hierarchy (BVH) nodes of the TLAS, transform incoming rays into
+instance-local space, and test for intersections against the referenced
+BLAS geometry.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

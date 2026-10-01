@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL gl_SubgroupGeMask and gl_SubgroupLeMask Explained - glsl</title>
+    <meta name="description" content="In GLSL, glSubgroupGeMask and glSubgroupLeMask are built-in input variables that provide precomputed bitmasks representing relative thread positions within an active subgroup. This article covers what these bitmasks represent, their underlying data struc">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-gl-subgroup-ge-mask-and-gl-subgroup-le-mask-explained">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL gl_SubgroupGeMask and gl_SubgroupLeMask Explained - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-gl-subgroup-ge-mask-and-gl-subgroup-le-mask-explained" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL, glSubgroupGeMask and glSubgroupLeMask are built-in input variables that provide precomputed bitmasks representing relative thread positions within an active subgroup. This article covers what these bitmasks represent, their underlying data struc" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-gl_subgroupgemask-and-gl_subgrouplemask-explained">GLSL
+gl_SubgroupGeMask and gl_SubgroupLeMask Explained</h1>
+<p>In GLSL, <code>gl_SubgroupGeMask</code> and
+<code>gl_SubgroupLeMask</code> are built-in input variables that provide
+precomputed bitmasks representing relative thread positions within an
+active subgroup. This article covers what these bitmasks represent,
+their underlying data structures, and how they are used to control
+execution and data sharing across parallel invocations.</p>
+<h3 id="representation-and-data-format">Representation and Data
+Format</h3>
+<p>In GLSL subgroup operations (enabled via extensions such as
+<code>GL_KHR_shader_subgroup_ballot</code> or core Vulkan 1.1+
+specifications), invocations execute together in fixed-size hardware
+chunks known as subgroups (often corresponding to warps or wavefronts).
+Each invocation in a subgroup is assigned a unique index accessible via
+<code>gl_SubgroupInvocationID</code>.</p>
+<p>Both <code>gl_SubgroupGeMask</code> and
+<code>gl_SubgroupLeMask</code> are typed as a 4-component unsigned
+integer vector (<code>uvec4</code>). This provides a 128-bit bitmask,
+where bit index <span class="math inline">\(N\)</span> represents the
+invocation in the subgroup with <code>gl_SubgroupInvocationID</code>
+equal to <span class="math inline">\(N\)</span>.</p>
+<h3 id="what-gl_subgrouplemask-represents">What
+<code>gl_SubgroupLeMask</code> Represents</h3>
+<p><code>gl_SubgroupLeMask</code> stands for "Less than or Equal Mask."
+For any given invocation, this variable contains a bitmask where every
+bit at an index less than or equal to the caller's
+<code>gl_SubgroupInvocationID</code> is set to <code>1</code>, while all
+bits corresponding to higher indices are set to <code>0</code>.</p>
+<p>For example, if an invocation has a
+<code>gl_SubgroupInvocationID</code> of 3:</p>
+<ul>
+<li>Bits 0, 1, 2, and 3 are set to <code>1</code>.</li>
+<li>Bit 4 and all higher bits are set to <code>0</code>.</li>
+</ul>
+<p>This mask is primarily used for forward inclusive scans and stream
+compaction. When intersected (using bitwise AND) with the result of a
+<code>subgroupBallot()</code> operation, <code>gl_SubgroupLeMask</code>
+isolates all active invocations that came before or at the current
+thread. Computing a population count
+(<code>subgroupBallotBitCount()</code>) on this intersection directly
+yields the current thread's compact output index.</p>
+<h3 id="what-gl_subgroupgemask-represents">What
+<code>gl_SubgroupGeMask</code> Represents</h3>
+<p><code>gl_SubgroupGeMask</code> stands for "Greater than or Equal
+Mask." For any given invocation, this variable contains a bitmask where
+every bit at an index greater than or equal to the caller's
+<code>gl_SubgroupInvocationID</code> is set to <code>1</code>, while all
+bits corresponding to lower indices are set to <code>0</code>.</p>
+<p>For example, in a 32-thread subgroup, if an invocation has a
+<code>gl_SubgroupInvocationID</code> of 3:</p>
+<ul>
+<li>Bits 0, 1, and 2 are set to <code>0</code>.</li>
+<li>Bits 3 through 31 are set to <code>1</code>.</li>
+</ul>
+<p>This mask is used for backward prefix scans (suffix scans), reverse
+accumulation, and algorithms requiring threads to inspect or coordinate
+with subsequent lanes in the execution wave.</p>
+<h3 id="summary-of-differences">Summary of Differences</h3>
+<ul>
+<li><strong><code>gl_SubgroupLeMask</code></strong>: Evaluates condition
+<code>Index &lt;= gl_SubgroupInvocationID</code>. Covers the current
+thread and all preceding threads.</li>
+<li><strong><code>gl_SubgroupGeMask</code></strong>: Evaluates condition
+<code>Index &gt;= gl_SubgroupInvocationID</code>. Covers the current
+thread and all succeeding threads.</li>
+</ul>
+<p>By using these hardware-provided constant masks instead of manually
+generating bitmasks with dynamic shift operations, shaders achieve lower
+register pressure and avoid branch instructions when performing
+intra-subgroup filtering and prefix calculations.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

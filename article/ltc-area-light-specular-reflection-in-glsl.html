@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LTC Area Light Specular Reflection in GLSL - glsl</title>
+    <meta name="description" content="Linearly Transformed Cosines (LTC) provide an exact, real-time analytical solution for integrating arbitrary microfacet BRDFs over polygonal area lights. In standard rendering pipelines, computing specular reflection from a rectangular emitter requires s">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/ltc-area-light-specular-reflection-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="LTC Area Light Specular Reflection in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/ltc-area-light-specular-reflection-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Linearly Transformed Cosines (LTC) provide an exact, real-time analytical solution for integrating arbitrary microfacet BRDFs over polygonal area lights. In standard rendering pipelines, computing specular reflection from a rectangular emitter requires s" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="ltc-area-light-specular-reflection-in-glsl">LTC Area Light
+Specular Reflection in GLSL</h1>
+<p>Linearly Transformed Cosines (LTC) provide an exact, real-time
+analytical solution for integrating arbitrary microfacet BRDFs over
+polygonal area lights. In standard rendering pipelines, computing
+specular reflection from a rectangular emitter requires solving a
+spherical polygon integral that lacks an analytical solution under
+complex BRDFs such as GGX. By using a precomputed <span
+class="math inline">\(3 \times 3\)</span> matrix transformation, the
+specular BRDF is mapped to a clamped cosine distribution, allowing the
+integral to be solved analytically in GLSL via vector calculus.</p>
+<h3 id="the-mathematical-framework">The Mathematical Framework</h3>
+<p>The core idea of LTC is that any microfacet BRDF (such as GGX) can be
+approximated by linearly transforming a standard clamped cosine
+distribution <span class="math inline">\(D_0\)</span>:</p>
+<p><span class="math display">\[D(\omega) \approx D_0(M^{-1}\omega)
+\frac{1}{\det(M) \|M^{-1}\omega\|^3}\]</span></p>
+<p>Integrating the BRDF over a spherical polygon <span
+class="math inline">\(P\)</span> illuminated by a uniform radiance <span
+class="math inline">\(L\)</span> is equivalent to integrating the
+clamped cosine over a transformed polygon <span
+class="math inline">\(P&#39; = M^{-1}P\)</span>:</p>
+<p><span class="math display">\[E = \int_P \text{BRDF}(\omega)
+\cos\theta \, d\omega = \int_{P&#39;} D_0(\omega&#39;) \,
+d\omega&#39;\]</span></p>
+<p>Instead of transforming the incident rays, we project the four
+vertices of the rectangular light source using the inverse matrix <span
+class="math inline">\(M^{-1}\)</span>. The resulting integral over the
+transformed polygon can be computed analytically using Stokes'
+theorem.</p>
+<h3 id="step-1-fetching-the-precomputed-ltc-matrix">Step 1: Fetching the
+Precomputed LTC Matrix</h3>
+<p>The matrix <span class="math inline">\(M^{-1}\)</span> depends on the
+surface roughness <span class="math inline">\(\alpha\)</span> and the
+angle between the view vector <span class="math inline">\(V\)</span> and
+surface normal <span class="math inline">\(N\)</span> (<span
+class="math inline">\(\cos\theta = N \cdot V\)</span>). Since <span
+class="math inline">\(M^{-1}\)</span> has isotropic symmetry in the
+tangent space, it can be parameterized by four values packed into a 2D
+lookup texture:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Lookup textures:</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">// ltc_1 contains the inverse matrix components</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// ltc_2 contains BRDF magnitude (Fresnel) and optional terms</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> u_LTC1<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> u_LTC2<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">mat3</span> <span class="fu">getLTCInverseMatrix</span><span class="op">(</span><span class="dt">vec2</span> uv<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> t1 <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_LTC1<span class="op">,</span> uv<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Construct the M^-1 transformation matrix</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">mat3</span><span class="op">(</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span><span class="op">(</span>t1<span class="op">.</span><span class="fu">x</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span>  t1<span class="op">.</span><span class="fu">y</span><span class="op">),</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span>  <span class="fl">1.0</span><span class="op">,</span>  <span class="fl">0.0</span><span class="op">),</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span><span class="op">(</span>t1<span class="op">.</span><span class="fu">z</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span>  t1<span class="op">.</span><span class="fu">w</span><span class="op">)</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="step-2-transforming-rectangular-vertices">Step 2: Transforming
+Rectangular Vertices</h3>
+<p>Given a rectangular area light defined by four world-space vertices
+<span class="math inline">\(V_0, V_1, V_2, V_3\)</span>, the vertices
+must be translated relative to the shading point <span
+class="math inline">\(P\)</span>, transformed into the local shading
+space (TBN frame), and then transformed by <span
+class="math inline">\(M^{-1}\)</span>:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">transformVertex</span><span class="op">(</span><span class="dt">vec3</span> vertex<span class="op">,</span> <span class="dt">vec3</span> P<span class="op">,</span> <span class="dt">mat3</span> TBN<span class="op">,</span> <span class="dt">mat3</span> Minv<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Translate vertex relative to surface position</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> localV <span class="op">=</span> vertex <span class="op">-</span> P<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Transform to shading space</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    localV <span class="op">=</span> localV <span class="op">*</span> TBN<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Apply LTC inverse transformation</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> Minv <span class="op">*</span> localV<span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="step-3-analytical-polygon-integration">Step 3: Analytical
+Polygon Integration</h3>
+<p>Once the vertices are transformed, the integral of a clamped cosine
+distribution over the polygon is computed using the boundary integral of
+the edges. For each directed edge between two normalized vertices <span
+class="math inline">\(v_1\)</span> and <span
+class="math inline">\(v_2\)</span>, the irradiance contribution is
+proportional to the solid angle subtended by the edge:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">integrateEdge</span><span class="op">(</span><span class="dt">vec3</span> v1<span class="op">,</span> <span class="dt">vec3</span> v2<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosTheta <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>v1<span class="op">,</span> v2<span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> theta <span class="op">=</span> <span class="bu">acos</span><span class="op">(</span><span class="bu">clamp</span><span class="op">(</span>cosTheta<span class="op">,</span> <span class="op">-</span><span class="fl">0.9999</span><span class="op">,</span> <span class="fl">0.9999</span><span class="op">));</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> crossProduct <span class="op">=</span> <span class="bu">cross</span><span class="op">(</span>v1<span class="op">,</span> v2<span class="op">);</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lengthCross <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>crossProduct<span class="op">);</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>lengthCross <span class="op">&lt;</span> <span class="fl">0.0001</span><span class="op">)</span> <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Vector form factor</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span>theta <span class="op">/</span> lengthCross<span class="op">)</span> <span class="op">*</span> crossProduct<span class="op">;</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Because the clamped cosine distribution is only valid above the
+horizon (<span class="math inline">\(z &gt; 0\)</span> in shading
+space), the polygon must either be clipped to the horizon plane (<span
+class="math inline">\(z = 0\)</span>) or approximated. The standard
+analytical form computes the boundary sum:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">evaluatePolygonIntegral</span><span class="op">(</span><span class="dt">vec3</span> p0<span class="op">,</span> <span class="dt">vec3</span> p1<span class="op">,</span> <span class="dt">vec3</span> p2<span class="op">,</span> <span class="dt">vec3</span> p3<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Normalize transformed vertices onto the unit sphere</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> v0 <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>p0<span class="op">);</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> v1 <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>p1<span class="op">);</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> v2 <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>p2<span class="op">);</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> v3 <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>p3<span class="op">);</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Sum edge contributions</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> formFactor <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    formFactor <span class="op">+=</span> <span class="fu">integrateEdge</span><span class="op">(</span>v0<span class="op">,</span> v1<span class="op">);</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    formFactor <span class="op">+=</span> <span class="fu">integrateEdge</span><span class="op">(</span>v1<span class="op">,</span> v2<span class="op">);</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    formFactor <span class="op">+=</span> <span class="fu">integrateEdge</span><span class="op">(</span>v2<span class="op">,</span> v3<span class="op">);</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    formFactor <span class="op">+=</span> <span class="fu">integrateEdge</span><span class="op">(</span>v3<span class="op">,</span> v0<span class="op">);</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Integrate with respect to the clamped cosine lobe pointing along the z-axis</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sum <span class="op">=</span> <span class="op">-</span>formFactor<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">max</span><span class="op">(</span>sum<span class="op">,</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">/</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">*</span> <span class="fl">3.14159265</span><span class="op">);</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="step-4-final-specular-shading">Step 4: Final Specular
+Shading</h3>
+<p>The specular color is scaled by the light intensity, the LTC
+directional irradiance, and the specular Fresnel response:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">computeLTCSpecular</span><span class="op">(</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> P<span class="op">,</span> <span class="dt">vec3</span> N<span class="op">,</span> <span class="dt">vec3</span> V<span class="op">,</span> <span class="dt">vec3</span> albedo<span class="op">,</span> <span class="dt">float</span> roughness<span class="op">,</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> lightPoints<span class="op">[</span><span class="dv">4</span><span class="op">],</span> <span class="dt">vec3</span> lightColor<span class="op">,</span> <span class="dt">float</span> lightIntensity</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotV <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> V<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> uv <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span>roughness<span class="op">,</span> <span class="bu">sqrt</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> NdotV<span class="op">));</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    uv <span class="op">=</span> uv <span class="op">*</span> <span class="op">(</span><span class="fl">63.0</span> <span class="op">/</span> <span class="fl">64.0</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">0.5</span> <span class="op">/</span> <span class="fl">64.0</span><span class="op">);</span> <span class="co">// Offset to avoid boundary artifacts</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat3</span> Minv <span class="op">=</span> <span class="fu">getLTCInverseMatrix</span><span class="op">(</span>uv<span class="op">);</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Construct local tangent frame</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> T <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>V <span class="op">-</span> N <span class="op">*</span> NdotV<span class="op">);</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> B <span class="op">=</span> <span class="bu">cross</span><span class="op">(</span>N<span class="op">,</span> T<span class="op">);</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat3</span> TBN <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span>T<span class="op">,</span> B<span class="op">,</span> N<span class="op">);</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Transform all 4 quad vertices</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> p0 <span class="op">=</span> <span class="fu">transformVertex</span><span class="op">(</span>lightPoints<span class="op">[</span><span class="dv">0</span><span class="op">],</span> P<span class="op">,</span> TBN<span class="op">,</span> Minv<span class="op">);</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> p1 <span class="op">=</span> <span class="fu">transformVertex</span><span class="op">(</span>lightPoints<span class="op">[</span><span class="dv">1</span><span class="op">],</span> P<span class="op">,</span> TBN<span class="op">,</span> Minv<span class="op">);</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> p2 <span class="op">=</span> <span class="fu">transformVertex</span><span class="op">(</span>lightPoints<span class="op">[</span><span class="dv">2</span><span class="op">],</span> P<span class="op">,</span> TBN<span class="op">,</span> Minv<span class="op">);</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> p3 <span class="op">=</span> <span class="fu">transformVertex</span><span class="op">(</span>lightPoints<span class="op">[</span><span class="dv">3</span><span class="op">],</span> P<span class="op">,</span> TBN<span class="op">,</span> Minv<span class="op">);</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute irradiance of the transformed polygon</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> specIrradiance <span class="op">=</span> <span class="fu">evaluatePolygonIntegral</span><span class="op">(</span>p0<span class="op">,</span> p1<span class="op">,</span> p2<span class="op">,</span> p3<span class="op">);</span></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Sample Fresnel scale/bias from second LUT</span></span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> ltc2 <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_LTC2<span class="op">,</span> uv<span class="op">);</span></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> specularColor <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span><span class="dt">vec3</span><span class="op">(</span><span class="fl">0.04</span><span class="op">),</span> albedo<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span> <span class="co">// Or use standard F0</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> F <span class="op">=</span> specularColor <span class="op">*</span> ltc2<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> <span class="op">(</span><span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">)</span> <span class="op">-</span> specularColor<span class="op">)</span> <span class="op">*</span> ltc2<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> lightColor <span class="op">*</span> lightIntensity <span class="op">*</span> specIrradiance <span class="op">*</span> F<span class="op">;</span></span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This procedure accurately reproduces the deformation, broadening, and
+horizon-clamping of specular highlights produced by polygonal area
+lights under microfacet reflectance models.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

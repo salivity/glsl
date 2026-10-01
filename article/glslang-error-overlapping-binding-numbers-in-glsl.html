@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>glslang Error: Overlapping Binding Numbers in GLSL - glsl</title>
+    <meta name="description" content="When compiling GLSL shaders with glslang, assigning the same binding location to multiple interface blocks within the same scope results in a compilation failure. This article covers the specific diagnostic error produced by glslang, explains why the col">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glslang-error-overlapping-binding-numbers-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="glslang Error: Overlapping Binding Numbers in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glslang-error-overlapping-binding-numbers-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="When compiling GLSL shaders with glslang, assigning the same binding location to multiple interface blocks within the same scope results in a compilation failure. This article covers the specific diagnostic error produced by glslang, explains why the col" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glslang-error-overlapping-binding-numbers-in-glsl">glslang
+Error: Overlapping Binding Numbers in GLSL</h1>
+<p>When compiling GLSL shaders with <code>glslang</code>, assigning the
+same binding location to multiple interface blocks within the same scope
+results in a compilation failure. This article covers the specific
+diagnostic error produced by <code>glslang</code>, explains why the
+collision occurs under OpenGL and Vulkan specifications, provides a
+reproducing code example, and details how to resolve the issue.</p>
+<h3 id="the-diagnostic-error">The Diagnostic Error</h3>
+<p>When two interface blocks (such as <code>uniform</code> blocks or
+<code>buffer</code> storage blocks) share an identical
+<code>binding</code> index within the same descriptor set,
+<code>glslang</code> terminates compilation and raises the following
+diagnostic error:</p>
+<pre class="text"><code>ERROR: &lt;line_number&gt;: &#39;binding&#39; : overlapping binding numbers</code></pre>
+<p>In typical output from <code>glslangValidator</code>, the error
+message specifies the exact source file or ID, line number, the layout
+qualifier key (<code>'binding'</code>), and the explanation
+<code>'overlapping binding numbers'</code>.</p>
+<h3 id="why-the-error-occurs">Why the Error Occurs</h3>
+<p>In both OpenGL (via <code>GL_ARB_shading_language_420pack</code> /
+core GLSL 4.20+) and Vulkan SPIR-V generation, binding indices identify
+the specific slot where resource descriptors connect to pipeline
+stages.</p>
+<p>The OpenGL and Vulkan GLSL specifications enforce that binding
+qualifiers must not alias:</p>
+<ul>
+<li>Under <strong>Vulkan</strong> (<code>-V</code> mode), each resource
+must have a unique <code>(set, binding)</code> tuple across the shader
+stage. If no <code>set</code> qualifier is provided, resources default
+to <code>set = 0</code>.</li>
+<li>Under <strong>OpenGL</strong>, binding points for uniform blocks or
+shader storage buffer objects (SSBOs) must be unique within the active
+stage.</li>
+</ul>
+<p>If two interface blocks occupy the same <code>set</code> and
+<code>binding</code>, the compiler cannot generate unambiguous
+descriptor decorations in the resulting SPIR-V binary or GLSL AST,
+triggering the diagnostic.</p>
+<h3 id="reproducing-example">Reproducing Example</h3>
+<p>The following code illustrates a collision between two uniform
+interface blocks:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> CameraData <span class="op">{</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> viewProjection<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Error: binding 0 is already occupied in set 0</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> ObjectData <span class="op">{</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> modelMatrix<span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Shader logic</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Compiling this shader via
+<code>glslangValidator -V shader.vert</code> generates:</p>
+<pre class="text"><code>ERROR: 0:8: &#39;binding&#39; : overlapping binding numbers 
+ERROR: 1 compilation errors.  No code generated.</code></pre>
+<h3 id="how-to-fix-the-error">How to Fix the Error</h3>
+<p>To fix the issue, assign each interface block a distinct binding
+index, or isolate the blocks into separate descriptor sets if targeting
+Vulkan:</p>
+<h4 id="solution-1-use-unique-binding-indices">Solution 1: Use Unique
+Binding Indices</h4>
+<p>Assign incremented or unique binding numbers within the same set:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> CameraData <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> viewProjection<span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">uniform</span> ObjectData <span class="op">{</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> modelMatrix<span class="op">;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<h4 id="solution-2-assign-different-descriptor-sets-vulkan">Solution 2:
+Assign Different Descriptor Sets (Vulkan)</h4>
+<p>If the resources represent different update frequencies (for example,
+per-frame data versus per-draw data), place them in separate sets:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> CameraData <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> viewProjection<span class="op">;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> ObjectData <span class="op">{</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> modelMatrix<span class="op">;</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>Using unique <code>(set, binding)</code> coordinates satisfies
+<code>glslang</code> layout validation rules and allows successful
+compilation to SPIR-V.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

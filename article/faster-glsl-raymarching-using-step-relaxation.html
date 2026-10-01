@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faster GLSL Raymarching Using Step Relaxation - glsl</title>
+    <meta name="description" content="Sphere tracing step relaxation accelerates convergence in GLSL raymarchers by dynamically scaling the ray's marching distance beyond the conservative bounds provided by a Signed Distance Function (SDF). While standard sphere tracing guarantees safety by">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/faster-glsl-raymarching-using-step-relaxation">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Faster GLSL Raymarching Using Step Relaxation - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/faster-glsl-raymarching-using-step-relaxation" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Sphere tracing step relaxation accelerates convergence in GLSL raymarchers by dynamically scaling the ray's marching distance beyond the conservative bounds provided by a Signed Distance Function (SDF). While standard sphere tracing guarantees safety by" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="faster-glsl-raymarching-using-step-relaxation">Faster GLSL
+Raymarching Using Step Relaxation</h1>
+<p>Sphere tracing step relaxation accelerates convergence in GLSL
+raymarchers by dynamically scaling the ray's marching distance beyond
+the conservative bounds provided by a Signed Distance Function (SDF).
+While standard sphere tracing guarantees safety by only stepping the
+exact distance to the nearest surface, it often requires excessive
+iterations when rays travel tangentially across surfaces or through open
+space. Step relaxation—often referred to as over-relaxation—amplifies
+each step by a relaxation factor, detects potential overshoots, and
+corrects them when necessary. This technique substantially decreases
+total iteration counts, reducing GPU branch overhead and texture or ALU
+bottlenecks in shader pipelines.</p>
+<h3 id="the-limitation-of-standard-sphere-tracing">The Limitation of
+Standard Sphere Tracing</h3>
+<p>In traditional sphere tracing, the ray advances iteratively along its
+direction vector <span class="math inline">\(\vec{v}\)</span> by a step
+size equal to the SDF value <span class="math inline">\(d =
+f(\vec{p})\)</span> evaluated at the current position:</p>
+<p><span class="math display">\[\vec{p}_{n+1} = \vec{p}_n + d \cdot
+\vec{v}\]</span></p>
+<p>Because <span class="math inline">\(f(\vec{p})\)</span> represents
+the radius of the largest unoccluded sphere centered at <span
+class="math inline">\(\vec{p}\)</span>, this step is unconditionally
+safe and mathematically prevents the ray from tunneling through
+geometry. However, when a ray travels almost parallel to a surface
+(grazing angles) or through narrow crevices, the distance to the nearest
+surface remains small even if the surface along the ray's forward path
+is far away. The ray marches forward in microscopic increments, stalling
+convergence and exhausting the loop iteration budget.</p>
+<h3 id="how-step-relaxation-works">How Step Relaxation Works</h3>
+<p>Step relaxation adapts concepts from numerical analysis (specifically
+Successive Over-Relaxation) to bypass this conservative bottleneck.
+Instead of stepping strictly by the evaluated distance <span
+class="math inline">\(d\)</span>, the algorithm applies a multiplier
+<span class="math inline">\(\omega\)</span> (where <span
+class="math inline">\(1.0 &lt; \omega &lt; 2.0\)</span>, typically
+around <span class="math inline">\(1.2\)</span> to <span
+class="math inline">\(1.6\)</span>) to extrapolate a larger candidate
+step:</p>
+<p><span class="math display">\[\vec{p}_{\text{candidate}} = \vec{p}_n +
+\omega \cdot d \cdot \vec{v}\]</span></p>
+<p>By intentionally overstepping, the ray clears open space and
+traverses flat or low-curvature trajectories in far fewer
+iterations.</p>
+<h3 id="detecting-and-correcting-overshoots">Detecting and Correcting
+Overshoots</h3>
+<p>Because stepping by <span class="math inline">\(\omega \cdot
+d\)</span> violates the strict spatial safety guarantee of the SDF, the
+ray risks penetrating geometry, jumping entirely through thin geometry,
+or causing visual artifacts. To maintain visual fidelity, relaxed sphere
+tracing employs an overshoot verification step:</p>
+<ol type="1">
+<li><strong>Evaluate Candidate:</strong> The shader evaluates the
+distance at the new candidate position, <span
+class="math inline">\(d_{\text{candidate}} =
+f(\vec{p}_{\text{candidate}})\)</span>.</li>
+<li><strong>Check for Invalidation:</strong> A valid step requires that
+the candidate distance satisfies geometric continuity. If <span
+class="math inline">\(d_{\text{candidate}} &lt; 0\)</span>, the ray has
+penetrated a surface. Additionally, based on the Lipschitz condition of
+SDFs (<span class="math inline">\(|\nabla f| \le 1\)</span>), the change
+in distance cannot exceed the distance traveled. If <span
+class="math inline">\(d_{\text{candidate}} + \text{step} &lt;
+d_{\text{previous}}\)</span>, the ray has skipped over a feature.</li>
+<li><strong>Rollback or Clamp:</strong> When an invalid step or
+overshoot is detected, the algorithm rejects the relaxed candidate. The
+ray either rolls back to the standard conservative distance step (<span
+class="math inline">\(d\)</span>), or adjusts along the segment using
+linear interpolation between the two sampled distances to position the
+ray safely near the surface boundary.</li>
+</ol>
+<h3 id="algorithmic-flow-in-glsl">Algorithmic Flow in GLSL</h3>
+<p>In a GLSL fragment shader, this logic is integrated directly into the
+raymarching loop:</p>
+<ul>
+<li>Track the previous distance and candidate step size across
+iterations.</li>
+<li>Calculate the relaxed step:
+<code>float stepSize = d * omega;</code></li>
+<li>If the previous step overshot (e.g.,
+<code>d + stepSize &lt; prevD</code>), adjust the current position
+backwards by an error term before calculating the next step.</li>
+<li>Dynamically reduce <span class="math inline">\(\omega\)</span>
+toward <span class="math inline">\(1.0\)</span> as the ray approaches
+the surface threshold (e.g., when <span class="math inline">\(d &lt;
+\epsilon\)</span>) to ensure sub-pixel convergence without
+oscillation.</li>
+</ul>
+<h3 id="performance-gains-in-raymarchers">Performance Gains in
+Raymarchers</h3>
+<p>Relaxing the step length cuts the total loop iterations required to
+reach the convergence threshold by roughly 25% to 50%, depending on
+scene complexity. In GLSL raymarchers, loop iterations correspond
+directly to SDF evaluations, which frequently contain computationally
+expensive noise functions, matrix transformations, or trigonometric
+operations. By skipping redundant evaluations across empty space and
+grazing regions, step relaxation minimizes instruction count and
+alleviates register pressure, resulting in lower frametimes and higher
+rendering throughput.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

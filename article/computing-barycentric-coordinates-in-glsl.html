@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Computing Barycentric Coordinates in GLSL - glsl</title>
+    <meta name="description" content="This article explains how to compute barycentric coordinates for an arbitrary point relative to a triangle's vertices using OpenGL Shading Language (GLSL). Barycentric coordinates express any point on a triangle's plane as a weighted sum of the triangle'">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/computing-barycentric-coordinates-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Computing Barycentric Coordinates in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/computing-barycentric-coordinates-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to compute barycentric coordinates for an arbitrary point relative to a triangle's vertices using OpenGL Shading Language (GLSL). Barycentric coordinates express any point on a triangle's plane as a weighted sum of the triangle'" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="computing-barycentric-coordinates-in-glsl">Computing Barycentric
+Coordinates in GLSL</h1>
+<p>This article explains how to compute barycentric coordinates for an
+arbitrary point relative to a triangle's vertices using OpenGL Shading
+Language (GLSL). Barycentric coordinates express any point on a
+triangle's plane as a weighted sum of the triangle's three vertices,
+providing an essential mechanism for attribute interpolation,
+ray-triangle intersection testing, and procedural geometric effects.
+Below is the mathematical formulation using Cramer's rule alongside an
+optimized, ready-to-use GLSL function.</p>
+<h3 id="the-mathematical-formulation">The Mathematical Formulation</h3>
+<p>Given a triangle defined by three vertices <span
+class="math inline">\(A\)</span>, <span
+class="math inline">\(B\)</span>, and <span
+class="math inline">\(C\)</span>, any point <span
+class="math inline">\(P\)</span> lying on the plane of the triangle can
+be expressed as:</p>
+<p><span class="math display">\[P = uA + vB + wC\]</span></p>
+<p>where <span class="math inline">\(u\)</span>, <span
+class="math inline">\(v\)</span>, and <span
+class="math inline">\(w\)</span> are the barycentric coordinates
+satisfying the constraint:</p>
+<p><span class="math display">\[u + v + w = 1 \implies u = 1 - v -
+w\]</span></p>
+<p>Substituting <span class="math inline">\(u\)</span> gives the vector
+formulation relative to vertex <span
+class="math inline">\(A\)</span>:</p>
+<p><span class="math display">\[P - A = v(B - A) + w(C - A)\]</span></p>
+<p>Let <span class="math inline">\(v_0 = B - A\)</span>, <span
+class="math inline">\(v_1 = C - A\)</span>, and <span
+class="math inline">\(v_2 = P - A\)</span>. This yields a linear system
+of two equations:</p>
+<p><span class="math display">\[(v \cdot v_0 + w \cdot v_1) \cdot v_0 =
+v_2 \cdot v_0\]</span> <span class="math display">\[(v \cdot v_0 + w
+\cdot v_1) \cdot v_1 = v_2 \cdot v_1\]</span></p>
+<p>Expanding these equations produces a <span class="math inline">\(2
+\times 2\)</span> system that can be solved directly for <span
+class="math inline">\(v\)</span> and <span
+class="math inline">\(w\)</span> using Cramer's rule via dot
+products.</p>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>The dot-product method works reliably for both 2D points
+(<code>vec2</code>) and coplanar 3D points (<code>vec3</code>):</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">computeBarycentric</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">,</span> <span class="dt">vec3</span> a<span class="op">,</span> <span class="dt">vec3</span> b<span class="op">,</span> <span class="dt">vec3</span> c<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> v0 <span class="op">=</span> b <span class="op">-</span> a<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> v1 <span class="op">=</span> c <span class="op">-</span> a<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> v2 <span class="op">=</span> p <span class="op">-</span> a<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d00 <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>v0<span class="op">,</span> v0<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d01 <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>v0<span class="op">,</span> v1<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d11 <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>v1<span class="op">,</span> v1<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d20 <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>v2<span class="op">,</span> v0<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d21 <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>v2<span class="op">,</span> v1<span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denom <span class="op">=</span> d00 <span class="op">*</span> d11 <span class="op">-</span> d01 <span class="op">*</span> d01<span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Guard against degenerate triangles</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">abs</span><span class="op">(</span>denom<span class="op">)</span> <span class="op">&lt;</span> <span class="fl">1e-6</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(-</span><span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> v <span class="op">=</span> <span class="op">(</span>d11 <span class="op">*</span> d20 <span class="op">-</span> d01 <span class="op">*</span> d21<span class="op">)</span> <span class="op">/</span> denom<span class="op">;</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> w <span class="op">=</span> <span class="op">(</span>d00 <span class="op">*</span> d21 <span class="op">-</span> d01 <span class="op">*</span> d20<span class="op">)</span> <span class="op">/</span> denom<span class="op">;</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> u <span class="op">=</span> <span class="fl">1.0</span> <span class="op">-</span> v <span class="op">-</span> w<span class="op">;</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span>u<span class="op">,</span> v<span class="op">,</span> w<span class="op">);</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="interpreting-the-results">Interpreting the Results</h3>
+<p>The returned <code>vec3(u, v, w)</code> maps weights to vertices
+<span class="math inline">\(A\)</span>, <span
+class="math inline">\(B\)</span>, and <span
+class="math inline">\(C\)</span> respectively:</p>
+<ul>
+<li><strong>Inside the Triangle:</strong> The point <span
+class="math inline">\(P\)</span> is strictly inside the triangle if
+<span class="math inline">\(u \ge 0\)</span>, <span
+class="math inline">\(v \ge 0\)</span>, and <span
+class="math inline">\(w \ge 0\)</span>.</li>
+<li><strong>On an Edge or Vertex:</strong> If any coordinate equals
+<span class="math inline">\(0\)</span>, <span
+class="math inline">\(P\)</span> lies on the edge opposite to that
+vertex. If two coordinates equal <span class="math inline">\(0\)</span>,
+<span class="math inline">\(P\)</span> coincides with the remaining
+vertex.</li>
+<li><strong>Outside the Triangle:</strong> If any coordinate is
+negative, <span class="math inline">\(P\)</span> lies outside the
+triangle boundary.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

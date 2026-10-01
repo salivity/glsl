@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stochastic Raymarched Soft Shadows in GLSL Compute - glsl</title>
+    <meta name="description" content="This article examines the implementation and evaluation of stochastic ray distribution for compute-based raymarched soft shadows using GLSL. It covers the mathematical formulation of jittered ray directions toward area lights, low-discrepancy sampling te">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/stochastic-raymarched-soft-shadows-in-glsl-compute">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Stochastic Raymarched Soft Shadows in GLSL Compute - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/stochastic-raymarched-soft-shadows-in-glsl-compute" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article examines the implementation and evaluation of stochastic ray distribution for compute-based raymarched soft shadows using GLSL. It covers the mathematical formulation of jittered ray directions toward area lights, low-discrepancy sampling te" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="stochastic-raymarched-soft-shadows-in-glsl-compute">Stochastic
+Raymarched Soft Shadows in GLSL Compute</h1>
+<p>This article examines the implementation and evaluation of stochastic
+ray distribution for compute-based raymarched soft shadows using GLSL.
+It covers the mathematical formulation of jittered ray directions toward
+area lights, low-discrepancy sampling techniques, the integration of
+blue noise to minimize visible clustering, and the raymarching execution
+model within compute shaders. Finally, it addresses divergence
+management and spatial filtering strategies required to reconstruct
+clean penumbras from low-sample-count stochastic distributions.</p>
+<h3 id="area-light-formulation-and-ray-jittering">Area Light Formulation
+and Ray Jittering</h3>
+<p>Standard raymarched soft shadows often approximate penumbras using
+distance-field estimators along a single unjittered ray directed at a
+point light. Stochastic soft shadows, by contrast, physically model area
+light sources (such as disks, spheres, or rectangles) by distributing
+secondary shadow rays across the solid angle subtended by the light.</p>
+<p>To evaluate a spherical light source with radius <span
+class="math inline">\(R\)</span> at position <span
+class="math inline">\(\mathbf{P}_L\)</span> from a surface hit point
+<span class="math inline">\(\mathbf{x}\)</span>, the target sample point
+<span class="math inline">\(\mathbf{S}\)</span> on the light is
+determined stochastically:</p>
+<ol type="1">
+<li>Generate a two-dimensional pseudo-random or quasi-random sample
+<span class="math inline">\(\mathbf{\xi} \in [0, 1)^2\)</span>.</li>
+<li>Map <span class="math inline">\(\mathbf{\xi}\)</span> onto the
+surface of a disk oriented toward <span
+class="math inline">\(\mathbf{x}\)</span>, using concentric disk mapping
+to avoid areal distortion.</li>
+<li>Construct an orthonormal basis (tangent, bitangent, normal) aligned
+with the vector <span class="math inline">\(\mathbf{L} = \mathbf{P}_L -
+\mathbf{x}\)</span>.</li>
+<li>Offset the center <span class="math inline">\(\mathbf{P}_L\)</span>
+along the tangent and bitangent axes by the mapped disk coordinates
+scaled by <span class="math inline">\(R\)</span>.</li>
+<li>Normalize the resulting vector <span
+class="math inline">\(\mathbf{D} = \mathrm{normalize}(\mathbf{S} -
+\mathbf{x})\)</span> to form the primary direction for the shadow
+raymarch.</li>
+</ol>
+<h3 id="low-discrepancy-and-blue-noise-sampling-in-glsl">Low-Discrepancy
+and Blue Noise Sampling in GLSL</h3>
+<p>Evaluating stochastic rays using naive white noise introduces
+high-frequency, uncorrelated grain that spatial and temporal filters
+struggle to reconstruct. Modern compute-based pipelines evaluate ray
+distribution using spatio-temporal blue noise or low-discrepancy
+sequences like Halton or Sobol offsets.</p>
+<p>Blue noise pushes sampling errors into higher frequencies, making the
+resulting penumbra noise significantly easier to eliminate with a
+lightweight bilateral blur. In GLSL, this is implemented by sampling a
+precomputed, tileable blue noise texture indexable by screen-space
+coordinates and temporal frame index:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Fetch blue noise offset per pixel</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> blueNoise <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>u_BlueNoiseTex<span class="op">,</span> <span class="op">(</span><span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">xy</span><span class="op">)</span> <span class="op">+</span> <span class="dt">ivec2</span><span class="op">(</span>u_FrameOffset <span class="op">*</span> <span class="dv">17</span><span class="op">))</span> <span class="op">%</span> <span class="dv">128</span><span class="op">,</span> <span class="dv">0</span><span class="op">).</span><span class="fu">rg</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Uniform concentric disk sampling</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> diskSample <span class="op">=</span> <span class="fu">concentricSampleDisk</span><span class="op">(</span>blueNoise<span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Build orthonormal basis</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> N_L <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>u_LightPos <span class="op">-</span> worldPos<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> up <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span>N_L<span class="op">.</span><span class="fu">z</span><span class="op">)</span> <span class="op">&lt;</span> <span class="fl">0.999</span> <span class="op">?</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">:</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> T_L <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="bu">cross</span><span class="op">(</span>up<span class="op">,</span> N_L<span class="op">));</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> B_L <span class="op">=</span> <span class="bu">cross</span><span class="op">(</span>N_L<span class="op">,</span> T_L<span class="op">);</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="co">// Final ray direction toward jittered area light point</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> targetLightPos <span class="op">=</span> u_LightPos <span class="op">+</span> <span class="op">(</span>T_L <span class="op">*</span> diskSample<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> B_L <span class="op">*</span> diskSample<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">*</span> u_LightRadius<span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> shadowRayDir <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>targetLightPos <span class="op">-</span> worldPos<span class="op">);</span></span></code></pre></div>
+<h3 id="compute-raymarching-evaluation">Compute Raymarching
+Evaluation</h3>
+<p>The compute shader executes the raymarch through a signed distance
+field (SDF) or a voxel grid. Because the ray direction is already
+stochastically distributed across the light surface, binary visibility
+(0.0 for occluded, 1.0 for unoccluded) can be evaluated directly rather
+than tracking step-wise distance heuristics:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">8</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">8</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">evaluateShadowRay</span><span class="op">(</span><span class="dt">vec3</span> ro<span class="op">,</span> <span class="dt">vec3</span> rd<span class="op">,</span> <span class="dt">float</span> maxDist<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> t <span class="op">=</span> <span class="fl">0.05</span><span class="op">;</span> <span class="co">// Offset to avoid self-shadowing</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> MAX_STEPS <span class="op">&amp;&amp;</span> t <span class="op">&lt;</span> maxDist<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> d <span class="op">=</span> <span class="fu">mapSceneSDF</span><span class="op">(</span>ro <span class="op">+</span> rd <span class="op">*</span> t<span class="op">);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>d <span class="op">&lt;</span> <span class="fl">0.001</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>            <span class="kw">return</span> <span class="fl">0.0</span><span class="op">;</span> <span class="co">// Fully occluded</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        t <span class="op">+=</span> <span class="bu">max</span><span class="op">(</span>d<span class="op">,</span> <span class="fl">0.01</span><span class="op">);</span> <span class="co">// March forward by safe distance</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fl">1.0</span><span class="op">;</span> <span class="co">// Unoccluded</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By casting only 1 to 4 samples per pixel (SPP) per frame, evaluation
+remains performant across complex distance fields.</p>
+<h3 id="simd-divergence-and-compute-optimizations">SIMD Divergence and
+Compute Optimizations</h3>
+<p>Compute shaders execute threads in warps (NVIDIA) or wavefronts
+(AMD). Stochastic raymarching risks performance degradation due to
+branch divergence: neighboring threads tracing slightly different ray
+paths will step different numbers of times, causing thread
+serialization.</p>
+<p>To mitigate SIMD divergence:</p>
+<ul>
+<li><strong>Depth and Normal Rejection:</strong> Pixels marked as
+skybox, background, or facing away from the light source (<span
+class="math inline">\(\mathbf{N} \cdot \mathbf{L} \le 0\)</span>) skip
+raymarching entirely using an early branch before calculating stochastic
+offsets.</li>
+<li><strong>Hierarchical Step Snapping:</strong> Clamping minimum step
+sizes prevents paths from getting stuck in geometric crevices that only
+a fraction of the warp encounters.</li>
+<li><strong>Subgroup Uniformity:</strong> Where available, compute
+shaders can leverage <code>GL_KHR_shader_subgroup_ballot</code> to
+dynamically prune threads that have already found occluders, though
+standard fixed-step loops with early break statements are often
+sufficient if the divergence latency is hidden by global memory
+latency.</li>
+</ul>
+<h3 id="denoising-integration">Denoising Integration</h3>
+<p>Because low-SPP stochastic evaluations output noisy 1-bit or
+low-precision visibility masks, an edge-aware filtering pass is
+mandatory. The compute pipeline outputs the stochastic shadow buffer to
+a dedicated render target, which is then processed by:</p>
+<ol type="1">
+<li><strong>Temporal Accumulation (TAA/TSR):</strong> Reprojecting the
+previous frame's shadow mask via motion vectors to blend samples over
+time, using exponential moving averages.</li>
+<li><strong>Spatial Denoising:</strong> An edge-avoiding à-trous wavelet
+filter or cross-bilateral filter that uses scene normals and linear
+depth buffers to blur the stochastic noise across the penumbra without
+bleeding shadows across geometric boundaries.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

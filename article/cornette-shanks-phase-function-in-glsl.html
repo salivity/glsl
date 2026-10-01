@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cornette-Shanks Phase Function in GLSL - glsl</title>
+    <meta name="description" content="This article provides an overview and practical implementation of the Cornette-Shanks phase function used for simulating atmospheric aerosol scattering in real-time computer graphics. It details the underlying mathematical equation, contrasts its behavio">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/cornette-shanks-phase-function-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Cornette-Shanks Phase Function in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/cornette-shanks-phase-function-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview and practical implementation of the Cornette-Shanks phase function used for simulating atmospheric aerosol scattering in real-time computer graphics. It details the underlying mathematical equation, contrasts its behavio" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="cornette-shanks-phase-function-in-glsl">Cornette-Shanks Phase
+Function in GLSL</h1>
+<p>This article provides an overview and practical implementation of the
+Cornette-Shanks phase function used for simulating atmospheric aerosol
+scattering in real-time computer graphics. It details the underlying
+mathematical equation, contrasts its behavior with other scattering
+models, and presents a production-ready, optimized GLSL implementation
+suitable for volumetric rendering and sky shaders.</p>
+<h2 id="mathematical-formulation">Mathematical Formulation</h2>
+<p>The Cornette-Shanks phase function (introduced in 1992) is an
+analytical approximation of Mie scattering designed to address
+shortcomings in the widely used Henyey-Greenstein phase function. While
+Henyey-Greenstein models forward and backward scattering effectively, it
+does not reduce to the Rayleigh phase function when the asymmetry
+parameter approaches zero. Cornette-Shanks incorporates a <span
+class="math inline">\((1 + \cos^2\theta)\)</span> term to properly
+mirror Rayleigh-like dipolar behavior for small particles while
+retaining directional forward-scattering lobes for larger aerosols.</p>
+<p>The normalized formulation of the phase function <span
+class="math inline">\(P(\theta)\)</span> over a sphere of <span
+class="math inline">\(4\pi\)</span> steradians is:</p>
+<p><span class="math display">\[P(\theta) = \frac{3}{8\pi} \frac{1 -
+g^2}{2 + g^2} \frac{1 + \cos^2\theta}{(1 + g^2 -
+2g\cos\theta)^{3/2}}\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(\theta\)</span> is the scattering angle
+between the incoming light direction and the viewing direction.</li>
+<li><span class="math inline">\(\cos\theta\)</span> is the dot product
+of the light ray direction vector and the observer ray direction
+vector.</li>
+<li><span class="math inline">\(g\)</span> is the asymmetry parameter,
+defined on the interval <span class="math inline">\((-1, 1)\)</span>.
+Positive values represent forward scattering (typical for aerosols and
+mist), zero represents isotropic/Rayleigh-like symmetric scattering, and
+negative values represent backward scattering.</li>
+</ul>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>Below is an optimized implementation of the Cornette-Shanks phase
+function written in GLSL:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define PI 3.14159265359</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">/**</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"> * Computes the Cornette-Shanks phase function for aerosol scattering.</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param cosTheta The cosine of the angle between the light direction and the view direction.</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"> * @param g The asymmetry parameter in the range (-1.0, 1.0).</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"> * @return The scattering intensity value normalized over 4*PI.</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co"> */</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">cornetteShanksPhase</span><span class="op">(</span><span class="dt">float</span> cosTheta<span class="op">,</span> <span class="dt">float</span> g<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> g2 <span class="op">=</span> g <span class="op">*</span> g<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosTheta2 <span class="op">=</span> cosTheta <span class="op">*</span> cosTheta<span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Normalization and shape coefficient</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> factor <span class="op">=</span> <span class="op">(</span><span class="fl">3.0</span> <span class="op">/</span> <span class="op">(</span><span class="fl">8.0</span> <span class="op">*</span> PI<span class="op">))</span> <span class="op">*</span> <span class="op">((</span><span class="fl">1.0</span> <span class="op">-</span> g2<span class="op">)</span> <span class="op">/</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">+</span> g2<span class="op">));</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Angular numerator and denominator</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> num <span class="op">=</span> <span class="fl">1.0</span> <span class="op">+</span> cosTheta2<span class="op">;</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denom <span class="op">=</span> <span class="bu">pow</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">+</span> g2 <span class="op">-</span> <span class="fl">2.0</span> <span class="op">*</span> g <span class="op">*</span> cosTheta<span class="op">,</span> <span class="fl">1.5</span><span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> factor <span class="op">*</span> <span class="op">(</span>num <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>denom<span class="op">,</span> <span class="fl">1e-6</span><span class="op">));</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="precomputed-variant">Precomputed Variant</h3>
+<p>If <span class="math inline">\(g\)</span> is constant across the
+entire screen or scene (such as in a global atmosphere setting), the
+terms independent of <span class="math inline">\(\cos\theta\)</span> can
+be precalculated on the CPU and passed as uniforms:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Uniforms calculated once on the CPU:</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="co">// uniform float u_CSFactor; // (3.0 / (8.0 * PI)) * ((1.0 - g2) / (2.0 + g2))</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co">// uniform float u_G;        // g</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">// uniform float u_G2Plus1;  // 1.0 + g * g</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">cornetteShanksPhaseOptimized</span><span class="op">(</span><span class="dt">float</span> cosTheta<span class="op">,</span> <span class="dt">float</span> csFactor<span class="op">,</span> <span class="dt">float</span> g<span class="op">,</span> <span class="dt">float</span> g2Plus1<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> num <span class="op">=</span> <span class="fl">1.0</span> <span class="op">+</span> cosTheta <span class="op">*</span> cosTheta<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denom <span class="op">=</span> <span class="bu">pow</span><span class="op">(</span>g2Plus1 <span class="op">-</span> <span class="fl">2.0</span> <span class="op">*</span> g <span class="op">*</span> cosTheta<span class="op">,</span> <span class="fl">1.5</span><span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> csFactor <span class="op">*</span> <span class="op">(</span>num <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>denom<span class="op">,</span> <span class="fl">1e-6</span><span class="op">));</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="practical-considerations">Practical Considerations</h2>
+<ol type="1">
+<li><strong>Direction Vectors</strong>: Ensure the vectors used to
+calculate <span class="math inline">\(\cos\theta\)</span> are
+normalized. When computing the dot product,
+<code>cosTheta = dot(rayDir, lightDir)</code>. Depending on your light
+direction convention (pointing toward the light source vs. pointing
+along the ray of light), you may need to invert the sign of
+<code>cosTheta</code>.</li>
+<li><strong>Singularities</strong>: When <span class="math inline">\(|g|
+\to 1\)</span> and <span class="math inline">\(\cos\theta \to
+1\)</span>, the denominator approaches zero. Clamping the denominator
+using <code>max(denom, 1e-6)</code> prevents division by zero artifacts
+when looking directly into a concentrated light source.</li>
+<li><strong>Parameter Tuning</strong>: Aerosols and haze typically use
+<span class="math inline">\(g\)</span> values between <code>0.7</code>
+and <code>0.85</code>, which create a pronounced forward-scattering halo
+around light sources without severe numerical instability.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

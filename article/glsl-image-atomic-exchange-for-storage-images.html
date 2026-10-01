@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL imageAtomicExchange for Storage Images - glsl</title>
+    <meta name="description" content="The imageAtomicExchange function in GLSL is an atomic built-in function designed to safely replace a texel's value in a storage image while simultaneously returning the original value that was stored there. In highly concurrent GPU environments where tho">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-image-atomic-exchange-for-storage-images">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL imageAtomicExchange for Storage Images - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-image-atomic-exchange-for-storage-images" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The imageAtomicExchange function in GLSL is an atomic built-in function designed to safely replace a texel's value in a storage image while simultaneously returning the original value that was stored there. In highly concurrent GPU environments where tho" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-imageatomicexchange-for-storage-images">GLSL
+imageAtomicExchange for Storage Images</h1>
+<p>The <code>imageAtomicExchange</code> function in GLSL is an atomic
+built-in function designed to safely replace a texel's value in a
+storage image while simultaneously returning the original value that was
+stored there. In highly concurrent GPU environments where thousands of
+shader invocations can access the same memory address at the same time,
+this operation prevents data races and ensures deterministic execution.
+This article explains the purpose, mechanics, and common use cases of
+<code>imageAtomicExchange</code> when working with OpenGL and Vulkan
+compute or fragment shaders.</p>
+<h3 id="the-purpose-of-atomic-operations">The Purpose of Atomic
+Operations</h3>
+<p>In standard image operations, performing a read followed by a write
+(such as <code>imageLoad</code> followed by <code>imageStore</code>) is
+non-atomic. If multiple shader threads attempt to read and update the
+same texel simultaneously, they can overwrite each other's changes,
+leading to race conditions and corrupt memory states.</p>
+<p><code>imageAtomicExchange</code> solves this by executing a
+read-modify-write sequence as a single, uninterrupted transaction at the
+hardware level. No other thread can read or modify the target texel
+during this operation.</p>
+<h3 id="how-imageatomicexchange-works">How imageAtomicExchange
+Works</h3>
+<p>The function replaces the value at a specified texel coordinate with
+a new value and returns the value that existed immediately before the
+swap:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="bu">imageAtomicExchange</span><span class="op">(</span><span class="kw">layout</span><span class="op">(</span>r32ui<span class="op">)</span> <span class="dt">uimage2D</span> image<span class="op">,</span> <span class="dt">ivec2</span> P<span class="op">,</span> <span class="dt">uint</span> data<span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> <span class="bu">imageAtomicExchange</span><span class="op">(</span><span class="kw">layout</span><span class="op">(</span>r32i<span class="op">)</span> <span class="dt">iimage2D</span> image<span class="op">,</span> <span class="dt">ivec2</span> P<span class="op">,</span> <span class="dt">int</span> data<span class="op">);</span></span></code></pre></div>
+<ul>
+<li><strong><code>image</code></strong>: The storage image variable,
+typically qualified with <code>coherent</code> to guarantee memory
+visibility across invocations.</li>
+<li><strong><code>P</code></strong>: The coordinate of the texel being
+addressed (e.g., <code>ivec2</code> for 2D images, <code>ivec3</code>
+for 3D images).</li>
+<li><strong><code>data</code></strong>: The new value to be stored into
+the image texel.</li>
+<li><strong>Return Value</strong>: The old value that resided at
+coordinate <code>P</code> before the operation took place.</li>
+</ul>
+<h3 id="key-use-cases">Key Use Cases</h3>
+<h4 id="1-order-independent-transparency-oit-linked-lists">1.
+Order-Independent Transparency (OIT) Linked Lists</h4>
+<p>The most common application of <code>imageAtomicExchange</code> is
+constructing per-pixel linked lists for order-independent
+transparency.</p>
+<ul>
+<li>A 2D storage image holds the "head pointer" (an index into a
+separate buffer) for each pixel on the screen.</li>
+<li>When a fragment is processed, it allocates an element in a global
+node buffer.</li>
+<li>The fragment shader calls
+<code>imageAtomicExchange(headPointersImage, pixelCoord, newFragmentIndex)</code>.</li>
+<li>The returned value is the previous head pointer, which the shader
+immediately saves as the "next" pointer in its newly allocated node.
+This creates an unbroken singly-linked list for each pixel without
+needing complex locking mechanisms.</li>
+</ul>
+<h4 id="2-gpu-spinlocks-and-mutual-exclusion">2. GPU Spinlocks and
+Mutual Exclusion</h4>
+<p>While generally avoided when possible due to performance
+considerations, <code>imageAtomicExchange</code> can be used to
+implement lightweight spinlocks or mutexes on the GPU:</p>
+<ul>
+<li>An image texel serves as a lock flag (e.g., <code>0</code> for
+unlocked, <code>1</code> for locked).</li>
+<li>An invocation calls
+<code>imageAtomicExchange(lockImage, coord, 1)</code>.</li>
+<li>If the return value is <code>0</code>, the invocation acquired the
+lock. If the return value is <code>1</code>, another thread holds the
+lock, prompting the thread to wait and retry.</li>
+</ul>
+<h4 id="3-state-tracking-and-flag-clearing">3. State Tracking and Flag
+Clearing</h4>
+<p>When coordinating multi-pass algorithms,
+<code>imageAtomicExchange</code> can atomically read a status flag and
+reset it back to zero or an initial state in a single step, preventing
+redundant work from concurrent threads.</p>
+<h3 id="technical-requirements">Technical Requirements</h3>
+<ul>
+<li><strong>Supported Formats</strong>: Atomic operations on storage
+images are strictly restricted to 32-bit single-component integer
+formats (<code>r32ui</code> and <code>r32i</code>). Certain extensions
+(such as <code>GL_EXT_shader_atomic_float</code>) can enable
+floating-point atomics, but <code>imageAtomicExchange</code> primarily
+targets unsigned and signed integers.</li>
+<li><strong>Memory Coherency</strong>: Storage images modified through
+atomic operations should generally use the <code>coherent</code> memory
+qualifier to ensure that changes made by one shader invocation become
+visible to other invocations. Memory barriers, such as
+<code>memoryBarrierImage()</code>, are also required to serialize memory
+operations across distinct dispatch or draw phases.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

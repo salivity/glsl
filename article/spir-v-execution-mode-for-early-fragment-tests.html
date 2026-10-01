@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPIR-V Execution Mode for early_fragment_tests - glsl</title>
+    <meta name="description" content="This article identifies the specific SPIR-V execution mode that corresponds to the GLSL layout(earlyfragmenttests) in; layout qualifier, explaining how it is represented in the SPIR-V binary and how it alters standard GPU pipeline operations. It also cov">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/spir-v-execution-mode-for-early-fragment-tests">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="SPIR-V Execution Mode for early_fragment_tests - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/spir-v-execution-mode-for-early-fragment-tests" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article identifies the specific SPIR-V execution mode that corresponds to the GLSL layout(earlyfragmenttests) in; layout qualifier, explaining how it is represented in the SPIR-V binary and how it alters standard GPU pipeline operations. It also cov" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="spir-v-execution-mode-for-early_fragment_tests">SPIR-V Execution
+Mode for early_fragment_tests</h1>
+<p>This article identifies the specific SPIR-V execution mode that
+corresponds to the GLSL <code>layout(early_fragment_tests) in;</code>
+layout qualifier, explaining how it is represented in the SPIR-V binary
+and how it alters standard GPU pipeline operations. It also covers the
+functional implications of enforcing early fragment testing, including
+its impact on depth testing, stencil operations, and fragment shader
+invocations.</p>
+<p>The GLSL declaration <code>layout(early_fragment_tests) in;</code>
+directly maps to the SPIR-V execution mode
+<strong><code>EarlyFragmentTests</code></strong>.</p>
+<p>In SPIR-V, execution modes define the operational constraints and
+behaviors of an entry point within an execution model. When translating
+a GLSL fragment shader with early fragment tests enabled, the compiler
+generates an <code>OpExecutionMode</code> instruction targeting the
+fragment shader's entry point:</p>
+<pre class="spirv"><code>OpExecutionMode %entry_point EarlyFragmentTests</code></pre>
+<h3 id="purpose-and-pipeline-behavior">Purpose and Pipeline
+Behavior</h3>
+<p>Under the standard graphics pipeline model, the fragment shader
+executes before per-fragment operations such as depth and stencil
+testing. While modern GPUs often perform proprietary optimizations (like
+hardware early-Z) to discard fragments before shading, these
+optimizations are automatically disabled if the fragment shader writes
+to depth (<code>gl_FragDepth</code>), modifies stencil values, or
+includes side effects like arbitrary image or buffer writes.</p>
+<p>Declaring <code>EarlyFragmentTests</code> explicitly forces depth and
+stencil testing to occur strictly before the execution of the fragment
+shader. If a fragment fails the depth or stencil test, the fragment
+shader invocation is discarded completely.</p>
+<h3 id="technical-implications">Technical Implications</h3>
+<ol type="1">
+<li><strong>Shader Invocations:</strong> Fragments that do not pass the
+depth and stencil buffers will never execute the fragment shader, saving
+computational resources on occluded geometry.</li>
+<li><strong>Side Effects:</strong> Any operations with side effects—such
+as storage buffer writes (SSBOs), atomic operations, or image load/store
+functions—will only run for fragments that have already survived the
+depth and stencil tests.</li>
+<li><strong>Restrictions:</strong> The shader must not conditionally
+override depth in a way that contradicts early testing; writing to
+<code>gl_FragDepth</code> while using <code>EarlyFragmentTests</code> is
+either restricted or strictly validated depending on the graphics API
+specification in use (such as Vulkan or OpenGL).</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

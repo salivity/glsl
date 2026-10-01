@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL SDF Normals With the Tetrahedron Technique - glsl</title>
+    <meta name="description" content="This article provides an overview of the tetrahedron technique for calculating surface normals of Signed Distance Fields (SDF) in GLSL. Computing normals via standard central differences requires six evaluations of the scene function per pixel, which cre">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-sdf-normals-with-the-tetrahedron-technique">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL SDF Normals With the Tetrahedron Technique - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-sdf-normals-with-the-tetrahedron-technique" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of the tetrahedron technique for calculating surface normals of Signed Distance Fields (SDF) in GLSL. Computing normals via standard central differences requires six evaluations of the scene function per pixel, which cre" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-sdf-normals-with-the-tetrahedron-technique">GLSL SDF
+Normals With the Tetrahedron Technique</h1>
+<p>This article provides an overview of the tetrahedron technique for
+calculating surface normals of Signed Distance Fields (SDF) in GLSL.
+Computing normals via standard central differences requires six
+evaluations of the scene function per pixel, which creates a substantial
+performance bottleneck in raymarching shaders. The tetrahedron method
+reduces this workload to just four evaluations while preserving
+geometric symmetry, offering an optimal balance between performance and
+visual fidelity.</p>
+<h2 id="the-gradient-of-a-signed-distance-field">The Gradient of a
+Signed Distance Field</h2>
+<p>In signed distance field rendering, the surface normal <span
+class="math inline">\(\mathbf{n}\)</span> at a point <span
+class="math inline">\(\mathbf{p}\)</span> corresponds to the normalized
+gradient of the distance function <span
+class="math inline">\(f(\mathbf{p})\)</span>:</p>
+<p><span class="math display">\[\mathbf{n} = \frac{\nabla
+f(\mathbf{p})}{\|\nabla f(\mathbf{p})\|}\]</span></p>
+<p>Because most distance functions do not have analytically derived
+derivatives, the gradient must be approximated numerically.</p>
+<p>The standard approach uses central finite differences along the
+Cartesian axes:</p>
+<p><span class="math display">\[\nabla f(\mathbf{p}) \approx
+\begin{pmatrix} f(\mathbf{p} + \epsilon \mathbf{\hat{x}}) - f(\mathbf{p}
+- \epsilon \mathbf{\hat{x}}) \\ f(\mathbf{p} + \epsilon
+\mathbf{\hat{y}}) - f(\mathbf{p} - \epsilon \mathbf{\hat{y}}) \\
+f(\mathbf{p} + \epsilon \mathbf{\hat{z}}) - f(\mathbf{p} - \epsilon
+\mathbf{\hat{z}}) \end{pmatrix}\]</span></p>
+<p>This calculation requires sampling the scene function <span
+class="math inline">\(f\)</span> six times. In complex scenes containing
+fractals, boolean operations, or domain repetitions, evaluating <span
+class="math inline">\(f\)</span> six times per ray hit significantly
+degrades frame rates.</p>
+<h2 id="how-the-tetrahedron-method-works">How the Tetrahedron Method
+Works</h2>
+<p>The tetrahedron technique approximates the gradient by sampling the
+distance field at the four vertices of a regular tetrahedron centered
+around the evaluation point <span
+class="math inline">\(\mathbf{p}\)</span>.</p>
+<p>A regular tetrahedron can be inscribed in a cube using four
+alternating vertices whose coordinates use signs from alternating
+permutations:</p>
+<ul>
+<li><span class="math inline">\(\mathbf{v}_1 = (+1, -1,
+-1)\)</span></li>
+<li><span class="math inline">\(\mathbf{v}_2 = (-1, -1,
++1)\)</span></li>
+<li><span class="math inline">\(\mathbf{v}_3 = (-1, +1,
+-1)\)</span></li>
+<li><span class="math inline">\(\mathbf{v}_4 = (+1, +1,
++1)\)</span></li>
+</ul>
+<p>To calculate the gradient vector, each vertex direction <span
+class="math inline">\(\mathbf{v}_i\)</span> is scaled by the distance
+field value sampled at that offset:</p>
+<p><span class="math display">\[\nabla f(\mathbf{p}) \approx
+\sum_{i=1}^{4} \mathbf{v}_i f(\mathbf{p} + \epsilon
+\mathbf{v}_i)\]</span></p>
+<p>Summing these weighted directional vectors reconstructs the true
+directional gradient. Dividing the final vector by its length produces
+the unit surface normal.</p>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>The four vertices can be generated efficiently using GLSL vector
+swizzling from a single <code>vec2(1.0, -1.0)</code>.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// User-defined SDF scene evaluation function</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">map</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">calcNormalTetrahedron</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> eps <span class="op">=</span> <span class="fl">0.0005</span><span class="op">;</span> <span class="co">// Sampling step size</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">vec2</span> k <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">normalize</span><span class="op">(</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        k<span class="op">.</span><span class="fu">xyy</span> <span class="op">*</span> <span class="fu">map</span><span class="op">(</span>p <span class="op">+</span> k<span class="op">.</span><span class="fu">xyy</span> <span class="op">*</span> eps<span class="op">)</span> <span class="op">+</span> </span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        k<span class="op">.</span><span class="fu">yyx</span> <span class="op">*</span> <span class="fu">map</span><span class="op">(</span>p <span class="op">+</span> k<span class="op">.</span><span class="fu">yyx</span> <span class="op">*</span> eps<span class="op">)</span> <span class="op">+</span> </span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        k<span class="op">.</span><span class="fu">yxy</span> <span class="op">*</span> <span class="fu">map</span><span class="op">(</span>p <span class="op">+</span> k<span class="op">.</span><span class="fu">yxy</span> <span class="op">*</span> eps<span class="op">)</span> <span class="op">+</span> </span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        k<span class="op">.</span><span class="fu">xxx</span> <span class="op">*</span> <span class="fu">map</span><span class="op">(</span>p <span class="op">+</span> k<span class="op">.</span><span class="fu">xxx</span> <span class="op">*</span> eps<span class="op">)</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="breakdown-of-the-code">Breakdown of the Code:</h3>
+<ul>
+<li><code>k.xyy</code> resolves to
+<code>vec3(1.0, -1.0, -1.0)</code></li>
+<li><code>k.yyx</code> resolves to
+<code>vec3(-1.0, -1.0, 1.0)</code></li>
+<li><code>k.yxy</code> resolves to
+<code>vec3(-1.0, 1.0, -1.0)</code></li>
+<li><code>k.xxx</code> resolves to <code>vec3(1.0, 1.0, 1.0)</code></li>
+</ul>
+<p>Each vector represents one vertex of the tetrahedron. The scene
+function <code>map</code> is evaluated at the displaced positions,
+multiplied by the respective direction vectors, accumulated, and finally
+normalized.</p>
+<h2 id="performance-and-accuracy-considerations">Performance and
+Accuracy Considerations</h2>
+<ul>
+<li><strong>Computational Savings:</strong> Reducing scene evaluations
+from six to four yields an immediate 33% reduction in normal estimation
+cost.</li>
+<li><strong>Step Size (<span
+class="math inline">\(\epsilon\)</span>):</strong> Because the sampling
+vectors <span class="math inline">\(\mathbf{v}_i\)</span> have a length
+of <span class="math inline">\(\sqrt{3} \approx 1.732\)</span>, the
+effective sample distance from <span
+class="math inline">\(\mathbf{p}\)</span> is <span
+class="math inline">\(\epsilon\sqrt{3}\)</span>. If sharp edges show
+slight smoothing or artifacts, lower the <code>eps</code> constant
+slightly compared to a Cartesian difference step.</li>
+<li><strong>Rotational Invariance:</strong> Unlike forward differences
+(which use only 4 taps along standard axes but produce asymmetric
+artifacts), the tetrahedron method distributes error symmetrically
+across three dimensions, preventing axis-aligned lighting bias.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

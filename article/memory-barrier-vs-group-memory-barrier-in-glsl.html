@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>memoryBarrier vs groupMemoryBarrier in GLSL? - glsl</title>
+    <meta name="description" content="In GLSL compute and shader programming, understanding memory ordering is essential for avoiding race conditions. While both memoryBarrier() and groupMemoryBarrier() prevent the compiler and hardware from reordering memory access operations across synchro">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/memory-barrier-vs-group-memory-barrier-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="memoryBarrier vs groupMemoryBarrier in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/memory-barrier-vs-group-memory-barrier-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL compute and shader programming, understanding memory ordering is essential for avoiding race conditions. While both memoryBarrier() and groupMemoryBarrier() prevent the compiler and hardware from reordering memory access operations across synchro" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="memorybarrier-vs-groupmemorybarrier-in-glsl">memoryBarrier vs
+groupMemoryBarrier in GLSL?</h1>
+<p>In GLSL compute and shader programming, understanding memory ordering
+is essential for avoiding race conditions. While both
+<code>memoryBarrier()</code> and <code>groupMemoryBarrier()</code>
+prevent the compiler and hardware from reordering memory access
+operations across synchronization boundaries, they differ in their
+operational scope and the types of memory they affect. This guide covers
+the key differences between these two built-in barrier functions, how
+they interact with cache hierarchies, and when to choose one over the
+other.</p>
+<h2 id="the-role-of-memory-barriers-in-glsl">The Role of Memory Barriers
+in GLSL</h2>
+<p>Modern GPUs execute thousands of threads concurrently. To maximize
+throughput, the hardware and compiler frequently reorder memory load and
+store operations. When multiple shader invocations read from and write
+to shared storage, raw ordering cannot be assumed.</p>
+<p>A memory barrier acts as an ordering constraint: all memory writes
+issued prior to the barrier function call must be committed and visible
+to the target invocations before any memory operations following the
+barrier can execute. Crucially, memory barriers in GLSL only order
+memory operations; they do not stall execution to synchronize thread
+timing unless paired with an execution barrier like
+<code>barrier()</code>.</p>
+<h2 id="what-is-memorybarrier">What is memoryBarrier()?</h2>
+<p>The <code>memoryBarrier()</code> function enforces memory ordering
+globally across all shader invocations across the entire GPU.</p>
+<ul>
+<li><strong>Memory Types Covered:</strong> Image variables
+(<code>imageStore</code>), shader storage buffer objects (SSBOs), and
+atomic counters.</li>
+<li><strong>Scope of Visibility:</strong> Global. It ensures that memory
+transactions issued before the call become visible to all other
+invocations on the device before operations after the call occur.</li>
+<li><strong>Shared Memory Handling:</strong> It does
+<strong>not</strong> order access to <code>shared</code> memory
+variables declared inside compute shaders.</li>
+</ul>
+<p>Use <code>memoryBarrier()</code> when you are writing algorithms
+where invocations across different workgroups or different draw calls
+need to see updated buffer or texture writes in a specific order.</p>
+<h2 id="what-is-groupmemorybarrier">What is groupMemoryBarrier()?</h2>
+<p>The <code>groupMemoryBarrier()</code> function is designed
+specifically for compute shaders and restricts its synchronization scope
+to the local workgroup.</p>
+<ul>
+<li><strong>Memory Types Covered:</strong> All memory accesses performed
+by the invocation, including <code>shared</code> variables, SSBO buffer
+variables, image variables, and atomic counters.</li>
+<li><strong>Scope of Visibility:</strong> Local to the current
+workgroup. It guarantees that prior memory operations are visible to
+other invocations executing in the same workgroup before subsequent
+operations proceed.</li>
+<li><strong>Performance Impact:</strong> Because it only requires cache
+flushing and ordering relative to the local compute unit (workgroup), it
+can be substantially faster and less disruptive to GPU memory pipelines
+than a global barrier.</li>
+</ul>
+<h2 id="key-differences-summary">Key Differences Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th><code>memoryBarrier()</code></th>
+<th><code>groupMemoryBarrier()</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Visibility Scope</strong></td>
+<td>Global (all workgroups across GPU)</td>
+<td>Local (current workgroup only)</td>
+</tr>
+<tr>
+<td><strong>Available Stages</strong></td>
+<td>Compute and graphics stages</td>
+<td>Compute shaders only</td>
+</tr>
+<tr>
+<td><strong>Affects Shared Memory</strong></td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><strong>Affects SSBOs / Images</strong></td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><strong>Execution Sync</strong></td>
+<td>No (ordering only)</td>
+<td>No (ordering only)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="pairing-with-execution-barriers">Pairing with Execution
+Barriers</h2>
+<p>A common misconception is that calling
+<code>groupMemoryBarrier()</code> halts thread execution until all
+threads in the workgroup reach that point. It only enforces the ordering
+of memory transactions issued by the calling thread.</p>
+<p>To both guarantee memory visibility and synchronize execution timing
+across all invocations in a workgroup, you must use
+<code>barrier()</code>:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Write to shared or global memory</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>sharedData<span class="op">[</span><span class="bu">gl_LocalInvocationIndex</span><span class="op">]</span> <span class="op">=</span> computedValue<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Order memory writes and synchronize thread execution</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="bu">barrier</span><span class="op">();</span> </span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Safely read values written by other invocations in the workgroup</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> neighborValue <span class="op">=</span> sharedData<span class="op">[</span>neighborIndex<span class="op">];</span></span></code></pre></div>
+<p>Inside a compute shader, calling <code>barrier()</code> internally
+enforces the equivalent of a <code>groupMemoryBarrier()</code> alongside
+thread execution synchronization.</p>
+<h2 id="fine-grained-alternatives">Fine-Grained Alternatives</h2>
+<p>GLSL also provides specialized memory barriers when you only need to
+order specific memory resources:</p>
+<ul>
+<li><code>memoryBarrierShared()</code>: Orders only <code>shared</code>
+variable accesses within the workgroup.</li>
+<li><code>memoryBarrierBuffer()</code>: Orders only buffer variable
+accesses (SSBOs).</li>
+<li><code>memoryBarrierImage()</code>: Orders only image load and store
+operations.</li>
+<li><code>memoryBarrierAtomicCounter()</code>: Orders only atomic
+counter operations.</li>
+</ul>
+<p>Selecting the most restrictive barrier suitable for your algorithm
+prevents unnecessary cache flushes and ensures optimal GPU pipeline
+efficiency.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Constant Integer Division by Zero Explained - glsl</title>
+    <meta name="description" content="This article explores how GLSL compilers handle integer division by zero when evaluated as a compile-time constant expression. While the core OpenGL Shading Language specification treats integer division by zero as undefined behavior, standard reference">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-constant-integer-division-by-zero-explained">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Constant Integer Division by Zero Explained - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-constant-integer-division-by-zero-explained" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores how GLSL compilers handle integer division by zero when evaluated as a compile-time constant expression. While the core OpenGL Shading Language specification treats integer division by zero as undefined behavior, standard reference" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-constant-integer-division-by-zero-explained">GLSL Constant
+Integer Division by Zero Explained</h1>
+<p>This article explores how GLSL compilers handle integer division by
+zero when evaluated as a compile-time constant expression. While the
+core OpenGL Shading Language specification treats integer division by
+zero as undefined behavior, standard reference compilers and GPU driver
+toolchains typically treat constant integer division by zero as a fatal
+compilation error. Below is an examination of specification rules,
+standard compiler implementations, and differences between integer and
+floating-point handling.</p>
+<h3 id="the-glsl-specification-and-undefined-behavior">The GLSL
+Specification and Undefined Behavior</h3>
+<p>According to the official OpenGL Shading Language (GLSL)
+specification, the result of dividing an integer by zero is undefined.
+Unlike floating-point division, which often follows IEEE-754 semantics
+to produce infinity or Not-a-Number (NaN), standard integer
+representations have no built-in representation for infinite or
+undefined values.</p>
+<p>When an expression consists entirely of compile-time constants (such
+as literals, <code>const</code>-qualified variables, or constant
+operations), the compiler evaluates the expression during constant
+folding. Because undefined operations in constant expressions cannot
+yield a valid, deterministic value according to the language semantics,
+compilers generally refuse to generate code for them.</p>
+<h3 id="compiler-behavior-frontends-and-reference-tools">Compiler
+Behavior: Frontends and Reference Tools</h3>
+<p>In standard reference tooling such as <code>glslang</code> (the
+Khronos reference compiler for GLSL and SPIR-V generation), compile-time
+constant integer division by zero triggers a compilation error.</p>
+<p>When encountering code such as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> result <span class="op">=</span> <span class="dv">10</span> <span class="op">/</span> <span class="dv">0</span><span class="op">;</span></span></code></pre></div>
+<p>The reference compiler halts parsing and issues an error message
+similar to:</p>
+<pre class="text"><code>ERROR: 0:1: &#39;/&#39; : divide by zero</code></pre>
+<p>The compilation process fails immediately, preventing invalid SPIR-V
+or shader binaries from being generated. This strict behavior protects
+developers from deploying code that relies on undefined hardware
+states.</p>
+<h3 id="vendor-driver-implementations">Vendor Driver
+Implementations</h3>
+<p>In traditional OpenGL environments where source code is compiled by
+the GPU driver at runtime via <code>glCompileShader</code>, behavior can
+theoretically vary by vendor:</p>
+<ul>
+<li><strong>NVIDIA and AMD:</strong> Modern desktop drivers adhere to
+strict compile-time validation. Both vendors typically flag compile-time
+constant division by zero as an error, causing shader compilation to
+fail.</li>
+<li><strong>Lenient or Embedded Drivers:</strong> Some specialized or
+older embedded (OpenGL ES) drivers may issue a compiler warning rather
+than a fatal error, subsequently folding the value to zero or leaving
+the register uninitialized. However, relying on this behavior creates
+non-portable code.</li>
+</ul>
+<h3 id="constant-integer-vs-floating-point-division">Constant Integer
+vs. Floating-Point Division</h3>
+<p>The handling of integer division by zero contrasts sharply with
+floating-point constant expressions:</p>
+<ul>
+<li><strong>Integer Division (<code>int / int</code>):</strong> Lacks
+infinite representations. Constant evaluation causes a compilation
+error.</li>
+<li><strong>Floating-Point Division
+(<code>float / float</code>):</strong> When evaluating expressions like
+<code>1.0 / 0.0</code>, the compiler may resolve the expression to
+positive or negative infinity (<code>+INF</code> or <code>-INF</code>),
+or <code>NaN</code> if dividing <code>0.0 / 0.0</code>, depending on the
+profile and floating-point compliance settings. This usually does not
+halt compilation unless strict non-IEEE flags are enforced.</li>
+</ul>
+<h3 id="summary">Summary</h3>
+<p>In practice, a GLSL compiler evaluates constant integer division by
+zero during the constant folding stage and rejects the shader with a
+compile-time error. Developers must guard macro definitions and constant
+arithmetic to ensure integer divisors never evaluate to zero.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

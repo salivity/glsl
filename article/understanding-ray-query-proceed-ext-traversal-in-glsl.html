@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding rayQueryProceedEXT Traversal in GLSL - glsl</title>
+    <meta name="description" content="In Vulkan inline ray tracing via the GLSLEXTrayquery extension, rayQueryProceedEXT acts as an iterative driver for hardware-accelerated bounding volume hierarchy (BVH) traversal inside a shader loop. This function advances the ray through top-level and b">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-ray-query-proceed-ext-traversal-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding rayQueryProceedEXT Traversal in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-ray-query-proceed-ext-traversal-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In Vulkan inline ray tracing via the GLSLEXTrayquery extension, rayQueryProceedEXT acts as an iterative driver for hardware-accelerated bounding volume hierarchy (BVH) traversal inside a shader loop. This function advances the ray through top-level and b" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="understanding-rayqueryproceedext-traversal-in-glsl">Understanding
+rayQueryProceedEXT Traversal in GLSL</h1>
+<p>In Vulkan inline ray tracing via the <code>GLSL_EXT_ray_query</code>
+extension, <code>rayQueryProceedEXT</code> acts as an iterative driver
+for hardware-accelerated bounding volume hierarchy (BVH) traversal
+inside a shader loop. This function advances the ray through top-level
+and bottom-level acceleration structures (TLAS and BLAS), testing
+bounding boxes and primitives until it either encounters a candidate
+intersection that requires shader-side confirmation or exhausts all
+potential intersections. By returning a boolean value, it signals to the
+<code>while</code> loop whether traversal is actively paused at a
+candidate hit (<code>true</code>) or has completed entirely
+(<code>false</code>), allowing developers to query final intersection
+results.</p>
+<h3 id="initialization-and-ray-state-setup">Initialization and Ray State
+Setup</h3>
+<p>Before <code>rayQueryProceedEXT</code> can traverse geometry, the ray
+query object must be initialized using
+<code>rayQueryInitializeEXT</code>. This function sets:</p>
+<ul>
+<li>The top-level acceleration structure (TLAS) handle.</li>
+<li>Ray traversal flags (such as <code>gl_RayFlagsOpaqueEXT</code> or
+<code>gl_RayFlagsTerminateOnFirstHitEXT</code>).</li>
+<li>The instance inclusion mask.</li>
+<li>Geometric ray properties: world-space origin, minimum distance
+(<span class="math inline">\(t_{\min}\)</span>), direction vector, and
+maximum distance (<span class="math inline">\(t_{\max}\)</span>).</li>
+</ul>
+<p>Initialization configures the internal traversal state machine and
+places the root node of the TLAS onto the hardware or emulation
+traversal stack.</p>
+<h3 id="how-rayqueryproceedext-executes-traversal">How
+rayQueryProceedEXT Executes Traversal</h3>
+<p>Inside a <code>while (rayQueryProceedEXT(rayQuery))</code> loop, the
+function operates as a stateful coroutine between the shader processor
+and the ray tracing pipeline (often fixed-function hardware such as RT
+Cores):</p>
+<ol type="1">
+<li><strong>Stack Processing and Node Testing:</strong> When called, the
+underlying implementation pops nodes from the BVH traversal stack. It
+performs ray-box intersection tests against internal nodes, descending
+through the TLAS into the corresponding BLAS instances based on
+transformation matrices and culling masks.</li>
+<li><strong>Hardware-Level Hit Processing:</strong> If the ray hits
+fully opaque primitives and no custom shader handling is needed, the
+fixed-function unit automatically updates the internal "committed" hit
+distance (<span class="math inline">\(t\)</span>) and continues
+traversal without yielding control back to the shader.</li>
+<li><strong>Pausing Traversal for Candidate Intersections:</strong> The
+function halts traversal and returns <code>true</code> under conditions
+that require custom logic from the shader:
+<ul>
+<li><strong>Non-Opaque Triangles:</strong> When encountering geometry
+flagged as non-opaque, traversal yields so the shader can evaluate alpha
+testing or procedural discard using
+<code>rayQueryConfirmIntersectionEXT</code>.</li>
+<li><strong>Axis-Aligned Bounding Boxes (AABBs):</strong> When
+intersecting custom procedural geometry defined by AABBs, traversal
+yields to let the shader perform an analytic intersection test and
+optionally submit a hit distance using
+<code>rayQueryGenerateIntersectionEXT</code>.</li>
+</ul></li>
+<li><strong>Resuming Traversal:</strong> In the next iteration of the
+<code>while</code> loop, invoking <code>rayQueryProceedEXT</code>
+informs the traversal unit to resume from its current state, taking into
+account any confirmed or rejected hits.</li>
+</ol>
+<h3 id="loop-termination">Loop Termination</h3>
+<p><code>rayQueryProceedEXT</code> returns <code>false</code> when
+traversal finishes, which immediately breaks the <code>while</code>
+loop. This occurs when:</p>
+<ul>
+<li>The BVH traversal stack becomes empty, meaning all candidate paths
+have been tested or bounded out.</li>
+<li>A flag such as <code>gl_RayFlagsTerminateOnFirstHitEXT</code> was
+set, and an acceptable intersection was confirmed.</li>
+<li>The ray interval contracts to a point where remaining bounding boxes
+fall beyond the committed hit distance (<span
+class="math inline">\(t\)</span>).</li>
+</ul>
+<h3 id="post-loop-resolution">Post-Loop Resolution</h3>
+<p>Once the loop terminates, traversal is complete. The ray query object
+holds the final "committed" intersection data. The shader then uses
+functions such as
+<code>rayQueryGetIntersectionTypeEXT(rayQuery, true)</code> to check if
+a valid geometry hit was found, followed by retrieving primitive
+indices, instance IDs, barycentrics, and transformation matrices to
+compute shading or visibility.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

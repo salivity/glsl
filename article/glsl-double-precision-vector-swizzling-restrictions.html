@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Double-Precision Vector Swizzling Restrictions - glsl</title>
+    <meta name="description" content="Double-precision vector swizzling in core OpenGL Shading Language (GLSL) allows developers to access and reorder components of 64-bit vectors (dvec2, dvec3, and dvec4). While core GLSL applies the same overarching syntactic rules to double-precision vect">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-double-precision-vector-swizzling-restrictions">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Double-Precision Vector Swizzling Restrictions - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-double-precision-vector-swizzling-restrictions" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Double-precision vector swizzling in core OpenGL Shading Language (GLSL) allows developers to access and reorder components of 64-bit vectors (dvec2, dvec3, and dvec4). While core GLSL applies the same overarching syntactic rules to double-precision vect" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-double-precision-vector-swizzling-restrictions">GLSL
+Double-Precision Vector Swizzling Restrictions</h1>
+<p>Double-precision vector swizzling in core OpenGL Shading Language
+(GLSL) allows developers to access and reorder components of 64-bit
+vectors (<code>dvec2</code>, <code>dvec3</code>, and
+<code>dvec4</code>). While core GLSL applies the same overarching
+syntactic rules to double-precision vectors as it does to standard
+32-bit floating-point vectors, strict language and hardware-level
+constraints govern how these operations are written and executed.
+Understanding these limitations—ranging from component bounds and write
+masks to register limits—ensures valid and efficient shader code.</p>
+<h3 id="component-domain-and-dimension-limits">Component Domain and
+Dimension Limits</h3>
+<p>Double-precision vectors can only be swizzled using components that
+exist within the source vector’s declared dimension. Attempting to
+select a component beyond the vector size results in a compile-time
+error:</p>
+<ul>
+<li>A <code>dvec2</code> only provides access to components
+<code>x</code>, <code>y</code> (or <code>r</code>, <code>g</code> /
+<code>s</code>, <code>t</code>). Accessing <code>z</code> or
+<code>w</code> is illegal.</li>
+<li>A <code>dvec3</code> provides access to <code>x</code>,
+<code>y</code>, <code>z</code>. Accessing <code>w</code> is
+illegal.</li>
+<li>A <code>dvec4</code> provides access to all four components
+(<code>x</code>, <code>y</code>, <code>z</code>, <code>w</code>).</li>
+</ul>
+<p>Furthermore, swizzling expressions cannot produce types larger than a
+4-component vector. A swizzle operator cannot yield more than four
+components (for example, <code>my_dvec2.xyxyx</code> is invalid because
+there is no <code>dvec5</code> type in GLSL).</p>
+<h3 id="selector-namespace-consistency">Selector Namespace
+Consistency</h3>
+<p>GLSL defines three distinct selector groups for vector
+components:</p>
+<ul>
+<li>Spatial: <code>x</code>, <code>y</code>, <code>z</code>,
+<code>w</code></li>
+<li>Color: <code>r</code>, <code>g</code>, <code>b</code>,
+<code>a</code></li>
+<li>Texture: <code>s</code>, <code>t</code>, <code>p</code>,
+<code>q</code></li>
+</ul>
+<p>When swizzling a double-precision vector, you cannot mix selectors
+from different families within the same swizzle operation. An expression
+such as <code>my_dvec3.xg</code> or <code>my_dvec4.xyzr</code> is
+invalid and will fail compilation.</p>
+<h3 id="l-value-write-mask-restrictions">L-Value (Write Mask)
+Restrictions</h3>
+<p>When a <code>dvec</code> swizzle is used as an l-value (the target on
+the left-hand side of an assignment), two major restrictions apply:</p>
+<ol type="1">
+<li><strong>No Duplicate Components:</strong> A component cannot appear
+more than once in an l-value swizzle. For instance,
+<code>my_dvec3.xx = dvec2(1.0lf, 2.0lf);</code> is forbidden because
+writing to the same memory location twice within a single assignment is
+undefined.</li>
+<li><strong>Component Cardinality Match:</strong> The number of
+components selected in the l-value swizzle must match the component
+count of the r-value expression on the right-hand side.</li>
+</ol>
+<h3 id="scalar-double-limitations">Scalar Double Limitations</h3>
+<p>Core GLSL does not support swizzling on scalar types. While some
+shading languages allow pseudo-swizzling on scalars, GLSL prohibits
+swizzling a plain <code>double</code>. An expression like
+<code>my_double.xxxx</code> to construct a <code>dvec4</code> will not
+compile; explicit constructor syntax such as
+<code>dvec4(my_double)</code> must be used instead.</p>
+<h3 id="parity-with-single-precision-and-performance-impacts">Parity
+with Single Precision and Performance Impacts</h3>
+<p>Syntactically, core GLSL imposes no unique structural restrictions on
+<code>dvec</code> swizzles that do not also apply to <code>vec</code>
+swizzles. However, double-precision components are 64 bits wide rather
+than 32 bits. A <code>dvec4</code> requires 256 bits of storage—double
+that of a <code>vec4</code>. Consequently, complex swizzling patterns on
+double-precision vectors often require more internal temporary registers
+and multi-instruction data shuffling on GPUs lacking native full-width
+64-bit datapaths.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

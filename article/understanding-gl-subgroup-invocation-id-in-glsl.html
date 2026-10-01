@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding gl_SubgroupInvocationID in GLSL - glsl</title>
+    <meta name="description" content="In GLSL, glSubgroupInvocationID is a built-in input variable that uniquely identifies an individual execution thread, or SIMD lane, within its active subgroup. Modern graphics processing units (GPUs) execute shader invocations in lockstep bundles known v">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-gl-subgroup-invocation-id-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding gl_SubgroupInvocationID in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-gl-subgroup-invocation-id-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL, glSubgroupInvocationID is a built-in input variable that uniquely identifies an individual execution thread, or SIMD lane, within its active subgroup. Modern graphics processing units (GPUs) execute shader invocations in lockstep bundles known v" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-gl_subgroupinvocationid-in-glsl">Understanding
+gl_SubgroupInvocationID in GLSL</h1>
+<p>In GLSL, <code>gl_SubgroupInvocationID</code> is a built-in input
+variable that uniquely identifies an individual execution thread, or
+SIMD lane, within its active subgroup. Modern graphics processing units
+(GPUs) execute shader invocations in lockstep bundles known variously as
+warps, wavefronts, or subgroups. By exposing a zero-based unsigned
+integer unique to each lane in that bundle,
+<code>gl_SubgroupInvocationID</code> enables fine-grained parallel
+operations, lane-to-lane data sharing, and divergent control-flow
+management without relying on slower workgroup-shared memory.</p>
+<h3 id="the-mechanism-of-gl_subgroupinvocationid">The Mechanism of
+gl_SubgroupInvocationID</h3>
+<p>At the hardware level, GPU execution units process multiple threads
+simultaneously using Single Instruction, Multiple Data (SIMD) or Single
+Instruction, Multiple Threads (SIMT) architectures. A GLSL subgroup
+directly represents this hardware execution unit.</p>
+<p>When a shader runs, invocations are assigned to fixed-width SIMD
+vectors (typically 16, 32, or 64 lanes wide, depending on the GPU vendor
+and architecture). The variable <code>gl_SubgroupInvocationID</code> is
+a hardware-backed index assigned directly to each physical lane within
+that vector:</p>
+<ul>
+<li><strong>Type</strong>: <code>uint</code></li>
+<li><strong>Range</strong>: Spans continuously from <code>0</code> up to
+<code>gl_SubgroupSize - 1</code>.</li>
+<li><strong>Scope</strong>: Strictly local to the immediate subgroup.
+Unlike <code>gl_LocalInvocationID</code>, which spans the entire
+software-defined workgroup, <code>gl_SubgroupInvocationID</code> resets
+to <code>0</code> for the first lane of every individual hardware
+subgroup.</li>
+</ul>
+<h3 id="mapping-simd-lanes-to-hardware">Mapping SIMD Lanes to
+Hardware</h3>
+<p>When an instruction executes across a subgroup, the GPU's scheduler
+maps each thread to an ALU data path (lane).
+<code>gl_SubgroupInvocationID</code> reflects this exact position:</p>
+<ol type="1">
+<li><strong>Hardware Lane Association</strong>: If a GPU utilizes
+32-thread warps, lane 0 executes the invocation where
+<code>gl_SubgroupInvocationID == 0</code>, lane 1 executes
+<code>gl_SubgroupInvocationID == 1</code>, and so forth up to lane
+31.</li>
+<li><strong>Fixed Identity</strong>: The ID remains constant for the
+lifetime of that invocation within the subgroup, regardless of dynamic
+branching or control flow divergence.</li>
+<li><strong>Inactive Lanes</strong>: If a subgroup diverges (e.g., due
+to an <code>if-else</code> condition), inactive lanes are masked out by
+hardware, but the active lanes retain their original
+<code>gl_SubgroupInvocationID</code> values.</li>
+</ol>
+<h3 id="practical-applications-in-glsl">Practical Applications in
+GLSL</h3>
+<p>Identifying the specific SIMD lane via
+<code>gl_SubgroupInvocationID</code> is essential for several advanced
+graphics and compute techniques:</p>
+<ul>
+<li><strong>Lane Election</strong>: Work can be restricted to a single
+lane within the SIMD unit (such as lane 0) to avoid redundant
+computations or atomic operations:
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>gl_SubgroupInvocationID <span class="op">==</span> <span class="dv">0</span>u<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Perform a single operation for the entire subgroup</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></li>
+<li><strong>Direct Intra-Subgroup Communication</strong>: Functions like
+<code>subgroupBroadcast(value, id)</code> allow one SIMD lane to read
+values directly from another SIMD lane's registers, using
+<code>gl_SubgroupInvocationID</code> to target specific data
+sources.</li>
+<li><strong>Compact Reductions and Scans</strong>: Subgroup arithmetic
+operations (e.g., <code>subgroupExclusiveAdd</code>) use the lane ID to
+determine prefix order without the overhead of barrier
+synchronizations.</li>
+<li><strong>Bitmask and Ballot Operations</strong>: When using
+<code>subgroupBallot()</code>, which returns a 4-component vector
+representing active invocations as a bitfield,
+<code>gl_SubgroupInvocationID</code> corresponds directly to the bit
+position representing the current thread.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

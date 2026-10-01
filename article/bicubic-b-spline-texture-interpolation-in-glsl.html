@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bicubic B-Spline Texture Interpolation in GLSL - glsl</title>
+    <meta name="description" content="This article explains how to implement bicubic B-spline texture interpolation manually within a GLSL fragment shader. Standard hardware bilinear filtering only offers $C^0$ continuity, which introduces noticeable grid artifacts and sharp gradient shifts">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/bicubic-b-spline-texture-interpolation-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Bicubic B-Spline Texture Interpolation in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/bicubic-b-spline-texture-interpolation-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to implement bicubic B-spline texture interpolation manually within a GLSL fragment shader. Standard hardware bilinear filtering only offers $C^0$ continuity, which introduces noticeable grid artifacts and sharp gradient shifts" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="bicubic-b-spline-texture-interpolation-in-glsl">Bicubic B-Spline
+Texture Interpolation in GLSL</h1>
+<p>This article explains how to implement bicubic B-spline texture
+interpolation manually within a GLSL fragment shader. Standard hardware
+bilinear filtering only offers <span class="math inline">\(C^0\)</span>
+continuity, which introduces noticeable grid artifacts and sharp
+gradient shifts when textures are magnified. Bicubic B-spline filtering
+reconstructs continuous <span class="math inline">\(C^2\)</span>
+surfaces by taking a weighted average of a <span class="math inline">\(4
+\times 4\)</span> neighborhood of texels using cubic polynomials. While
+a naive implementation requires 16 texture taps, you can leverage GPU
+bilinear texture filtering hardware to evaluate the filter using only 4
+optimized texture fetches.</p>
+<h2 id="the-cubic-b-spline-basis-functions">The Cubic B-Spline Basis
+Functions</h2>
+<p>Uniform cubic B-spline interpolation over an interval <span
+class="math inline">\(t \in [0, 1]\)</span> is defined by four
+polynomial basis weights:</p>
+<p><span class="math display">\[\begin{aligned}
+w_0(t) &amp;= \frac{1}{6}(1 - t)^3 \\
+w_1(t) &amp;= \frac{1}{6}(3t^3 - 6t^2 + 4) \\
+w_2(t) &amp;= \frac{1}{6}(-3t^3 + 3t^2 + 3t + 1) \\
+w_3(t) &amp;= \frac{1}{6}t^3
+\end{aligned}\]</span></p>
+<p>Because the partition of unity holds (<span class="math inline">\(w_0
++ w_1 + w_2 + w_3 = 1\)</span>), the reconstructed curve is smooth and
+normalized across all texels.</p>
+<h2 id="reducing-16-texture-fetches-to-4">Reducing 16 Texture Fetches to
+4</h2>
+<p>A direct 2D cubic filter samples a <span class="math inline">\(4
+\times 4\)</span> grid of texels, requiring 16 dependent texture calls.
+However, modern GPUs perform hardware bilinear filtering between
+adjacent texels.</p>
+<p>By combining pairs of 1D weights <span class="math inline">\((w_0,
+w_1)\)</span> and <span class="math inline">\((w_2, w_3)\)</span>, you
+can collapse the 4-tap 1D filter into 2 bilinear taps:</p>
+<p><span class="math display">\[\begin{aligned}
+g_0 &amp;= w_0 + w_1, \quad &amp;h_0 &amp;= \frac{w_1}{w_0 + w_1} \\
+g_1 &amp;= w_2 + w_3, \quad &amp;h_1 &amp;= \frac{w_3}{w_2 + w_3}
+\end{aligned}\]</span></p>
+<p>Using <span class="math inline">\(h_0\)</span> and <span
+class="math inline">\(h_1\)</span> as sampling offsets relative to the
+integer texel grid, the GPU's bilinear sampler will blend the two
+adjacent texels according to their exact B-spline weight ratios.
+Extending this across both axes reduces the required samples from 16 to
+4 bilinear fetches.</p>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>Ensure the texture sampler is configured with <code>GL_LINEAR</code>
+filtering enabled so that sub-texel coordinates interpolate
+correctly.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec2</span> v_TexCoords<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> u_Texture<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec2</span> u_TextureResolution<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> <span class="fu">sampleBicubicBSpline</span><span class="op">(</span><span class="dt">sampler2D</span> tex<span class="op">,</span> <span class="dt">vec2</span> uv<span class="op">,</span> <span class="dt">vec2</span> resolution<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Transform coordinates from [0, 1] UV to texel units</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> tc <span class="op">=</span> uv <span class="op">*</span> resolution <span class="op">-</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> <span class="dt">index</span> <span class="op">=</span> <span class="bu">floor</span><span class="op">(</span>tc<span class="op">);</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> f <span class="op">=</span> <span class="bu">fract</span><span class="op">(</span>tc<span class="op">);</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Evaluate 1D cubic B-spline weights</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> f2 <span class="op">=</span> f <span class="op">*</span> f<span class="op">;</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> f3 <span class="op">=</span> f2 <span class="op">*</span> f<span class="op">;</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> w0 <span class="op">=</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> <span class="fl">3.0</span> <span class="op">*</span> f <span class="op">+</span> <span class="fl">3.0</span> <span class="op">*</span> f2 <span class="op">-</span> f3<span class="op">)</span> <span class="op">/</span> <span class="fl">6.0</span><span class="op">;</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> w1 <span class="op">=</span> <span class="op">(</span><span class="fl">4.0</span> <span class="op">-</span> <span class="fl">6.0</span> <span class="op">*</span> f2 <span class="op">+</span> <span class="fl">3.0</span> <span class="op">*</span> f3<span class="op">)</span> <span class="op">/</span> <span class="fl">6.0</span><span class="op">;</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> w2 <span class="op">=</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">+</span> <span class="fl">3.0</span> <span class="op">*</span> f <span class="op">+</span> <span class="fl">3.0</span> <span class="op">*</span> f2 <span class="op">-</span> <span class="fl">3.0</span> <span class="op">*</span> f3<span class="op">)</span> <span class="op">/</span> <span class="fl">6.0</span><span class="op">;</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> w3 <span class="op">=</span> f3 <span class="op">/</span> <span class="fl">6.0</span><span class="op">;</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Combine weights to find bilinear sampling offsets</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> g0 <span class="op">=</span> w0 <span class="op">+</span> w1<span class="op">;</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> g1 <span class="op">=</span> w2 <span class="op">+</span> w3<span class="op">;</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> h0 <span class="op">=</span> w1 <span class="op">/</span> g0<span class="op">;</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> h1 <span class="op">=</span> w3 <span class="op">/</span> g1<span class="op">;</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute sample locations in UV space</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> tap0 <span class="op">=</span> <span class="op">(</span><span class="dt">index</span> <span class="op">-</span> <span class="fl">0.5</span> <span class="op">+</span> h0<span class="op">)</span> <span class="op">/</span> resolution<span class="op">;</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> tap1 <span class="op">=</span> <span class="op">(</span><span class="dt">index</span> <span class="op">+</span> <span class="fl">1.5</span> <span class="op">+</span> h1<span class="op">)</span> <span class="op">/</span> resolution<span class="op">;</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Perform the 4 bilinear fetches</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> tex00 <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>tex<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>tap0<span class="op">.</span><span class="fu">x</span><span class="op">,</span> tap0<span class="op">.</span><span class="fu">y</span><span class="op">));</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> tex10 <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>tex<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>tap1<span class="op">.</span><span class="fu">x</span><span class="op">,</span> tap0<span class="op">.</span><span class="fu">y</span><span class="op">));</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> tex01 <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>tex<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>tap0<span class="op">.</span><span class="fu">x</span><span class="op">,</span> tap1<span class="op">.</span><span class="fu">y</span><span class="op">));</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> tex11 <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>tex<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>tap1<span class="op">.</span><span class="fu">x</span><span class="op">,</span> tap1<span class="op">.</span><span class="fu">y</span><span class="op">));</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Combine horizontal bilinear pairs</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> row0 <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>tex10<span class="op">,</span> tex00<span class="op">,</span> g0<span class="op">.</span><span class="fu">x</span><span class="op">);</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> row1 <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>tex11<span class="op">,</span> tex01<span class="op">,</span> g0<span class="op">.</span><span class="fu">x</span><span class="op">);</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Combine vertical results</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">mix</span><span class="op">(</span>row1<span class="op">,</span> row0<span class="op">,</span> g0<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="fu">sampleBicubicBSpline</span><span class="op">(</span>u_Texture<span class="op">,</span> v_TexCoords<span class="op">,</span> u_TextureResolution<span class="op">);</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="how-the-coordinate-math-works">How the Coordinate Math
+Works</h2>
+<ol type="1">
+<li><strong>Texel Offset:</strong> The UV coordinates are multiplied by
+the texture dimensions and shifted by <code>-0.5</code> to align UV
+sample points with the centers of texels.</li>
+<li><strong>Fractional Split:</strong> <code>floor(tc)</code> locates
+the top-left texel index of the central <span class="math inline">\(2
+\times 2\)</span> block, while <code>fract(tc)</code> provides the
+sub-texel interpolation phase <span class="math inline">\(f \in [0,
+1]\)</span>.</li>
+<li><strong>Hardware Blending:</strong> <code>tap0</code> samples
+between texels <span class="math inline">\((i - 1)\)</span> and <span
+class="math inline">\(i\)</span>, while <code>tap1</code> samples
+between texels <span class="math inline">\((i + 1)\)</span> and <span
+class="math inline">\((i + 2)\)</span>. The relative offsets <span
+class="math inline">\(h_0\)</span> and <span
+class="math inline">\(h_1\)</span> shift the hardware tap to reproduce
+the ratio of <span class="math inline">\(w_0\)</span> to <span
+class="math inline">\(w_1\)</span> and <span
+class="math inline">\(w_2\)</span> to <span
+class="math inline">\(w_3\)</span>.</li>
+<li><strong>Final Linear Blend:</strong> The <code>mix</code> calls
+evaluate the outer weights <span class="math inline">\(g_0\)</span> and
+<span class="math inline">\(g_1\)</span>. Because <span
+class="math inline">\(g_0 + g_1 = 1\)</span>, using
+<code>mix(b, a, g0)</code> executes
+<code>a * g0 + b * (1.0 - g0)</code>, producing the correct composite
+cubic reconstruction.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

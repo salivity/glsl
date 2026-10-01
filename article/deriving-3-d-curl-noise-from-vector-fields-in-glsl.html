@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deriving 3D Curl Noise from Vector Fields in GLSL - glsl</title>
+    <meta name="description" content="This article explains how to derive 3D curl noise from analytical potential vector fields within OpenGL Shading Language (GLSL). It covers the underlying mathematical principles of the curl operator, explains why the resulting vector field is naturally d">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/deriving-3-d-curl-noise-from-vector-fields-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Deriving 3D Curl Noise from Vector Fields in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/deriving-3-d-curl-noise-from-vector-fields-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to derive 3D curl noise from analytical potential vector fields within OpenGL Shading Language (GLSL). It covers the underlying mathematical principles of the curl operator, explains why the resulting vector field is naturally d" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="deriving-3d-curl-noise-from-vector-fields-in-glsl">Deriving 3D
+Curl Noise from Vector Fields in GLSL</h1>
+<p>This article explains how to derive 3D curl noise from analytical
+potential vector fields within OpenGL Shading Language (GLSL). It covers
+the underlying mathematical principles of the curl operator, explains
+why the resulting vector field is naturally divergence-free, and
+demonstrates how to implement this technique efficiently in a fragment
+or compute shader using both analytical approaches and finite
+differences.</p>
+<h2 id="the-mathematical-principle">The Mathematical Principle</h2>
+<p>Curl noise generates divergence-free velocity fields, which are
+critical for simulating fluid-like motion, smoke, and turbulence without
+unnatural compression or expansion artifacts.</p>
+<p>The process begins with a 3D vector potential field, denoted as <span
+class="math inline">\(\vec{\Psi}(x, y, z) = (\psi_x, \psi_y,
+\psi_z)\)</span>. The velocity field <span
+class="math inline">\(\vec{v}\)</span> is obtained by taking the
+mathematical curl of <span
+class="math inline">\(\vec{\Psi}\)</span>:</p>
+<p><span class="math display">\[\vec{v} = \nabla \times
+\vec{\Psi}\]</span></p>
+<p>According to vector calculus identities, the divergence of the curl
+of any twice continuously differentiable vector field is identically
+zero:</p>
+<p><span class="math display">\[\nabla \cdot (\nabla \times \vec{\Psi})
+= 0\]</span></p>
+<p>Because the divergence is zero, the resulting field is
+incompressible.</p>
+<p>Expanded into Cartesian coordinates, the individual velocity
+components are computed as:</p>
+<p><span class="math display">\[v_x = \frac{\partial \psi_z}{\partial y}
+- \frac{\partial \psi_y}{\partial z}\]</span></p>
+<p><span class="math display">\[v_y = \frac{\partial \psi_x}{\partial z}
+- \frac{\partial \psi_z}{\partial x}\]</span></p>
+<p><span class="math display">\[v_z = \frac{\partial \psi_y}{\partial x}
+- \frac{\partial \psi_x}{\partial y}\]</span></p>
+<h2 id="defining-the-analytical-potential-field">Defining the Analytical
+Potential Field</h2>
+<p>To generate varied and organic patterns, the vector potential field
+<span class="math inline">\(\vec{\Psi}(p)\)</span> can be constructed by
+combining three independent scalar potential fields. Common choices
+include analytic trigonometric functions, Perlin noise, or Simplex
+noise:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">potentialField</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Example using three offset scalar noise calls or analytical functions</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> psiX <span class="op">=</span> <span class="fu">snoise</span><span class="op">(</span>p <span class="op">+</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">));</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> psiY <span class="op">=</span> <span class="fu">snoise</span><span class="op">(</span>p <span class="op">+</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">43.12</span><span class="op">,</span> <span class="fl">17.56</span><span class="op">,</span> <span class="fl">11.23</span><span class="op">));</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> psiZ <span class="op">=</span> <span class="fu">snoise</span><span class="op">(</span>p <span class="op">+</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">123.4</span><span class="op">,</span> <span class="fl">78.9</span><span class="op">,</span> <span class="fl">45.6</span><span class="op">));</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span>psiX<span class="op">,</span> psiY<span class="op">,</span> psiZ<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>If the scalar fields are completely analytical (e.g., sums of sine
+and cosine waves), you can calculate the exact partial derivatives
+analytically using the chain rule. However, procedural noise algorithms
+are typically differentiated numerically.</p>
+<h2 id="computing-derivatives-in-glsl">Computing Derivatives in
+GLSL</h2>
+<p>When analytical derivatives of the underlying noise functions are
+complex or unavailable, the partial derivatives can be computed using
+central finite differences. Central differences provide second-order
+accuracy (<span class="math inline">\(O(\epsilon^2)\)</span>) and avoid
+directional bias.</p>
+<p>Given a small sampling step <span
+class="math inline">\(\epsilon\)</span>:</p>
+<p><span class="math display">\[\frac{\partial \psi}{\partial x} \approx
+\frac{\psi(x + \epsilon, y, z) - \psi(x - \epsilon, y,
+z)}{2\epsilon}\]</span></p>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>Below is a complete GLSL function that samples a potential field and
+computes the 3D curl:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">computeCurl</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">,</span> <span class="dt">float</span> epsilon<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> e <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span>epsilon<span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Partial derivatives with respect to X</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dPsi_dx <span class="op">=</span> <span class="op">(</span><span class="fu">potentialField</span><span class="op">(</span>p <span class="op">+</span> e<span class="op">.</span><span class="fu">xyy</span><span class="op">)</span> <span class="op">-</span> <span class="fu">potentialField</span><span class="op">(</span>p <span class="op">-</span> e<span class="op">.</span><span class="fu">xyy</span><span class="op">))</span> <span class="op">/</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">*</span> epsilon<span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Partial derivatives with respect to Y</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dPsi_dy <span class="op">=</span> <span class="op">(</span><span class="fu">potentialField</span><span class="op">(</span>p <span class="op">+</span> e<span class="op">.</span><span class="fu">yxy</span><span class="op">)</span> <span class="op">-</span> <span class="fu">potentialField</span><span class="op">(</span>p <span class="op">-</span> e<span class="op">.</span><span class="fu">yxy</span><span class="op">))</span> <span class="op">/</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">*</span> epsilon<span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Partial derivatives with respect to Z</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dPsi_dz <span class="op">=</span> <span class="op">(</span><span class="fu">potentialField</span><span class="op">(</span>p <span class="op">+</span> e<span class="op">.</span><span class="fu">yyx</span><span class="op">)</span> <span class="op">-</span> <span class="fu">potentialField</span><span class="op">(</span>p <span class="op">-</span> e<span class="op">.</span><span class="fu">yyx</span><span class="op">))</span> <span class="op">/</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">*</span> epsilon<span class="op">);</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute curl components:</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// v.x = dPsi_z / dy - dPsi_y / dz</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// v.y = dPsi_x / dz - dPsi_z / dx</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// v.z = dPsi_y / dx - dPsi_x / dy</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> curl<span class="op">;</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    curl<span class="op">.</span><span class="fu">x</span> <span class="op">=</span> dPsi_dy<span class="op">.</span><span class="fu">z</span> <span class="op">-</span> dPsi_dz<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    curl<span class="op">.</span><span class="fu">y</span> <span class="op">=</span> dPsi_dz<span class="op">.</span><span class="fu">x</span> <span class="op">-</span> dPsi_dx<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    curl<span class="op">.</span><span class="fu">z</span> <span class="op">=</span> dPsi_dx<span class="op">.</span><span class="fu">y</span> <span class="op">-</span> dPsi_dy<span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> curl<span class="op">;</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="performance-considerations">Performance Considerations</h2>
+<ol type="1">
+<li><strong>Sampling Overhead:</strong> Using central differences
+requires 6 evaluations of the vector potential field (or 18 individual
+scalar noise evaluations). If performance is constrained, forward
+differences require only 3 vector samples (plus the evaluation at <span
+class="math inline">\(p\)</span>), though this sacrifices numerical
+symmetry.</li>
+<li><strong>Step Size Selection:</strong> The value of <span
+class="math inline">\(\epsilon\)</span> dictates the fidelity of the
+derivatives. If <span class="math inline">\(\epsilon\)</span> is too
+small, floating-point precision issues arise; if it is too large, fine
+turbulent details are smoothed out. A value between <code>1e-4</code>
+and <code>1e-2</code> relative to the noise frequency typically yields
+the best balance.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

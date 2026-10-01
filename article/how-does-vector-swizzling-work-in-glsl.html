@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does Vector Swizzling Work in GLSL? - glsl</title>
+    <meta name="description" content="Vector component swizzling in OpenGL Shading Language (GLSL) is a syntax feature that allows developers to access, reorder, duplicate, and construct vector components using concise dot-notation. This article explores how swizzle operators work, the disti">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-vector-swizzling-work-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does Vector Swizzling Work in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-vector-swizzling-work-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Vector component swizzling in OpenGL Shading Language (GLSL) is a syntax feature that allows developers to access, reorder, duplicate, and construct vector components using concise dot-notation. This article explores how swizzle operators work, the disti" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-vector-swizzling-work-in-glsl">How Does Vector
+Swizzling Work in GLSL?</h1>
+<p>Vector component swizzling in OpenGL Shading Language (GLSL) is a
+syntax feature that allows developers to access, reorder, duplicate, and
+construct vector components using concise dot-notation. This article
+explores how swizzle operators work, the distinct component naming sets
+available, rules for using swizzles as r-values and l-values, and common
+practical use cases in shader development.</p>
+<h2 id="vector-component-sets">Vector Component Sets</h2>
+<p>GLSL provides built-in vector types (<code>vec2</code>,
+<code>vec3</code>, <code>vec4</code>) for floating-point values, as well
+as integer (<code>ivec</code>), unsigned integer (<code>uvec</code>),
+and boolean (<code>bvec</code>) variants. To access the internal
+components of these vectors, GLSL defines three interchangeable naming
+sets:</p>
+<ul>
+<li><strong>Positions:</strong> <code>x</code>, <code>y</code>,
+<code>z</code>, <code>w</code></li>
+<li><strong>Colors:</strong> <code>r</code>, <code>g</code>,
+<code>b</code>, <code>a</code></li>
+<li><strong>Texture coordinates:</strong> <code>s</code>,
+<code>t</code>, <code>p</code>, <code>q</code></li>
+</ul>
+<p>Each set corresponds to indices 0, 1, 2, and 3 in the vector array.
+For example, in a <code>vec4</code>, <code>v.x</code>, <code>v.r</code>,
+and <code>v.s</code> all access the first component.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> data <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">2.0</span><span class="op">,</span> <span class="fl">3.0</span><span class="op">,</span> <span class="fl">4.0</span><span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> first  <span class="op">=</span> data<span class="op">.</span><span class="fu">x</span><span class="op">;</span> <span class="co">// 1.0</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> second <span class="op">=</span> data<span class="op">.</span><span class="fu">g</span><span class="op">;</span> <span class="co">// 2.0</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> third  <span class="op">=</span> data<span class="op">.</span><span class="fu">p</span><span class="op">;</span> <span class="co">// 3.0</span></span></code></pre></div>
+<p>GLSL requires that you do not mix different naming sets within a
+single swizzle expression. For instance, <code>data.xy</code> is valid,
+but <code>data.xg</code> will cause a compile-time error.</p>
+<h2 id="reading-and-reordering-components">Reading and Reordering
+Components</h2>
+<p>When reading from a vector (using swizzle as an r-value), components
+can be extracted in any order, repeated, or truncated to produce a new
+vector of matching length.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> original <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">2.0</span><span class="op">,</span> <span class="fl">3.0</span><span class="op">,</span> <span class="fl">4.0</span><span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Selecting and reordering</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> reversed <span class="op">=</span> original<span class="op">.</span><span class="fu">zyx</span><span class="op">;</span>      <span class="co">// vec3(3.0, 2.0, 1.0)</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Duplicating components</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> repeated <span class="op">=</span> original<span class="op">.</span><span class="fu">xxxx</span><span class="op">;</span>     <span class="co">// vec4(1.0, 1.0, 1.0, 1.0)</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Creating subsets</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> coords   <span class="op">=</span> original<span class="op">.</span><span class="fu">xy</span><span class="op">;</span>       <span class="co">// vec2(1.0, 2.0)</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> rgb      <span class="op">=</span> original<span class="op">.</span><span class="fu">rgb</span><span class="op">;</span>      <span class="co">// vec3(1.0, 2.0, 3.0)</span></span></code></pre></div>
+<p>The resulting type depends strictly on the number of swizzled fields:
+one field yields a scalar (<code>float</code>), two yield a
+<code>vec2</code>, three yield a <code>vec3</code>, and four yield a
+<code>vec4</code>.</p>
+<h2 id="writing-to-components">Writing to Components</h2>
+<p>Swizzling can also be used on the left-hand side of an assignment (as
+an l-value) to modify specific channels of a target vector.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> color <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>color<span class="op">.</span><span class="fu">rgb</span> <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.5</span><span class="op">,</span> <span class="fl">0.2</span><span class="op">);</span> <span class="co">// color is now (1.0, 0.5, 0.2, 0.0)</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>color<span class="op">.</span><span class="fu">a</span> <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span>                   <span class="co">// color is now (1.0, 0.5, 0.2, 1.0)</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>color<span class="op">.</span><span class="fu">ba</span> <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.8</span><span class="op">,</span> <span class="fl">0.9</span><span class="op">);</span>       <span class="co">// color is now (1.0, 0.5, 0.8, 0.9)</span></span></code></pre></div>
+<p>When swizzling as an l-value, two primary restrictions apply:</p>
+<ol type="1">
+<li><strong>No Duplicates:</strong> You cannot repeat components on the
+left side of an assignment. An expression like
+<code>color.xx = vec2(1.0, 2.0);</code> is invalid because the compiler
+cannot determine which value should be written to the <code>x</code>
+component.</li>
+<li><strong>Dimension Matching:</strong> The number of components in the
+swizzle selector must match the dimensions of the expression on the
+right side.</li>
+</ol>
+<h2 id="practical-applications">Practical Applications</h2>
+<p>Swizzling reduces boilerplate code and improves performance by
+minimizing intermediate variable declarations in shader pipelines:</p>
+<ul>
+<li><strong>Alpha Extraction and Masking:</strong> Easily separate RGB
+color data from alpha values when compositing textures.</li>
+<li><strong>Coordinate Transformations:</strong> Convert 3D world
+coordinates to 2D screen positions via <code>pos.xy / pos.w</code>.</li>
+<li><strong>Color Conversions:</strong> Reorder color channels (such as
+converting RGBA to BGRA formats) directly with
+<code>color.bgra</code>.</li>
+<li><strong>Normal Map Unpacking:</strong> Convert compressed 2D normal
+maps to 3D surface vectors using combined swizzling and scalar
+arithmetic.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

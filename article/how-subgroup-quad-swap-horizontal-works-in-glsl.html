@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How subgroupQuadSwapHorizontal Works in GLSL - glsl</title>
+    <meta name="description" content="The subgroupQuadSwapHorizontal function in GLSL allows invocations within a 2x2 execution quad to directly swap values horizontally with their immediate neighbor. This article breaks down the quad execution model in graphics hardware, explains the lane-m">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-subgroup-quad-swap-horizontal-works-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How subgroupQuadSwapHorizontal Works in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-subgroup-quad-swap-horizontal-works-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The subgroupQuadSwapHorizontal function in GLSL allows invocations within a 2x2 execution quad to directly swap values horizontally with their immediate neighbor. This article breaks down the quad execution model in graphics hardware, explains the lane-m" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-subgroupquadswaphorizontal-works-in-glsl">How
+subgroupQuadSwapHorizontal Works in GLSL</h1>
+<p>The <code>subgroupQuadSwapHorizontal</code> function in GLSL allows
+invocations within a 2x2 execution quad to directly swap values
+horizontally with their immediate neighbor. This article breaks down the
+quad execution model in graphics hardware, explains the lane-mapping
+mechanics that govern horizontal data exchanges, and illustrates how
+shader invocations execute these operations directly at the register
+level without relying on shared memory or memory barriers.</p>
+<h3 id="the-2x2-quad-layout">The 2x2 Quad Layout</h3>
+<p>Modern GPUs execute fragment shaders in aligned 2x2 clusters of
+pixels known as quads. These quads are essential for calculating
+screen-space derivatives (such as <code>dFdx</code> and
+<code>dFdy</code>) used in texture level-of-detail operations. Within a
+subgroup—often referred to as a warp or wavefront—threads are assigned
+indices that map to these 2x2 arrangements.</p>
+<p>In GLSL, using the <code>GL_KHR_shader_subgroup_quad</code>
+extension, the four invocations in each quad are arranged in a localized
+coordinate grid:</p>
+<ul>
+<li><strong>Lane 0</strong>: Top-left pixel <code>(x, y)</code></li>
+<li><strong>Lane 1</strong>: Top-right pixel
+<code>(x + 1, y)</code></li>
+<li><strong>Lane 2</strong>: Bottom-left pixel
+<code>(x, y + 1)</code></li>
+<li><strong>Lane 3</strong>: Bottom-right pixel
+<code>(x + 1, y + 1)</code></li>
+</ul>
+<h3 id="the-horizontal-swap-mechanism">The Horizontal Swap
+Mechanism</h3>
+<p><code>subgroupQuadSwapHorizontal</code> exchanges the provided
+expression's value between adjacent horizontal lanes in the same quad.
+The operation targets the X-axis neighbor while keeping the Y-axis
+constant.</p>
+<p>The exchange follows this mapping:</p>
+<ul>
+<li>Invocation 0 reads the value from Invocation 1, and Invocation 1
+reads the value from Invocation 0.</li>
+<li>Invocation 2 reads the value from Invocation 3, and Invocation 3
+reads the value from Invocation 2.</li>
+</ul>
+<p>At the hardware execution level, this mapping corresponds to a
+bitwise XOR of the relative quad index with <code>1</code>
+(<code>relative_lane_id ^ 0x1</code>):</p>
+<pre><code>0 (00b) ^ 1 = 1 (01b)
+1 (01b) ^ 1 = 0 (00b)
+2 (10b) ^ 1 = 3 (11b)
+3 (11b) ^ 1 = 2 (10b)</code></pre>
+<p>Because the swap occurs across the horizontal boundary, vertical
+pairings (such as 0 with 2, or 1 with 3) remain unaffected.</p>
+<h3 id="syntax-and-implementation">Syntax and Implementation</h3>
+<p>To use this operation, the subgroup quad extension must be enabled in
+the shader:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_KHR_shader_subgroup_quad : enable</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> localValue <span class="op">=</span> <span class="op">...;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Retrieve the value from the horizontally adjacent pixel in the quad</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> neighborValue <span class="op">=</span> <span class="fu">subgroupQuadSwapHorizontal</span><span class="op">(</span>localValue<span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute custom horizontal finite differences</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> horizontalDifference <span class="op">=</span> localValue <span class="op">-</span> neighborValue<span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="hardware-execution-and-performance">Hardware Execution and
+Performance</h3>
+<p>Unlike compute shader shared memory (<code>shared</code> variables)
+or texture lookups, <code>subgroupQuadSwapHorizontal</code> does not
+access the memory subsystem or GPU caches. Instead, it relies on
+hardware shuffle or crossbar network routing within the execution
+unit.</p>
+<p>This provides several performance characteristics:</p>
+<ul>
+<li><strong>Zero Memory Latency</strong>: Data moves directly between
+SIMD lane registers.</li>
+<li><strong>Implicit Synchronization</strong>: Invocations within the
+quad execute the instruction in lockstep, eliminating the need for
+execution barriers like <code>memoryBarrierShared()</code> or
+<code>barrier()</code>.</li>
+<li><strong>Uniform Execution Requirement</strong>: All invocations in
+the quad must participate in the call. If invocations diverge due to
+branching, inactive invocations will result in undefined values for
+their corresponding partners.</li>
+</ul>
+<p>This horizontal exchange mechanism is commonly used for custom image
+filtering, spatial reconstruction, anti-aliasing techniques, and
+building manual finite-difference approximations without accessing
+off-chip memory.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

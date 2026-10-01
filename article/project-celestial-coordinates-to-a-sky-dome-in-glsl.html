@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Celestial Coordinates to a Sky Dome in GLSL - glsl</title>
+    <meta name="description" content="Projecting celestial coordinates onto a 3D hemispherical sky dome requires transforming spherical angles into Cartesian unit vectors. This article outlines the mathematical formulas used to convert celestial coordinates—both horizontal (Altitude/Azimut">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/project-celestial-coordinates-to-a-sky-dome-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Project Celestial Coordinates to a Sky Dome in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/project-celestial-coordinates-to-a-sky-dome-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Projecting celestial coordinates onto a 3D hemispherical sky dome requires transforming spherical angles into Cartesian unit vectors. This article outlines the mathematical formulas used to convert celestial coordinates—both horizontal (Altitude/Azimut" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="project-celestial-coordinates-to-a-sky-dome-in-glsl">Project
+Celestial Coordinates to a Sky Dome in GLSL</h1>
+<p>Projecting celestial coordinates onto a 3D hemispherical sky dome
+requires transforming spherical angles into Cartesian unit vectors. This
+article outlines the mathematical formulas used to convert celestial
+coordinates—both horizontal (Altitude/Azimuth) and equatorial (Right
+Ascension/Declination)—into local 3D coordinates, followed by optimized
+GLSL shader implementations for real-time rendering.</p>
+<h2 id="coordinate-systems-overview">Coordinate Systems Overview</h2>
+<p>Rendering a celestial sky dome typically involves two primary
+systems:</p>
+<ol type="1">
+<li><strong>Equatorial Coordinates</strong>: Right Ascension (<span
+class="math inline">\(\alpha\)</span> or <span
+class="math inline">\(\text{RA}\)</span>) and Declination (<span
+class="math inline">\(\delta\)</span> or <span
+class="math inline">\(\text{Dec}\)</span>). These represent fixed
+positions on the celestial sphere.</li>
+<li><strong>Horizontal Coordinates</strong>: Azimuth (<span
+class="math inline">\(A\)</span>) and Altitude (<span
+class="math inline">\(a\)</span> or Elevation). These represent the
+observer's local view, where Altitude ranges from <span
+class="math inline">\(0^\circ\)</span> to <span
+class="math inline">\(90^\circ\)</span> (horizon to zenith) and Azimuth
+ranges from <span class="math inline">\(0^\circ\)</span> to <span
+class="math inline">\(360^\circ\)</span>.</li>
+</ol>
+<p>In graphics pipelines, the sky dome is typically modeled as a unit
+hemisphere where the vertical axis represents the observer's zenith
+(commonly the <span class="math inline">\(+Y\)</span> axis).</p>
+<hr />
+<h2 id="direct-horizontal-projection-formula">Direct Horizontal
+Projection Formula</h2>
+<p>If coordinates are already in Altitude (<span
+class="math inline">\(a\)</span>) and Azimuth (<span
+class="math inline">\(A\)</span>), the projection to a Cartesian unit
+vector <span class="math inline">\(\vec{P} = (x, y, z)\)</span> on a
+hemisphere where <span class="math inline">\(+Y\)</span> is Up, <span
+class="math inline">\(+Z\)</span> is North, and <span
+class="math inline">\(+X\)</span> is East is:</p>
+<p><span class="math display">\[x = \cos(a) \sin(A)\]</span> <span
+class="math display">\[y = \sin(a)\]</span> <span
+class="math display">\[z = \cos(a) \cos(A)\]</span></p>
+<p>For a standard OpenGL camera space where North is <span
+class="math inline">\(-Z\)</span>:</p>
+<p><span class="math display">\[x = \cos(a) \sin(A)\]</span> <span
+class="math display">\[y = \sin(a)\]</span> <span
+class="math display">\[z = -\cos(a) \cos(A)\]</span></p>
+<hr />
+<h2 id="converting-equatorial-radec-to-horizontal-altaz">Converting
+Equatorial (RA/Dec) to Horizontal (Alt/Az)</h2>
+<p>To place stars defined by Right Ascension (<span
+class="math inline">\(\alpha\)</span>) and Declination (<span
+class="math inline">\(\delta\)</span>) onto a local sky dome, transform
+them using the observer's geographic latitude (<span
+class="math inline">\(\phi\)</span>) and Local Sidereal Time (<span
+class="math inline">\(\text{LST}\)</span>).</p>
+<h3 id="1-calculate-the-local-hour-angle-h">1. Calculate the Local Hour
+Angle (<span class="math inline">\(H\)</span>)</h3>
+<p><span class="math display">\[H = \text{LST} - \alpha\]</span></p>
+<h3 id="2-calculate-altitude-a">2. Calculate Altitude (<span
+class="math inline">\(a\)</span>)</h3>
+<p><span class="math display">\[\sin(a) = \sin(\phi) \sin(\delta) +
+\cos(\phi) \cos(\delta) \cos(H)\]</span> <span class="math display">\[a
+= \arcsin(\sin(a))\]</span></p>
+<h3 id="3-calculate-azimuth-a">3. Calculate Azimuth (<span
+class="math inline">\(A\)</span>)</h3>
+<p><span class="math display">\[\cos(A) = \frac{\sin(\delta) -
+\sin(\phi) \sin(a)}{\cos(\phi) \cos(a)}\]</span></p>
+<p>Using the two-argument arctangent for quadrant correctness:</p>
+<p><span class="math display">\[A = \text{atan2}(-\sin(H) \cos(\delta),
+\cos(\phi) \sin(\delta) - \sin(\phi) \cos(\delta) \cos(H))\]</span></p>
+<hr />
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>The following GLSL functions demonstrate projecting both coordinate
+types onto a hemispherical unit dome.</p>
+<h3 id="projecting-altitude-and-azimuth">Projecting Altitude and
+Azimuth</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Converts Altitude and Azimuth (in radians) to a unit vector on the hemisphere</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">// +Y = Zenith, +X = East, -Z = North</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">horizontalToDome</span><span class="op">(</span><span class="dt">float</span> altitude<span class="op">,</span> <span class="dt">float</span> azimuth<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosAlt <span class="op">=</span> <span class="bu">cos</span><span class="op">(</span>altitude<span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        cosAlt <span class="op">*</span> <span class="bu">sin</span><span class="op">(</span>azimuth<span class="op">),</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">sin</span><span class="op">(</span>altitude<span class="op">),</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span>cosAlt <span class="op">*</span> <span class="bu">cos</span><span class="op">(</span>azimuth<span class="op">)</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="full-equatorial-radec-projection-matrix">Full Equatorial
+(RA/Dec) Projection Matrix</h3>
+<p>Instead of computing trigonometric conversions per vertex or
+fragment, you can project equatorial coordinates into a rotating
+equatorial Cartesian frame and multiply by an observer orientation
+matrix.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Converts RA and Dec directly to a celestial unit vector (+Y = Celestial North Pole)</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">celestialToCartesian</span><span class="op">(</span><span class="dt">float</span> ra<span class="op">,</span> <span class="dt">float</span> dec<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosDec <span class="op">=</span> <span class="bu">cos</span><span class="op">(</span>dec<span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        cosDec <span class="op">*</span> <span class="bu">cos</span><span class="op">(</span>ra<span class="op">),</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">sin</span><span class="op">(</span>dec<span class="op">),</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        cosDec <span class="op">*</span> <span class="bu">sin</span><span class="op">(</span>ra<span class="op">)</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="co">// Transform equatorial vector to local horizontal sky dome</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">equatorialToLocalDome</span><span class="op">(</span><span class="dt">vec3</span> eqDir<span class="op">,</span> <span class="dt">float</span> lat<span class="op">,</span> <span class="dt">float</span> lst<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Rotate by Local Sidereal Time around the celestial pole (Y axis)</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosLST <span class="op">=</span> <span class="bu">cos</span><span class="op">(</span>lst<span class="op">);</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sinLST <span class="op">=</span> <span class="bu">sin</span><span class="op">(</span>lst<span class="op">);</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat3</span> rotLST <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        cosLST<span class="op">,</span>  <span class="fl">0.0</span><span class="op">,</span> sinLST<span class="op">,</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        <span class="fl">0.0</span><span class="op">,</span>     <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span>sinLST<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> cosLST</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> hourAngleDir <span class="op">=</span> rotLST <span class="op">*</span> eqDir<span class="op">;</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Rotate by observer colatitude (90 deg - latitude) around X axis to align Zenith to +Y</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> angle <span class="op">=</span> <span class="fl">1.57079632679</span> <span class="op">-</span> lat<span class="op">;</span> <span class="co">// PI/2 - latitude</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosLat <span class="op">=</span> <span class="bu">cos</span><span class="op">(</span>angle<span class="op">);</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sinLat <span class="op">=</span> <span class="bu">sin</span><span class="op">(</span>angle<span class="op">);</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat3</span> rotLat <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>        <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span>     <span class="fl">0.0</span><span class="op">,</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>        <span class="fl">0.0</span><span class="op">,</span> cosLat<span class="op">,</span> <span class="op">-</span>sinLat<span class="op">,</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>        <span class="fl">0.0</span><span class="op">,</span> sinLat<span class="op">,</span>  cosLat</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> rotLat <span class="op">*</span> hourAngleDir<span class="op">;</span></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="mapping-dome-direction-to-2d-planar-dome-textures">Mapping Dome
+Direction to 2D Planar Dome Textures</h3>
+<p>To project a hemisphere direction vector <code>vec3 dir</code> (where
+<code>dir.y &gt;= 0.0</code>) onto a 2D circular fish-eye texture
+map:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">domeToUV</span><span class="op">(</span><span class="dt">vec3</span> dir<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Equidistant fisheye projection</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> r <span class="op">=</span> <span class="bu">atan</span><span class="op">(</span><span class="bu">length</span><span class="op">(</span>dir<span class="op">.</span><span class="fu">xz</span><span class="op">),</span> dir<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">/</span> <span class="fl">1.57079632679</span><span class="op">;</span> <span class="co">// Normalized radius [0, 1]</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> normXZ <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>dir<span class="op">.</span><span class="fu">xz</span><span class="op">);</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> normXZ <span class="op">*</span> <span class="op">(</span>r <span class="op">*</span> <span class="fl">0.5</span><span class="op">)</span> <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.5</span><span class="op">);</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

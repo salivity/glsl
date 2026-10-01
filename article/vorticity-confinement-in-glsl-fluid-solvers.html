@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vorticity Confinement in GLSL Fluid Solvers - glsl</title>
+    <meta name="description" content="Vorticity confinement is the standard algorithmic technique used in real-time GLSL fluid simulations to counteract numerical dissipation and regenerate turbulent micro-details. In grid-based Eulerian solvers, semi-Lagrangian advection frequently smooths">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/vorticity-confinement-in-glsl-fluid-solvers">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Vorticity Confinement in GLSL Fluid Solvers - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/vorticity-confinement-in-glsl-fluid-solvers" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Vorticity confinement is the standard algorithmic technique used in real-time GLSL fluid simulations to counteract numerical dissipation and regenerate turbulent micro-details. In grid-based Eulerian solvers, semi-Lagrangian advection frequently smooths" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="vorticity-confinement-in-glsl-fluid-solvers">Vorticity
+Confinement in GLSL Fluid Solvers</h1>
+<p>Vorticity confinement is the standard algorithmic technique used in
+real-time GLSL fluid simulations to counteract numerical dissipation and
+regenerate turbulent micro-details. In grid-based Eulerian solvers,
+semi-Lagrangian advection frequently smooths out small eddies, causing
+smoke, water, and fire to appear overly viscous. By identifying the
+local centers of rotation and injecting artificial momentum back into
+the velocity field, vorticity confinement restores high-frequency
+rotational energy, ensuring fluids retain their chaotic, natural
+appearance without requiring denser simulation grids.</p>
+<h3
+id="the-algorithm-steinhoff-and-underhills-vorticity-confinement">The
+Algorithm: Steinhoff and Underhill's Vorticity Confinement</h3>
+<p>Originally developed by John Steinhoff and David Underhill for
+aerodynamics and later introduced to computer graphics by Ronald Fedkiw,
+Jos Stam, and Henrik Wann Jensen, the vorticity confinement algorithm
+calculates a non-physical body force that pushes energy back into
+swirling regions.</p>
+<p>The algorithm operates in four distinct mathematical steps across the
+discrete simulation grid:</p>
+<h4 id="1-compute-the-vorticity-field">1. Compute the Vorticity
+Field</h4>
+<p>The algorithm first evaluates the curl of the current velocity field
+<span class="math inline">\(\mathbf{u}\)</span>, which yields the
+vorticity vector <span class="math inline">\(\omega\)</span>:</p>
+<p><span class="math display">\[\omega = \nabla \times
+\mathbf{u}\]</span></p>
+<p>In a 2D GLSL simulation, the curl simplifies to a scalar field
+representing rotation along the perpendicular z-axis:</p>
+<p><span class="math display">\[\omega = \frac{\partial u_y}{\partial x}
+- \frac{\partial u_x}{\partial y}\]</span></p>
+<p>In GLSL fragment shaders, this is evaluated using central finite
+differences by sampling neighboring texels (left, right, top, bottom) of
+the velocity texture.</p>
+<h4 id="2-determine-the-vorticity-gradients">2. Determine the Vorticity
+Gradients</h4>
+<p>Next, the solver computes the scalar magnitude of the vorticity,
+<span class="math inline">\(|\omega|\)</span>. It then computes the
+gradient vector <span class="math inline">\(\mathbf{\eta}\)</span> of
+this magnitude:</p>
+<p><span class="math display">\[\mathbf{\eta} = \nabla
+|\omega|\]</span></p>
+<p>This gradient points directly toward the local centers of the
+vortices, where rotation is most intense.</p>
+<h4 id="3-normalize-the-direction-vectors">3. Normalize the Direction
+Vectors</h4>
+<p>To isolate direction from magnitude, <span
+class="math inline">\(\mathbf{\eta}\)</span> is normalized to produce
+unit vector <span class="math inline">\(\mathbf{N}\)</span>:</p>
+<p><span class="math display">\[\mathbf{N} =
+\frac{\mathbf{\eta}}{\|\mathbf{\eta}\|}\]</span></p>
+<p>A small epsilon value is added to the denominator in shader code to
+prevent division-by-zero errors in areas with zero or uniform
+vorticity.</p>
+<h4 id="4-apply-the-confinement-force">4. Apply the Confinement
+Force</h4>
+<p>The confinement force <span
+class="math inline">\(\mathbf{f}_{vc}\)</span> is calculated as the
+cross product of the unit vector <span
+class="math inline">\(\mathbf{N}\)</span> and the original vorticity
+vector <span class="math inline">\(\omega\)</span>, scaled by a
+user-defined strength parameter <span
+class="math inline">\(\epsilon\)</span> and grid spacing <span
+class="math inline">\(h\)</span>:</p>
+<p><span class="math display">\[\mathbf{f}_{vc} = \epsilon h (\mathbf{N}
+\times \omega)\]</span></p>
+<p>This generated force vector acts perpendicular to both the vortex
+direction and the gradient pointing to the vortex center. When added to
+the fluid's velocity field across time step <span
+class="math inline">\(\Delta t\)</span>, it accelerates the rotational
+flow without expanding or compressing the fluid volume, successfully
+counteracting numerical damping while preserving the divergence-free
+nature required by incompressible Navier-Stokes solvers.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

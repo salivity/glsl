@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPIR-V Opcode Insertion with GL_EXT_spirv_intrinsics - glsl</title>
+    <meta name="description" content="The GLEXTspirvintrinsics extension allows developers to inject native SPIR-V instructions, types, and decorations directly into high-level OpenGL Shading Language (GLSL) code. By introducing custom attributes that map to the underlying SPIR-V intermediat">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/spir-v-opcode-insertion-with-gl-ext-spirv-intrinsics">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="SPIR-V Opcode Insertion with GL_EXT_spirv_intrinsics - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/spir-v-opcode-insertion-with-gl-ext-spirv-intrinsics" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The GLEXTspirvintrinsics extension allows developers to inject native SPIR-V instructions, types, and decorations directly into high-level OpenGL Shading Language (GLSL) code. By introducing custom attributes that map to the underlying SPIR-V intermediat" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="spir-v-opcode-insertion-with-gl_ext_spirv_intrinsics">SPIR-V
+Opcode Insertion with GL_EXT_spirv_intrinsics</h1>
+<p>The <code>GL_EXT_spirv_intrinsics</code> extension allows developers
+to inject native SPIR-V instructions, types, and decorations directly
+into high-level OpenGL Shading Language (GLSL) code. By introducing
+custom attributes that map to the underlying SPIR-V intermediate
+representation, this extension enables immediate access to new hardware
+features, vendor extensions, and low-level instructions without
+requiring manual SPIR-V assembly coding or waiting for official
+high-level GLSL syntax updates.</p>
+<p>The extension functions by supplying a family of GLSL attributes that
+inform the front-end compiler (typically <code>glslang</code>) how to
+translate GLSL declarations directly into SPIR-V byte codes. Instead of
+translating high-level GLSL expressions into default abstract syntax
+trees, the compiler emits the explicitly declared opcodes and attributes
+when compiling targeting SPIR-V.</p>
+<h3 id="mapping-instructions-with-spirv_instruction">Mapping
+Instructions with <code>spirv_instruction</code></h3>
+<p>The primary mechanism for inserting opcodes is the
+<code>spirv_instruction</code> attribute. Developers declare a standard
+GLSL function prototype and annotate it with the target SPIR-V opcode ID
+or name:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_spirv_intrinsics : enable</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Map to OpIAdd (opcode 128)</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">[[</span><span class="fu">spirv_instruction</span><span class="op">(</span>id <span class="op">=</span> <span class="dv">128</span><span class="op">)]]</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> <span class="fu">custom_add</span><span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">);</span></span></code></pre></div>
+<p>When <code>custom_add</code> is invoked in shader logic, the compiler
+replaces the call with the specified <code>OpIAdd</code> instruction,
+assigning function arguments to the instruction's input operands and
+capturing the result in the assigned variable.</p>
+<h3 id="declaring-capabilities-and-extensions">Declaring Capabilities
+and Extensions</h3>
+<p>Many low-level SPIR-V opcodes require specific extensions or
+capabilities to validate correctly in the Vulkan or OpenGL runtime.
+<code>GL_EXT_spirv_intrinsics</code> provides attributes to declare
+these dependencies directly on the intrinsics:</p>
+<ul>
+<li><code>spirv_capability(capability_id)</code>: Automatically adds an
+<code>OpCapability</code> requirement to the SPIR-V module header.</li>
+<li><code>spirv_extension("extension_name")</code>: Inserts the
+corresponding <code>OpExtension</code> directive.</li>
+</ul>
+<p>These attributes ensure that downstream drivers recognize and support
+the underlying instruction sets used by the injected code.</p>
+<h3 id="custom-types-with-spirv_type">Custom Types with
+<code>spirv_type</code></h3>
+<p>Standard GLSL lacks representation for certain native types
+introduced by new extensions, such as specialized cooperative matrices,
+ray tracing handles, or variable-width integers. The
+<code>spirv_type</code> attribute allows developers to declare
+placeholder GLSL types mapped directly to SPIR-V type generation
+opcodes:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="op">[[</span><span class="fu">spirv_type</span><span class="op">(</span>id <span class="op">=</span> <span class="dv">20</span><span class="op">)]]</span> <span class="co">// OpTypeFloat with a width operand</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> float16_t<span class="op">;</span></span></code></pre></div>
+<p>This constructs the type at the intermediate representation level,
+enabling arguments and return values of intrinsic functions to utilize
+types not traditionally recognized by standard GLSL.</p>
+<h3 id="applying-decorators-with-spirv_decorate">Applying Decorators
+with <code>spirv_decorate</code></h3>
+<p>To alter the layout, memory semantics, or linkage of variables and
+members, the extension provides <code>spirv_decorate</code>. This
+attribute binds directly to SPIR-V's <code>OpDecorate</code> and
+<code>OpMemberDecorate</code>:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="op">[[</span><span class="fu">spirv_decorate</span><span class="op">(</span>RelaxedPrecision<span class="op">)]]</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> fastCalculation<span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="op">[[</span><span class="fu">spirv_decorate</span><span class="op">(</span>Location<span class="op">,</span> <span class="dv">0</span><span class="op">)]]</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> fragColor<span class="op">;</span></span></code></pre></div>
+<p>This bypasses traditional GLSL layout and qualifier syntax, mapping
+directly to SPIR-V decoration targets.</p>
+<h3 id="compilation-mechanics">Compilation Mechanics</h3>
+<p>During compilation, <code>glslang</code> checks for the presence of
+these attributes during intermediate code generation. When resolving
+intrinsic function calls, the compiler skips normal expression
+evaluation, validates the argument count against the SPIR-V
+specification for the given opcode, and emits the instruction verbatim
+with the designated return type and operand references. The resulting
+binary is valid SPIR-V containing the specified low-level opcodes within
+standard GLSL control flow.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

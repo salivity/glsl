@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How unpackHalf2x16 Works in GLSL - glsl</title>
+    <meta name="description" content="The GLSL built-in function unpackHalf2x16 unpacks a single 32-bit unsigned integer into a two-component 32-bit floating-point vector (vec2). It achieves this by treating the input integer as two contiguous 16-bit chunks, interpreting each chunk as an IEE">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-unpack-half-2-x-16-works-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How unpackHalf2x16 Works in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-unpack-half-2-x-16-works-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The GLSL built-in function unpackHalf2x16 unpacks a single 32-bit unsigned integer into a two-component 32-bit floating-point vector (vec2). It achieves this by treating the input integer as two contiguous 16-bit chunks, interpreting each chunk as an IEE" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-unpackhalf2x16-works-in-glsl">How unpackHalf2x16 Works in
+GLSL</h1>
+<p>The GLSL built-in function <code>unpackHalf2x16</code> unpacks a
+single 32-bit unsigned integer into a two-component 32-bit
+floating-point vector (<code>vec2</code>). It achieves this by treating
+the input integer as two contiguous 16-bit chunks, interpreting each
+chunk as an IEEE 754 half-precision floating-point number (binary16),
+and converting each into a standard 32-bit single-precision float
+(binary32). This process is essential in real-time graphics for
+decompressing packed data such as UV coordinates, normals, or
+half-precision framebuffers to save memory bandwidth.</p>
+<h3 id="bit-splitting">Bit Splitting</h3>
+<p>The function takes a single <code>uint v</code> as its parameter. The
+32-bit integer is divided into two separate 16-bit bitfields:</p>
+<ol type="1">
+<li><strong>Component X (Least Significant Bits):</strong> Extracted
+from bits 0 through 15 (<code>v &amp; 0xFFFFu</code>).</li>
+<li><strong>Component Y (Most Significant Bits):</strong> Extracted from
+bits 16 through 31 (<code>v &gt;&gt; 16u</code>).</li>
+</ol>
+<h3 id="the-16-bit-float-layout-binary16">The 16-Bit Float Layout
+(binary16)</h3>
+<p>Each extracted 16-bit value conforms to the IEEE 754 binary16
+standard, structured as:</p>
+<ul>
+<li><strong>1 Sign Bit (Bit 15):</strong> Determines if the value is
+positive (0) or negative (1).</li>
+<li><strong>5 Exponent Bits (Bits 10–14):</strong> Encodes the exponent
+with a bias of 15.</li>
+<li><strong>10 Mantissa/Fraction Bits (Bits 0–9):</strong> Encodes the
+fractional part with an implicit leading bit of 1 for normalized
+numbers.</li>
+</ul>
+<h3 id="conversion-to-32-bit-float-binary32">Conversion to 32-Bit Float
+(binary32)</h3>
+<p>To produce standard GLSL <code>float</code> values for the returned
+<code>vec2</code>, the hardware converts each 16-bit float into a 32-bit
+float (1 sign bit, 8 exponent bits with a bias of 127, and 23 mantissa
+bits):</p>
+<ul>
+<li><strong>Sign Bit:</strong> The 1-bit sign is copied directly to bit
+31 of the target 32-bit float.</li>
+<li><strong>Exponent:</strong> The 5-bit exponent is re-biased. Because
+the 16-bit bias is 15 and the 32-bit bias is 127, the exponent is
+adjusted by adding the difference (<span class="math inline">\(127 - 15
+= 112\)</span>) to normalized exponents.</li>
+<li><strong>Mantissa:</strong> The 10-bit mantissa is shifted left into
+the higher bits of the 23-bit target mantissa, filling the lower 13 bits
+with zeros.</li>
+</ul>
+<h3 id="special-cases-handling">Special Cases Handling</h3>
+<p>The conversion process automatically handles IEEE 754 floating-point
+edge cases:</p>
+<ul>
+<li><strong>Zero:</strong> If both the exponent and mantissa are zero,
+the result becomes a positive or negative 32-bit zero (<code>+0.0</code>
+or <code>-0.0</code>).</li>
+<li><strong>Subnormal (Denormalized) Numbers:</strong> If the exponent
+is zero and the mantissa is non-zero, the value is normalized during
+conversion or flushed to zero depending on the GPU's floating-point
+handling mode.</li>
+<li><strong>Infinities and NaNs:</strong> If the 5-bit exponent is all
+ones (<code>0x1F</code>), it is converted to a 32-bit infinity (if the
+mantissa is zero) or a 32-bit NaN (if the mantissa is non-zero).</li>
+</ul>
+<h3 id="result-output">Result Output</h3>
+<p>Once both the lower and upper 16-bit segments are transformed into
+standard 32-bit floats, the function returns them combined as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> result<span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>result<span class="op">.</span><span class="fu">x</span> <span class="op">=</span> <span class="fu">convertHalfToFloat</span><span class="op">(</span>uint16_lower<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>result<span class="op">.</span><span class="fu">y</span> <span class="op">=</span> <span class="fu">convertHalfToFloat</span><span class="op">(</span>uint16_upper<span class="op">);</span></span></code></pre></div>
+<p>This operation runs directly on GPU hardware using dedicated
+bit-manipulation and unpacking instructions, ensuring minimal runtime
+overhead.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

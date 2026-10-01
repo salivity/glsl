@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How SPIR-V Reflection Extracts Uniform Offsets and Types - glsl</title>
+    <meta name="description" content="Shader reflection is the automated process of inspecting compiled shader bytecode to reconstruct high-level interface information, such as uniform buffer structures, member variable offsets, and data types, without requiring source code or manual CPU-sid">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-spir-v-reflection-extracts-uniform-offsets-and-types">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How SPIR-V Reflection Extracts Uniform Offsets and Types - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-spir-v-reflection-extracts-uniform-offsets-and-types" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Shader reflection is the automated process of inspecting compiled shader bytecode to reconstruct high-level interface information, such as uniform buffer structures, member variable offsets, and data types, without requiring source code or manual CPU-sid" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-spir-v-reflection-extracts-uniform-offsets-and-types">How
+SPIR-V Reflection Extracts Uniform Offsets and Types</h1>
+<p>Shader reflection is the automated process of inspecting compiled
+shader bytecode to reconstruct high-level interface information, such as
+uniform buffer structures, member variable offsets, and data types,
+without requiring source code or manual CPU-side declarations. In
+SPIR-V, the intermediate language used by Vulkan and modern graphics
+pipelines, this data is preserved systematically within instruction
+streams as IDs, decorations, and type definitions. By parsing these
+opcodes, reflection engines can determine exact GPU memory layouts,
+enabling graphics applications to bind descriptors and marshal CPU data
+to uniform buffers accurately.</p>
+<h3 id="the-anatomy-of-spir-v-modules">The Anatomy of SPIR-V
+Modules</h3>
+<p>A compiled SPIR-V module is a linear sequence of 32-bit words. Each
+logical operation is encoded as an instruction containing an opcode and
+a word count, followed by instruction-specific operands.</p>
+<p>SPIR-V uses a static single assignment (SSA) system driven by
+numerical IDs. When a GLSL uniform block is compiled into SPIR-V, every
+variable, composite structure, and primitive type is assigned an integer
+Result <code>&lt;id&gt;</code>. Shader reflection tools (such as
+SPIRV-Reflect or SPIRV-Cross) reconstruct the interface by making
+sequential passes over these instructions to build a dependency graph
+linking variables, types, and layout metadata.</p>
+<h3 id="locating-uniform-variables-and-descriptors">Locating Uniform
+Variables and Descriptors</h3>
+<p>The reflection process begins by identifying resource interfaces
+declared with uniform-related storage classes:</p>
+<ol type="1">
+<li><strong><code>OpVariable</code> Scanning</strong>: The parser
+filters for <code>OpVariable</code> instructions whose
+<code>Storage Class</code> operand is set to <code>Uniform</code>
+(typical for Uniform Buffer Objects) or <code>StorageBuffer</code>
+(Shader Storage Buffer Objects).</li>
+<li><strong>Binding Retrieval</strong>: The variable's ID is
+cross-referenced with <code>OpDecorate</code> instructions. These
+instructions attach metadata such as <code>DescriptorSet</code> and
+<code>Binding</code> indices:
+<ul>
+<li><code>OpDecorate %var_id DescriptorSet 0</code></li>
+<li><code>OpDecorate %var_id Binding 1</code></li>
+</ul></li>
+</ol>
+<p>These values inform the engine which descriptor set and binding slot
+correspond to the uniform data in memory.</p>
+<h3 id="resolving-uniform-variable-types">Resolving Uniform Variable
+Types</h3>
+<p>To determine what kind of data the uniform variable holds, the
+reflection tool resolves its type chain:</p>
+<ol type="1">
+<li><strong>Pointer Dereferencing</strong>: The <code>OpVariable</code>
+declaration defines a pointer type (<code>OpTypePointer</code>). The
+reflection parser inspects this instruction to extract the underlying
+storage type ID.</li>
+<li><strong>Primitive Types</strong>: Basic elements are declared
+directly via instructions like <code>OpTypeFloat 32</code> (a 32-bit
+float) or <code>OpTypeInt 32 1</code> (a signed 32-bit integer).</li>
+<li><strong>Composite Types</strong>: More complex data types reference
+earlier declared type IDs:
+<ul>
+<li><strong>Vectors (<code>OpTypeVector</code>)</strong>: Points to a
+component scalar type ID and specifies a vector length (e.g., 4 for a
+<code>vec4</code>).</li>
+<li><strong>Matrices (<code>OpTypeMatrix</code>)</strong>: Points to a
+column vector type ID and defines a column count.</li>
+<li><strong>Arrays (<code>OpTypeArray</code>,
+<code>OpTypeRuntimeArray</code>)</strong>: References an element type ID
+and a constant ID defining the array length.</li>
+<li><strong>Structures (<code>OpTypeStruct</code>)</strong>: Declares an
+ordered list of field type IDs representing the members of the uniform
+block.</li>
+</ul></li>
+</ol>
+<p>By recursively traversing these type IDs, the parser constructs a
+complete abstract syntax tree (AST) of the uniform hierarchy.</p>
+<h3 id="extracting-byte-offsets-and-layout-rules">Extracting Byte
+Offsets and Layout Rules</h3>
+<p>GLSL compilers automatically calculate memory alignment rules (such
+as <code>std140</code> or <code>std430</code>) and bake the resulting
+physical byte offsets into the SPIR-V module as decorations. The
+reflection engine extracts this layout data using the following
+instructions:</p>
+<h4 id="member-offsets-opmemberdecorate">Member Offsets
+(<code>OpMemberDecorate</code>)</h4>
+<p>For struct types, the compiler generates
+<code>OpMemberDecorate</code> instructions using the <code>Offset</code>
+decoration:</p>
+<pre class="spirv"><code>OpMemberDecorate %struct_id 0 Offset 0
+OpMemberDecorate %struct_id 1 Offset 16
+OpMemberDecorate %struct_id 2 Offset 32</code></pre>
+<p>The reflection parser reads the structure ID, the zero-based member
+index, and the byte offset literal. This allows the host application to
+copy CPU data directly into the uniform buffer at the exact byte
+locations the GPU expects.</p>
+<h4 id="matrix-and-array-strides">Matrix and Array Strides</h4>
+<p>Memory offsets for matrices and arrays require supplementary layout
+decorations to account for padding and memory alignment:</p>
+<ul>
+<li><strong><code>MatrixStride</code></strong>: Applied via
+<code>OpMemberDecorate</code> to define the byte distance between
+consecutive columns (or rows) in a matrix.</li>
+<li><strong><code>RowMajor</code> / <code>ColMajor</code></strong>:
+Specifies the storage orientation of the matrix in memory.</li>
+<li><strong><code>ArrayStride</code></strong>: Applied to array types
+via <code>OpDecorate</code> to dictate the byte spacing between
+consecutive array elements, factoring in required alignment
+padding.</li>
+</ul>
+<h3 id="reconstructing-the-interface">Reconstructing the Interface</h3>
+<p>Once the entire instruction stream is processed, the reflection tool
+pairs each variable name (retrieved from non-functional
+<code>OpName</code> and <code>OpMemberName</code> debug instructions)
+with its corresponding descriptor binding, type size, and calculated
+byte offset.</p>
+<p>The resulting metadata map provides the host application with
+complete structural knowledge of the uniform block, ensuring that
+runtime data uploads adhere strictly to the target GPU's memory
+alignment requirements.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

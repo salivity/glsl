@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPIR-V Reflection: Descriptor Sets and Locations - glsl</title>
+    <meta name="description" content="Shader reflection is the process of inspecting compiled shader binaries to automatically deduce their resource interface without relying on hardcoded application bindings. When GLSL is compiled into Standard Portable Intermediate Representation (SPIR-V),">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/spir-v-reflection-descriptor-sets-and-locations">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="SPIR-V Reflection: Descriptor Sets and Locations - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/spir-v-reflection-descriptor-sets-and-locations" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Shader reflection is the process of inspecting compiled shader binaries to automatically deduce their resource interface without relying on hardcoded application bindings. When GLSL is compiled into Standard Portable Intermediate Representation (SPIR-V)," />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="spir-v-reflection-descriptor-sets-and-locations">SPIR-V
+Reflection: Descriptor Sets and Locations</h1>
+<p>Shader reflection is the process of inspecting compiled shader
+binaries to automatically deduce their resource interface without
+relying on hardcoded application bindings. When GLSL is compiled into
+Standard Portable Intermediate Representation (SPIR-V), metadata such as
+descriptor set indices, binding slots, and input/output locations are
+retained as explicit decorations attached to internal IDs. By traversing
+the linear stream of 32-bit words comprising a SPIR-V module, reflection
+tools map variables to their storage types, parse execution interfaces,
+and reconstruct the exact pipeline layout required by graphics APIs like
+Vulkan.</p>
+<h3 id="the-anatomy-of-spir-v-instructions">The Anatomy of SPIR-V
+Instructions</h3>
+<p>A SPIR-V binary is an ordered stream of 32-bit unsigned integer
+words. The module begins with a five-word header defining the magic
+number (<code>0x07230203</code>), the version specification, generator
+ID, bound (the maximum ID value plus one), and schema information.</p>
+<p>Following the header, the binary consists entirely of instructions.
+Each instruction is packed into words where the high 16 bits define the
+word count (length of the instruction), and the low 16 bits represent
+the opcode (<code>OpCode</code>). Reflection parsers read this stream
+sequentially, storing intermediate values based on numeric IDs assigned
+by the compiler to types, constants, variables, and decorations.</p>
+<h3 id="extracting-metadata-via-opdecorate">Extracting Metadata via
+OpDecorate</h3>
+<p>GLSL layout qualifiers are converted by compilers (such as
+<code>glslang</code>) into specific SPIR-V decoration instructions:</p>
+<ul>
+<li><code>layout(set = S, binding = B)</code> becomes two separate
+instructions: <code>OpDecorate %id DescriptorSet S</code> and
+<code>OpDecorate %id Binding B</code>.</li>
+<li><code>layout(location = L)</code> becomes
+<code>OpDecorate %id Location L</code>.</li>
+<li>Flat or non-interpolated qualifiers map to decorations like
+<code>OpDecorate %id Flat</code>.</li>
+</ul>
+<p>Reflection engines maintain a lookup table indexed by ID. When the
+parser encounters an <code>OpDecorate</code> or
+<code>OpMemberDecorate</code> opcode, it reads the target ID, the
+decoration enum (such as <code>Binding = 33</code> or
+<code>DescriptorSet = 34</code>), and any associated literal parameters.
+The extracted values are stored in the entry corresponding to that ID
+for later cross-referencing.</p>
+<h3 id="resolving-variables-and-types">Resolving Variables and
+Types</h3>
+<p>Decorations alone do not provide complete context; they must be
+paired with concrete variable definitions. The parser locates
+<code>OpVariable</code> instructions to identify distinct resources:</p>
+<ol type="1">
+<li><strong>Storage Class Inspection:</strong> Every
+<code>OpVariable</code> declares a Storage Class (such as
+<code>Uniform</code>, <code>StorageBuffer</code>, <code>Image</code>,
+<code>UniformConstant</code>, <code>Input</code>, or
+<code>Output</code>). Variables marked as <code>Input</code> or
+<code>Output</code> represent stage interface attributes, while
+<code>Uniform</code> and <code>UniformConstant</code> typically
+represent descriptor-backed resources.</li>
+<li><strong>Type Pointer Resolution:</strong> The
+<code>OpVariable</code> instruction points to a result type defined by
+an <code>OpTypePointer</code>. The reflection tool unwraps this pointer
+to find the underlying base type.</li>
+<li><strong>Descriptor Classification:</strong>
+<ul>
+<li>If the type resolves to <code>OpTypeImage</code> or
+<code>OpTypeSampledImage</code>, the resource is a texture or combined
+image sampler.</li>
+<li>If the type resolves to <code>OpTypeSampler</code>, it represents a
+separate sampler state.</li>
+<li>If the type resolves to <code>OpTypeStruct</code>, the parser
+determines whether it is an explicit Uniform Buffer Object (UBO) or
+Shader Storage Buffer Object (SSBO) based on whether the struct is
+decorated with <code>Block</code> or <code>BufferBlock</code>.</li>
+</ul></li>
+</ol>
+<h3 id="associating-locations-and-sets-with-variables">Associating
+Locations and Sets with Variables</h3>
+<p>Once types and variables are identified, the reflection engine
+reconciles them with the collected decoration map:</p>
+<ul>
+<li><strong>Descriptor Sets and Bindings:</strong> The variable's ID is
+queried against the decoration table. The parser extracts the values
+stored under <code>DescriptorSet</code> and <code>Binding</code>. If a
+variable lacks an explicit <code>DescriptorSet</code> decoration, the
+SPIR-V specification defaults the set index to <code>0</code>.</li>
+<li><strong>Pipeline Locations:</strong> For <code>Input</code> and
+<code>Output</code> storage classes, the variable's ID is checked for a
+<code>Location</code> decoration. In the case of struct-based interfaces
+or array inputs (such as tessellation or geometry stages), members may
+instead be decorated with individual <code>Location</code> offsets via
+<code>OpMemberDecorate</code>.</li>
+</ul>
+<h3 id="handling-active-interface-pruning">Handling Active Interface
+Pruning</h3>
+<p>A compiled SPIR-V module may contain declarations for resources that
+are not actively used by every entry point. Reflection tools read the
+<code>OpEntryPoint</code> instruction, which specifies the execution
+model (e.g., <code>Vertex</code>, <code>Fragment</code>), the entry
+point name (e.g., <code>"main"</code>), and an interface list containing
+the IDs of all global variables accessed by that entry point. Robust
+reflection engines filter their output against this interface list to
+ensure only resources actively referenced by the specified shader stage
+are exposed to the pipeline layout generator.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

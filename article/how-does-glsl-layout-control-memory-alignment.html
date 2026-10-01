@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does GLSL Layout Control Memory Alignment? - glsl</title>
+    <meta name="description" content="The layout qualifier in GLSL governs how shader data is structured, aligned, and mapped to GPU memory buffers. By specifying layout qualifiers such as std140, std430, offset, and align, developers enforce deterministic binary interfaces between host CPU">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-glsl-layout-control-memory-alignment">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does GLSL Layout Control Memory Alignment? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-glsl-layout-control-memory-alignment" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The layout qualifier in GLSL governs how shader data is structured, aligned, and mapped to GPU memory buffers. By specifying layout qualifiers such as std140, std430, offset, and align, developers enforce deterministic binary interfaces between host CPU" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-glsl-layout-control-memory-alignment">How Does GLSL
+Layout Control Memory Alignment?</h1>
+<p>The <code>layout</code> qualifier in GLSL governs how shader data is
+structured, aligned, and mapped to GPU memory buffers. By specifying
+layout qualifiers such as <code>std140</code>, <code>std430</code>,
+<code>offset</code>, and <code>align</code>, developers enforce
+deterministic binary interfaces between host CPU application code and
+GPU shaders. Understanding these qualifiers is critical for avoiding
+padding discrepancies, buffer corruption, and performance overhead in
+uniform buffer objects (UBOs) and shader storage buffer objects
+(SSBOs).</p>
+<h2 id="core-buffer-memory-layouts-std140-vs-std430">Core Buffer Memory
+Layouts: std140 vs. std430</h2>
+<p>GLSL defines two primary standard layout rules that govern automatic
+offset calculation and member packing.</p>
+<ul>
+<li><strong>std140 (Standard Uniform Block Layout):</strong> Primarily
+designed for Uniform Buffer Objects (UBOs). It enforces strict,
+hardware-friendly alignment rules where composite types and array
+elements are aggressively padded to 16-byte boundaries (the size of a
+<code>vec4</code>). Even an array of basic floats
+(<code>float data[4]</code>) allocates 16 bytes per float element under
+<code>std140</code>, introducing substantial memory padding.</li>
+<li><strong>std430 (Standard Storage Block Layout):</strong> Available
+for Shader Storage Buffer Objects (SSBOs). <code>std430</code> relaxes
+the aggressive padding rules of <code>std140</code>. Array elements and
+structure members retain their natural alignment—for example, elements
+in <code>float data[4]</code> are tightly packed at 4-byte intervals
+rather than 16 bytes.</li>
+</ul>
+<h2 id="standard-alignment-and-offset-rules">Standard Alignment and
+Offset Rules</h2>
+<p>Under standard packing layouts, GLSL calculates memory offsets
+automatically based on base alignment:</p>
+<ul>
+<li><strong>Scalars (<code>float</code>, <code>int</code>,
+<code>uint</code>):</strong> 4-byte base alignment. Offset must be a
+multiple of 4.</li>
+<li><strong>Two-component vectors (<code>vec2</code>,
+<code>ivec2</code>):</strong> 8-byte base alignment. Offset must be a
+multiple of 8.</li>
+<li><strong>Three- and four-component vectors (<code>vec3</code>,
+<code>vec4</code>):</strong> 16-byte base alignment. Offset must be a
+multiple of 16. A <code>vec3</code> consumes 12 bytes of data but still
+aligns to and pads out 16 bytes.</li>
+<li><strong>Structures:</strong> Base alignment matches the size of the
+structure's largest member, rounded up to a multiple of 16 in
+<code>std140</code>.</li>
+<li><strong>Matrices (<code>matNxM</code>):</strong> Treated as an array
+of <span class="math inline">\(N\)</span> column vectors (or row vectors
+if using <code>row_major</code>), each aligned according to vector
+alignment rules.</li>
+</ul>
+<h2 id="explicit-memory-layout-modifiers">Explicit Memory Layout
+Modifiers</h2>
+<p>GLSL provides explicit modifiers within the <code>layout</code>
+declaration to manually override default packing and control byte
+offsets directly:</p>
+<ul>
+<li><code>offset = N</code>: Sets the explicit byte offset of a block
+member from the start of the buffer. This allows precise alignment with
+pre-existing CPU-side data structures (<code>struct</code> definitions
+in C/C++).</li>
+<li><code>align = N</code>: Forces the starting byte offset of a member
+to be a multiple of <span class="math inline">\(N\)</span>. The value
+<span class="math inline">\(N\)</span> must be a power of two and
+greater than or equal to the member's natural alignment.</li>
+<li><code>row_major</code> and <code>column_major</code>: Controls the
+storage order of matrices in memory. GLSL defaults to
+<code>column_major</code>, meaning matrix columns are stored
+sequentially. Declaring <code>row_major</code> ensures matrices match
+CPU-side row-major matrix libraries without requiring manual
+transposition before upload.</li>
+<li><code>binding = N</code>: Specifies the buffer binding point
+directly in the shader, eliminating the need to query block indices on
+the host CPU.</li>
+</ul>
+<p>Mastering explicit and standard layout qualifiers guarantees
+reliable, platform-independent CPU-GPU memory interoperability across
+modern OpenGL and Vulkan pipelines.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

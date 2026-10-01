@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smith Geometry Function for Microfacet Shadowing in GLSL - glsl</title>
+    <meta name="description" content="The Smith geometry attenuation function models the physical occlusion of light by surface roughness within microfacet Bidirectional Reflectance Distribution Functions (BRDFs). In Physically Based Rendering (PBR), rough surfaces consist of microscopic val">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/smith-geometry-function-for-microfacet-shadowing-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Smith Geometry Function for Microfacet Shadowing in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/smith-geometry-function-for-microfacet-shadowing-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The Smith geometry attenuation function models the physical occlusion of light by surface roughness within microfacet Bidirectional Reflectance Distribution Functions (BRDFs). In Physically Based Rendering (PBR), rough surfaces consist of microscopic val" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="smith-geometry-function-for-microfacet-shadowing-in-glsl">Smith
+Geometry Function for Microfacet Shadowing in GLSL</h1>
+<p>The Smith geometry attenuation function models the physical occlusion
+of light by surface roughness within microfacet Bidirectional
+Reflectance Distribution Functions (BRDFs). In Physically Based
+Rendering (PBR), rough surfaces consist of microscopic valleys and peaks
+that obstruct light rays from reaching or escaping microfacets. This
+article explains the mechanics of microfacet shadowing and masking,
+details how the Smith formulation statistically resolves occlusion along
+both the incident and viewing vectors, and provides a production-ready
+implementation of the height-correlated Smith geometry function in
+GLSL.</p>
+<h3 id="the-physics-of-masking-and-shadowing">The Physics of Masking and
+Shadowing</h3>
+<p>Microfacet theory models a macroscopic surface as a collection of
+microscopic, perfectly specular planar facets. When light interacts with
+a rough surface, two primary geometrical occlusions occur:</p>
+<ol type="1">
+<li><strong>Shadowing:</strong> Microfacets block incident light from
+reaching neighboring microfacets.</li>
+<li><strong>Masking:</strong> Microfacets block reflected light from
+escaping along the view direction toward the camera.</li>
+</ol>
+<p>Without accounting for these occlusions, a BRDF violates the
+conservation of energy by reflecting more light than physically
+possible, especially at grazing angles where the projected area of
+microfacets overlaps significantly. The geometry attenuation factor,
+denoted as <span class="math inline">\(G(\mathbf{l}, \mathbf{v},
+\mathbf{h})\)</span>, calculates the proportion of active microfacets
+that are visible to both the light direction <span
+class="math inline">\(\mathbf{l}\)</span> and the view direction <span
+class="math inline">\(\mathbf{v}\)</span>.</p>
+<h3 id="the-smith-formulation-approach">The Smith Formulation
+Approach</h3>
+<p>Evaluating the exact geometry of arbitrary microscopic roughness in
+real time is computationally impossible. In 1967, Bruce G. Smith
+proposed a statistical model assuming that surface heights and profile
+slopes are uncorrelated. Under this assumption, the total visibility
+factor splits into two independent one-directional shadowing functions
+(<span class="math inline">\(G_1\)</span>):</p>
+<p><span class="math display">\[G(\mathbf{l}, \mathbf{v}) =
+G_1(\mathbf{l}) \cdot G_1(\mathbf{v})\]</span></p>
+<ul>
+<li><span class="math inline">\(G_1(\mathbf{l})\)</span> represents the
+probability that a facet is illuminated without being shadowed.</li>
+<li><span class="math inline">\(G_1(\mathbf{v})\)</span> represents the
+probability that a facet is visible to the observer without being
+masked.</li>
+</ul>
+<p>For the commonly used GGX (Trowbridge-Reitz) distribution, the
+standard one-directional Smith term is defined as:</p>
+<p><span class="math display">\[G_1(\mathbf{n}, \mathbf{w}) =
+\frac{2(\mathbf{n} \cdot \mathbf{w})}{(\mathbf{n} \cdot \mathbf{w}) +
+\sqrt{\alpha^2 + (1 - \alpha^2)(\mathbf{n} \cdot
+\mathbf{w})^2}}\]</span></p>
+<p>Where <span class="math inline">\(\mathbf{w}\)</span> is either the
+view vector <span class="math inline">\(\mathbf{v}\)</span> or light
+vector <span class="math inline">\(\mathbf{l}\)</span>, <span
+class="math inline">\(\mathbf{n}\)</span> is the macroscopic surface
+normal, and <span class="math inline">\(\alpha\)</span> is the surface
+roughness parameter (<span class="math inline">\(\alpha =
+\text{roughness}^2\)</span>).</p>
+<h3 id="height-correlated-smith-model">Height-Correlated Smith
+Model</h3>
+<p>Treating shadowing and masking as independent events overestimates
+occlusion at grazing angles, because microfacets elevated high enough to
+be seen by the viewer are also statistically more likely to be
+illuminated by the light.</p>
+<p>To correct this, modern real-time rendering relies on Eric Heitz’s
+height-correlated Smith formulation. This model couples the shadowing
+and masking terms based on elevation, eliminating over-darkening and
+producing a more accurate physical response:</p>
+<p><span class="math display">\[G(\mathbf{l}, \mathbf{v}) =
+\frac{2(\mathbf{n} \cdot \mathbf{l})(\mathbf{n} \cdot
+\mathbf{v})}{(\mathbf{n} \cdot \mathbf{v}) \sqrt{\alpha^2 + (1 -
+\alpha^2)(\mathbf{n} \cdot \mathbf{l})^2} + (\mathbf{n} \cdot
+\mathbf{l}) \sqrt{\alpha^2 + (1 - \alpha^2)(\mathbf{n} \cdot
+\mathbf{v})^2}}\]</span></p>
+<p>In practice, the geometry factor <span
+class="math inline">\(G\)</span> is combined with the Cook-Torrance
+denominator <span class="math inline">\(4(\mathbf{n} \cdot
+\mathbf{l})(\mathbf{n} \cdot \mathbf{v})\)</span> into a single
+visibility function, <span class="math inline">\(V(\mathbf{l},
+\mathbf{v})\)</span>, to save computational cycles:</p>
+<p><span class="math display">\[V(\mathbf{l}, \mathbf{v}) =
+\frac{G(\mathbf{l}, \mathbf{v})}{4(\mathbf{n} \cdot
+\mathbf{l})(\mathbf{n} \cdot \mathbf{v})}\]</span></p>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>The following GLSL function computes the height-correlated Smith
+visibility term for the GGX distribution. It eliminates the standard
+Cook-Torrance denominator by directly computing <span
+class="math inline">\(V(\mathbf{l}, \mathbf{v})\)</span>:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Computes the height-correlated visibility term V = G / (4 * NdotL * NdotV)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">// roughness: linear perceptual roughness [0.0, 1.0]</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">Visibility_SmithGGXCorrelated</span><span class="op">(</span><span class="dt">float</span> NdotV<span class="op">,</span> <span class="dt">float</span> NdotL<span class="op">,</span> <span class="dt">float</span> roughness<span class="op">)</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a <span class="op">=</span> roughness <span class="op">*</span> roughness<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a2 <span class="op">=</span> a <span class="op">*</span> a<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Evaluate visibility components for light and view directions</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> gv <span class="op">=</span> NdotL <span class="op">*</span> <span class="bu">sqrt</span><span class="op">(</span>NdotV <span class="op">*</span> <span class="op">(</span>NdotV <span class="op">-</span> NdotV <span class="op">*</span> a2<span class="op">)</span> <span class="op">+</span> a2<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> gl <span class="op">=</span> NdotV <span class="op">*</span> <span class="bu">sqrt</span><span class="op">(</span>NdotL <span class="op">*</span> <span class="op">(</span>NdotL <span class="op">-</span> NdotL <span class="op">*</span> a2<span class="op">)</span> <span class="op">+</span> a2<span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denominator <span class="op">=</span> gv <span class="op">+</span> gl<span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>denominator <span class="op">&gt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="fl">0.5</span> <span class="op">/</span> denominator<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>For performance-critical paths, Schlick’s rational approximation can
+be substituted. This approximation provides an efficient alternative
+while retaining smooth attenuation toward grazing angles:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Fast Schlick approximation for the Smith-GGX geometry function</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">Geometry_SchlickGGX</span><span class="op">(</span><span class="dt">float</span> NdotW<span class="op">,</span> <span class="dt">float</span> k<span class="op">)</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> NdotW <span class="op">/</span> <span class="op">(</span>NdotW <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> k<span class="op">)</span> <span class="op">+</span> k<span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">Geometry_Smith</span><span class="op">(</span><span class="dt">float</span> NdotV<span class="op">,</span> <span class="dt">float</span> NdotL<span class="op">,</span> <span class="dt">float</span> roughness<span class="op">)</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Remap roughness for direct analytic lighting</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> r <span class="op">=</span> roughness <span class="op">+</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> k <span class="op">=</span> <span class="op">(</span>r <span class="op">*</span> r<span class="op">)</span> <span class="op">/</span> <span class="fl">8.0</span><span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> ggx1 <span class="op">=</span> <span class="fu">Geometry_SchlickGGX</span><span class="op">(</span>NdotV<span class="op">,</span> k<span class="op">);</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> ggx2 <span class="op">=</span> <span class="fu">Geometry_SchlickGGX</span><span class="op">(</span>NdotL<span class="op">,</span> k<span class="op">);</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> ggx1 <span class="op">*</span> ggx2<span class="op">;</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By computing the shadowing and masking components along the surface
+normal, the Smith geometry attenuation function ensures that specular
+reflections fade realistically toward edge boundaries while preventing
+the surface from reflecting excess energy.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

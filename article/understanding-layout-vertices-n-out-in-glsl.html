@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding layout(vertices = N) out in GLSL - glsl</title>
+    <meta name="description" content="In OpenGL's programmable pipeline, the statement layout(vertices = N) out; in a Tessellation Control Shader (TCS) specifies the number of vertices present in the generated output patch. This article explains how this declaration dictates the shader's inv">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-layout-vertices-n-out-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding layout(vertices = N) out in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-layout-vertices-n-out-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL's programmable pipeline, the statement layout(vertices = N) out; in a Tessellation Control Shader (TCS) specifies the number of vertices present in the generated output patch. This article explains how this declaration dictates the shader's inv" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-layoutvertices--n-out-in-glsl">Understanding
+layout(vertices = N) out in GLSL</h1>
+<p>In OpenGL's programmable pipeline, the statement
+<code>layout(vertices = N) out;</code> in a Tessellation Control Shader
+(TCS) specifies the number of vertices present in the generated output
+patch. This article explains how this declaration dictates the shader's
+invocation count, manages per-patch output array sizing, and coordinates
+data flow to the subsequent Tessellation Evaluation Shader (TES).</p>
+<p>The primary purpose of <code>layout(vertices = N) out;</code> is to
+define the size of the output patch produced by the Tessellation Control
+Shader. While the input patch size is determined on the CPU side using
+<code>glPatchParameteri(GL_PATCH_VERTICES, ...)</code>, the TCS has the
+ability to change the topology by defining an entirely different number
+of output control points represented by <code>N</code>. For example, a
+TCS can receive a patch of 4 input vertices and output a patch of 16
+control points for a bicubic Bézier surface by setting <code>N</code> to
+16.</p>
+<p>This declaration directly controls the execution model of the shader.
+The GPU executes the TCS once for every output vertex in the patch,
+meaning the shader is invoked <code>N</code> times per patch. Within the
+shader, the built-in variable <code>gl_InvocationID</code> specifies the
+index of the output vertex currently being processed, ranging from
+<code>0</code> to <code>N - 1</code>.</p>
+<p>Additionally, setting the output vertex count sizes all per-vertex
+output variables. Any variable declared with the <code>out</code>
+qualifier (such as custom vertex attributes or the built-in
+<code>gl_out</code> array) becomes an array implicitly sized to
+<code>N</code>. While every invocation can read from any index of the
+input patch (<code>gl_in[]</code>) and even other indices in the output
+patch (provided barriers are used), an invocation is primarily
+responsible for writing data to its corresponding index,
+<code>gl_out[gl_InvocationID]</code>.</p>
+<p>Once all invocations finish and the tessellation levels
+(<code>gl_TessLevelInner</code> and <code>gl_TessLevelOuter</code>) are
+assigned, the resulting patch of <span class="math inline">\(N\)</span>
+vertices is passed downstream to the Tessellation Evaluation Shader
+(TES). The TES then uses these <span class="math inline">\(N\)</span>
+control points to calculate the final surface positions across the
+generated abstract tessellation domain.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

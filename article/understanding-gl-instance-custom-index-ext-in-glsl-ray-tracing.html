@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding gl_InstanceCustomIndexEXT in GLSL Ray Tracing - glsl</title>
+    <meta name="description" content="This article provides an overview of the glInstanceCustomIndexEXT built-in variable used in GLSL ray tracing pipelines. It covers what the variable represents, where its value originates from the host API, which shader stages can access it, and how graph">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-gl-instance-custom-index-ext-in-glsl-ray-tracing">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding gl_InstanceCustomIndexEXT in GLSL Ray Tracing - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-gl-instance-custom-index-ext-in-glsl-ray-tracing" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of the glInstanceCustomIndexEXT built-in variable used in GLSL ray tracing pipelines. It covers what the variable represents, where its value originates from the host API, which shader stages can access it, and how graph" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="understanding-gl_instancecustomindexext-in-glsl-ray-tracing">Understanding
+gl_InstanceCustomIndexEXT in GLSL Ray Tracing</h1>
+<p>This article provides an overview of the
+<code>gl_InstanceCustomIndexEXT</code> built-in variable used in GLSL
+ray tracing pipelines. It covers what the variable represents, where its
+value originates from the host API, which shader stages can access it,
+and how graphics developers use it to efficiently route per-instance
+data such as materials and resource descriptors.</p>
+<h3 id="what-is-gl_instancecustomindexext">What is
+gl_InstanceCustomIndexEXT?</h3>
+<p>In GLSL ray tracing pipelines (enabled via the
+<code>GL_EXT_ray_tracing</code> extension),
+<code>gl_InstanceCustomIndexEXT</code> is a built-in input variable of
+type <code>int</code>. It exposes a user-defined integer value assigned
+to a specific geometry instance in the Top-Level Acceleration Structure
+(TLAS).</p>
+<p>When a ray intersects a primitive, the pipeline determines which
+instance was struck and makes this custom integer available to the
+relevant ray tracing shaders.</p>
+<h3 id="origin-in-the-vulkan-api">Origin in the Vulkan API</h3>
+<p>The value of <code>gl_InstanceCustomIndexEXT</code> does not
+originate inside the shader; it is defined on the CPU when setting up
+the acceleration structures.</p>
+<p>In the Vulkan API, a TLAS is composed of instances defined by the
+<code>VkAccelerationStructureInstanceKHR</code> structure. This
+structure contains a 24-bit bitfield member named
+<code>instanceCustomIndex</code>:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> VkAccelerationStructureInstanceKHR <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    VkTransformMatrixKHR          transform<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint32_t</span>                      instanceCustomIndex<span class="op">:</span><span class="dv">24</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint32_t</span>                      mask<span class="op">:</span><span class="dv">8</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint32_t</span>                      instanceShaderBindingTableRecordOffset<span class="op">:</span><span class="dv">24</span><span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    VkGeometryInstanceFlagsKHR    flags<span class="op">:</span><span class="dv">8</span><span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint64_t</span>                      accelerationStructureReference<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> VkAccelerationStructureInstanceKHR<span class="op">;</span></span></code></pre></div>
+<p>The 24-bit value written to <code>instanceCustomIndex</code> on the
+host side directly populates <code>gl_InstanceCustomIndexEXT</code> in
+the shader. Because it is a 24-bit field, the maximum value it can
+represent is <code>16,777,215</code> (<code>0xFFFFFF</code>).</p>
+<h3 id="supported-shader-stages">Supported Shader Stages</h3>
+<p>The variable is accessible in the ray tracing pipeline stages that
+process intersections:</p>
+<ul>
+<li><strong>Intersection Shaders (<code>.rint</code>):</strong> Useful
+if custom primitive intersection logic depends on instance-specific
+properties.</li>
+<li><strong>Any-Hit Shaders (<code>.rahit</code>):</strong> Commonly
+used to look up material data to evaluate alpha-testing or opacity
+cutouts.</li>
+<li><strong>Closest-Hit Shaders (<code>.rchit</code>):</strong>
+Frequently used to read material properties, transform data, and
+lighting parameters to shade the final hit point.</li>
+</ul>
+<p>It is not available in ray generation, miss, or callable shaders, as
+these stages do not execute in the direct context of an intersected
+geometry instance.</p>
+<h3
+id="gl_instancecustomindexext-vs-gl_instanceid">gl_InstanceCustomIndexEXT
+vs. gl_InstanceID</h3>
+<p>GLSL ray tracing provides two distinct instance identifiers:</p>
+<ul>
+<li><strong><code>gl_InstanceID</code>:</strong> An automatically
+generated, zero-based index representing the position of the instance
+within the TLAS array. This value changes if instances are reordered or
+compacted.</li>
+<li><strong><code>gl_InstanceCustomIndexEXT</code>:</strong> A
+persistent, user-defined value that remains constant regardless of how
+instances are arranged or ordered inside the acceleration
+structure.</li>
+</ul>
+<h3 id="practical-use-cases">Practical Use Cases</h3>
+<p>Because ray tracing pipelines handle arbitrary scenes with diverse
+materials, shaders require a way to access per-instance resources
+without relying on individual draw calls. Common applications of
+<code>gl_InstanceCustomIndexEXT</code> include:</p>
+<ol type="1">
+<li><strong>Material Indexing:</strong> Mapping the hit instance
+directly to an array of material definitions stored in a Shader Storage
+Buffer Object (SSBO).</li>
+<li><strong>Bindless Descriptor Indexing:</strong> Indexing into
+descriptor arrays containing textures, vertex buffers, or index buffers
+associated with that specific model instance.</li>
+<li><strong>Object Identification:</strong> Passing an internal entity
+ID or mesh identifier back through the ray payload for physics queries,
+picking, or visibility checks.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

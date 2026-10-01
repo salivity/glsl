@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Is Point Size Controlled in GLSL? - glsl</title>
+    <meta name="description" content="The point size of rendered vertices in OpenGL is controlled using the built-in vertex shader output variable glPointSize. When rendering primitives using GLPOINTS, assigning a floating-point value to glPointSize defines the diameter of each point rasteri">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-is-point-size-controlled-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Is Point Size Controlled in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-is-point-size-controlled-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The point size of rendered vertices in OpenGL is controlled using the built-in vertex shader output variable glPointSize. When rendering primitives using GLPOINTS, assigning a floating-point value to glPointSize defines the diameter of each point rasteri" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-is-point-size-controlled-in-glsl">How Is Point Size
+Controlled in GLSL?</h1>
+<p>The point size of rendered vertices in OpenGL is controlled using the
+built-in vertex shader output variable <code>gl_PointSize</code>. When
+rendering primitives using <code>GL_POINTS</code>, assigning a
+floating-point value to <code>gl_PointSize</code> defines the diameter
+of each point rasterized on screen in pixels. This article covers
+enabling shader-controlled sizing in the OpenGL host application,
+writing assignment logic in the vertex shader, calculating
+distance-based attenuation for 3D scenes, and utilizing fragment
+coordinates to shape point sprites.</p>
+<h2 id="enabling-program-point-size-in-opengl">Enabling Program Point
+Size in OpenGL</h2>
+<p>Before GLSL shaders can directly control point dimensions, the OpenGL
+context must be configured to respect shader-defined sizes rather than
+the fixed global state.</p>
+<p>In standard OpenGL desktop profiles, you must call:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>glEnable<span class="op">(</span>GL_PROGRAM_POINT_SIZE<span class="op">);</span></span></code></pre></div>
+<p>If this capability is not enabled, the GPU ignores assignments to
+<code>gl_PointSize</code> in your shader and falls back to the default
+size or the value set by <code>glPointSize(size)</code>. In OpenGL ES
+and WebGL contexts, <code>gl_PointSize</code> is enabled by default and
+must be explicitly written in the vertex shader whenever rendering
+<code>GL_POINTS</code>.</p>
+<h2 id="basic-vertex-shader-implementation">Basic Vertex Shader
+Implementation</h2>
+<p>In GLSL, <code>gl_PointSize</code> is a built-in output variable of
+type <code>float</code>. You assign a pixel diameter directly within the
+<code>main()</code> function of the vertex shader.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> aPos<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> model<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> view<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> projection<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> projection <span class="op">*</span> view <span class="op">*</span> model <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>aPos<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_PointSize</span> <span class="op">=</span> <span class="fl">20.0</span><span class="op">;</span> <span class="co">// Sets the point size to 20x20 pixels</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>When the rasterizer processes vertices emitted with
+<code>GL_POINTS</code>, it generates a square raster grid centered on
+the vertex position corresponding to the assigned pixel dimension.</p>
+<h2 id="implementing-distance-attenuation">Implementing Distance
+Attenuation</h2>
+<p>In 3D scenes, fixed pixel sizes make distant points appear
+unnaturally large. To simulate perspective, you can dynamically scale
+<code>gl_PointSize</code> based on the distance between the camera and
+the vertex.</p>
+<p>A standard linear attenuation model calculates the camera-space
+distance using the view matrix:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> aPos<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> model<span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> view<span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> projection<span class="op">;</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> uBaseSize<span class="op">;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> viewPos <span class="op">=</span> view <span class="op">*</span> model <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>aPos<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> projection <span class="op">*</span> viewPos<span class="op">;</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate distance from the camera along the Z axis</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> <span class="bu">distance</span> <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>viewPos<span class="op">.</span><span class="fu">xyz</span><span class="op">);</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Attenuate size based on distance</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_PointSize</span> <span class="op">=</span> uBaseSize <span class="op">/</span> <span class="bu">distance</span><span class="op">;</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This adjustment ensures that points scale realistically as they move
+toward or away from the camera, functioning effectively for particle
+systems, starfields, and point cloud visualizations.</p>
+<h2 id="hardware-limits-and-clamping">Hardware Limits and Clamping</h2>
+<p>GPU drivers enforce minimum and maximum limits on point rasterization
+sizes. Assigning a value outside these bounds results in clamping by the
+hardware.</p>
+<p>You can query the supported range on the host side using:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>GLfloat range<span class="op">[</span><span class="dv">2</span><span class="op">];</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>glGetFloatv<span class="op">(</span>GL_ALIASED_POINT_SIZE_RANGE<span class="op">,</span> range<span class="op">);</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co">// range[0] contains the minimum size, range[1] contains the maximum size</span></span></code></pre></div>
+<p>To prevent unexpected rendering artifacts across different GPU
+vendors, clamp the computed size within GLSL:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="bu">gl_PointSize</span> <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>calculatedSize<span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">64.0</span><span class="op">);</span></span></code></pre></div>
+<h2 id="styling-points-with-gl_pointcoord">Styling Points with
+gl_PointCoord</h2>
+<p>Controlling <code>gl_PointSize</code> produces a square billboard
+over the vertex. To render circular particles or textured sprites, GLSL
+provides the <code>gl_PointCoord</code> input variable inside the
+fragment shader, which provides normalized UV coordinates ranging from
+<span class="math inline">\((0.0, 0.0)\)</span> to <span
+class="math inline">\((1.0, 1.0)\)</span> across the point quad.</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate distance from the center of the point</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> coord <span class="op">=</span> <span class="bu">gl_PointCoord</span> <span class="op">-</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.5</span><span class="op">);</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">length</span><span class="op">(</span>coord<span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0.5</span><span class="op">)</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">{</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>        <span class="kw">discard</span><span class="op">;</span> <span class="co">// Discard fragments outside the circle</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.5</span><span class="op">,</span> <span class="fl">0.2</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Combining vertex-stage <code>gl_PointSize</code> assignments with
+fragment-stage coordinate masking enables lightweight, high-performance
+rendering of complex 2D and 3D point effects.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Culling Front Faces to Accelerate Glass Refraction - glsl</title>
+    <meta name="description" content="In hardware-accelerated ray tracing via GLSL, computing the transmission of light through thick dielectric media like glass requires tracing rays that originate inside the object toward an exit interface. Utilizing the glRayFlagsCullFrontFacingTrianglesE">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/culling-front-faces-to-accelerate-glass-refraction">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Culling Front Faces to Accelerate Glass Refraction - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/culling-front-faces-to-accelerate-glass-refraction" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In hardware-accelerated ray tracing via GLSL, computing the transmission of light through thick dielectric media like glass requires tracing rays that originate inside the object toward an exit interface. Utilizing the glRayFlagsCullFrontFacingTrianglesE" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="culling-front-faces-to-accelerate-glass-refraction">Culling
+Front Faces to Accelerate Glass Refraction</h1>
+<p>In hardware-accelerated ray tracing via GLSL, computing the
+transmission of light through thick dielectric media like glass requires
+tracing rays that originate inside the object toward an exit interface.
+Utilizing the <code>gl_RayFlagsCullFrontFacingTrianglesEXT</code> ray
+flag instructs the ray traversal hardware to discard front-facing
+geometry automatically during intersection testing. This article
+explores how applying this flag accelerates interior glass refraction
+queries by pruning traversal workloads, preventing false
+self-intersections, and reducing unnecessary shader invocations.</p>
+<h3 id="the-dynamics-of-interior-refraction">The Dynamics of Interior
+Refraction</h3>
+<p>When a primary or reflection ray strikes the exterior of a dielectric
+medium (such as glass with an index of refraction <span
+class="math inline">\(n \approx 1.5\)</span>), it undergoes Fresnel
+reflection and refraction. The refracted ray bends into the medium
+according to Snell's law and travels through the interior volume.</p>
+<p>To resolve the light's exit path, a secondary transmission ray must
+be traced from inside the medium toward the boundary where it will exit
+back into the surrounding environment (such as air). In a standard
+closed manifold mesh with standard vertex winding, the interior of the
+object faces the <em>back</em> side of the triangles, while the
+<em>front</em> faces orient outward. Consequently, a ray traveling
+inside the glass seeking an exit point only needs to intersect
+back-facing surfaces.</p>
+<h3 id="hardware-level-traversal-pruning">Hardware-Level Traversal
+Pruning</h3>
+<p>The ray flag <code>gl_RayFlagsCullFrontFacingTrianglesEXT</code> is
+passed as an argument to the <code>traceRayEXT()</code> function call in
+GLSL. When enabled:</p>
+<ol type="1">
+<li><strong>Fixed-Function Pruning:</strong> Modern GPU ray-tracing
+cores (such as NVIDIA RT Cores or AMD Ray Accelerators) evaluate
+primitive orientation directly during the traversal and primitive
+intersection phase.</li>
+<li><strong>Early Primitive Rejection:</strong> Any triangle determined
+to be front-facing relative to the ray direction is immediately
+discarded before calculating a full hit or invoking any shader
+stages.</li>
+</ol>
+<p>By rejecting all exterior-facing geometry at the hardware level, the
+traversal pipeline minimizes the number of ray-box and ray-triangle
+tests, keeping the ray traversal loop short and focused purely on valid
+exit boundaries.</p>
+<h3
+id="elimination-of-shader-invocations-and-logic-overhead">Elimination of
+Shader Invocations and Logic Overhead</h3>
+<p>Without front-face culling, an interior ray encounters both front and
+back faces in scenes containing overlapping geometry, interior details,
+or non-convex shapes:</p>
+<ul>
+<li><strong>Closest-Hit Filtering Avoided:</strong> Without culling
+flags, front-facing hits would register as valid intersections. The
+application would have to handle these unwanted intersections manually
+in the closest-hit shader, determine that the ray hit an invalid face,
+advance the ray origin, and spawn another ray. This leads to redundant
+round-trips through the ray scheduler.</li>
+<li><strong>Any-Hit Shader Bypassing:</strong> If any-hit shaders are
+used for transparency or custom intersection logic, culling front-facing
+triangles ensures these shaders are never invoked for front-facing
+surfaces, conserving execution wavefronts and reducing instruction
+pressure.</li>
+</ul>
+<h3 id="mitigating-self-intersection-and-precision-artifacts">Mitigating
+Self-Intersection and Precision Artifacts</h3>
+<p>Rays originating on a surface boundary are prone to self-intersection
+artifacts caused by floating-point imprecision. When spawning an
+interior ray at the entry point, the ray origin sits precisely on the
+front-facing boundary.</p>
+<p>By setting <code>gl_RayFlagsCullFrontFacingTrianglesEXT</code>, the
+originating front face is completely invisible to the newly cast
+interior ray. This eliminates the risk of the refracted ray immediately
+re-intersecting the entry surface from the inside, significantly
+reducing the need for aggressive, arbitrary normal-offset biasing hacks
+that can cause visual leaks in thin glass geometry.</p>
+<h3 id="glsl-implementation-example">GLSL Implementation Example</h3>
+<p>The flag is passed directly into <code>traceRayEXT</code> when
+generating the interior transmission ray from the closest-hit
+shader:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> rayFlags <span class="op">=</span> gl_RayFlagsCullFrontFacingTrianglesEXT <span class="op">|</span> gl_RayFlagsOpaqueEXT<span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">traceRayEXT</span><span class="op">(</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    topLevelAS<span class="op">,</span>              <span class="co">// Acceleration structure</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    rayFlags<span class="op">,</span>                <span class="co">// Discards front-facing surfaces</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="bn">0xFF</span><span class="op">,</span>                    <span class="co">// Cull mask</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dv">0</span><span class="op">,</span>                       <span class="co">// Hit-to-hit offset</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dv">0</span><span class="op">,</span>                       <span class="co">// Geometry stride</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dv">0</span><span class="op">,</span>                       <span class="co">// Miss index</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    interiorRayOrigin<span class="op">,</span>       <span class="co">// Origin inside the medium</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    tMin<span class="op">,</span>                    <span class="co">// Minimum distance</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    refractedDirection<span class="op">,</span>      <span class="co">// Direction inside the glass</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    tMax<span class="op">,</span>                    <span class="co">// Maximum distance</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    payloadLocation          <span class="co">// Ray payload</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<h3 id="constraints-and-considerations">Constraints and
+Considerations</h3>
+<p>For <code>gl_RayFlagsCullFrontFacingTrianglesEXT</code> to function
+accurately, all meshes representing dielectric volumes must be
+watertight manifolds with strictly consistent winding orders. Inverted
+normals or flipped winding will cause rays to miss boundaries entirely,
+producing black voids or incorrect refraction paths.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

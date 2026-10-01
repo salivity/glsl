@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Using spirv_type to Define Custom SPIR-V Types in GLSL - glsl</title>
+    <meta name="description" content="This article explores the role of the spirvtype intrinsic in GLSL, explaining how it bridges the gap between low-level SPIR-V capabilities and high-level shader authoring. By leveraging the GLEXTspirvintrinsics extension, developers can declare arbitrary">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/using-spirv-type-to-define-custom-spir-v-types-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Using spirv_type to Define Custom SPIR-V Types in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/using-spirv-type-to-define-custom-spir-v-types-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores the role of the spirvtype intrinsic in GLSL, explaining how it bridges the gap between low-level SPIR-V capabilities and high-level shader authoring. By leveraging the GLEXTspirvintrinsics extension, developers can declare arbitrary" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="using-spirv_type-to-define-custom-spir-v-types-in-glsl">Using
+spirv_type to Define Custom SPIR-V Types in GLSL</h1>
+<p>This article explores the role of the <code>spirv_type</code>
+intrinsic in GLSL, explaining how it bridges the gap between low-level
+SPIR-V capabilities and high-level shader authoring. By leveraging the
+<code>GL_EXT_spirv_intrinsics</code> extension, developers can declare
+arbitrary SPIR-V types directly in GLSL source files. This overview
+details its purpose, syntax, and operational advantages when utilizing
+non-standard or bleeding-edge Vulkan SPIR-V extensions without waiting
+for explicit compiler support.</p>
+<h3 id="the-purpose-of-spirv_type">The Purpose of
+<code>spirv_type</code></h3>
+<p>Traditionally, GLSL is constrained by what the language specification
+explicitly exposes. When new hardware features or SPIR-V extensions are
+introduced to Vulkan, developers often face a delay while waiting for
+compiler frontends (such as <code>glslang</code>) to implement the
+corresponding GLSL syntax.</p>
+<p>The <code>spirv_type</code> attribute, introduced via the
+<code>GL_EXT_spirv_intrinsics</code> extension, eliminates this
+bottleneck. It allows developers to declare and consume any SPIR-V
+type—standard, extended, or experimental—directly inside high-level GLSL
+code. It acts as an escape hatch, mapping a GLSL type identifier
+directly to a specific SPIR-V Type Instruction opcode.</p>
+<h3 id="how-spirv_type-operates">How <code>spirv_type</code>
+Operates</h3>
+<p>When compiling GLSL to SPIR-V, the compiler substitutes occurrences
+of the declared GLSL type with the specified SPIR-V type opcode and its
+required operands.</p>
+<p>The syntax generally appears as an attribute or type qualifier
+specifying the SPIR-V opcode ID alongside literals, existing types, or
+constant parameters:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_spirv_intrinsics : require</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Mapping a GLSL identifier to a specific SPIR-V type</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Example: OpTypeVector with a component type and count</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">spirv_type</span><span class="op">(</span>id <span class="op">=</span> <span class="dv">23</span><span class="op">,</span> <span class="dv">6</span><span class="op">,</span> <span class="dv">4</span><span class="op">)</span> typedef vec4_custom<span class="op">;</span></span></code></pre></div>
+<p>In typical use cases, <code>spirv_type</code> enables:</p>
+<ul>
+<li><strong>Specifying SPIR-V Type Opcodes:</strong> The <code>id</code>
+parameter refers directly to the SPIR-V opcode number (such as
+<code>OpTypeImage</code>, <code>OpTypeAccelerationStructureKHR</code>,
+or <code>OpTypeCooperativeMatrixNV</code>).</li>
+<li><strong>Passing Type Parameters:</strong> Subsequent parameters
+within the declaration define required type operands, such as bit
+widths, scalar components, or dimension flags.</li>
+<li><strong>Applying SPIR-V Decorations:</strong> Types declared with
+<code>spirv_type</code> can be augmented with
+<code>spirv_decorate</code> to apply SPIR-V-level decorations directly
+to the underlying type or its instances.</li>
+</ul>
+<h3 id="key-roles-and-use-cases">Key Roles and Use Cases</h3>
+<ol type="1">
+<li><strong>Immediate Access to New Hardware Capabilities:</strong> When
+GPU vendors expose novel features via vendor-specific SPIR-V extensions
+(such as specialized ray-tracing primitives or custom machine-learning
+data formats), <code>spirv_type</code> allows developers to adopt them
+on day one.</li>
+<li><strong>Interoperability with
+<code>spirv_instruction</code>:</strong> Custom types rarely exist in
+isolation; they are usually manipulated by custom SPIR-V instructions.
+<code>spirv_type</code> supplies the exact operand and return types
+needed to build full intrinsic function calls using
+<code>spirv_instruction</code>.</li>
+<li><strong>Advanced Memory and Pointer Semantics:</strong> Developers
+can define specialized pointer types, custom storage classes, or
+non-standard image formats that are valid in SPIR-V but lack standard
+GLSL keywords.</li>
+</ol>
+<h3 id="trade-offs-and-considerations">Trade-offs and
+Considerations</h3>
+<p>While <code>spirv_type</code> grants fine-grained control, it
+bypasses standard GLSL type checking. The compiler treats the declared
+identifier largely as an opaque handle, relying on the programmer to
+ensure that operands passed to operations match the expectations of the
+SPIR-V specification and the target Vulkan runtime. Misconfigurations
+will result in SPIR-V validation errors rather than compile-time GLSL
+warnings.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

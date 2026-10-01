@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL dFdx vs dFdy: Pixel Gradients Explained - glsl</title>
+    <meta name="description" content="In GLSL, dFdx and dFdy are built-in derivative functions used to compute the rate of change of a given variable across adjacent pixels in screen space. While both evaluate gradients across the GPU's hardware-level $2 \times 2$ pixel quads, dFdx measures">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-d-fdx-vs-d-fdy-pixel-gradients-explained">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL dFdx vs dFdy: Pixel Gradients Explained - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-d-fdx-vs-d-fdy-pixel-gradients-explained" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL, dFdx and dFdy are built-in derivative functions used to compute the rate of change of a given variable across adjacent pixels in screen space. While both evaluate gradients across the GPU's hardware-level $2 \times 2$ pixel quads, dFdx measures" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-dfdx-vs-dfdy-pixel-gradients-explained">GLSL dFdx vs dFdy:
+Pixel Gradients Explained</h1>
+<p>In GLSL, <code>dFdx</code> and <code>dFdy</code> are built-in
+derivative functions used to compute the rate of change of a given
+variable across adjacent pixels in screen space. While both evaluate
+gradients across the GPU's hardware-level <span class="math inline">\(2
+\times 2\)</span> pixel quads, <code>dFdx</code> measures variation
+strictly along the horizontal (X) axis, whereas <code>dFdy</code>
+measures variation along the vertical (Y) axis. Understanding how these
+functions sample neighboring fragment values allows developers to
+generate procedural patterns, compute surface normals dynamically, and
+perform analytical anti-aliasing.</p>
+<h3 id="how-fragment-derivatives-work">How Fragment Derivatives
+Work</h3>
+<p>GPUs process fragments in parallel groups called "quads," which are
+<span class="math inline">\(2 \times 2\)</span> grids of adjacent
+pixels. Because all four fragments in a quad execute the same fragment
+shader simultaneously, the GPU can compare the value of any variable
+across neighboring pixels:</p>
+<ul>
+<li><strong><code>dFdx(p)</code></strong>: Computes the partial
+derivative of expression <code>p</code> with respect to the horizontal
+screen coordinate (<span class="math inline">\(x\)</span>). It subtracts
+the value of <code>p</code> in the left pixel from the value in the
+right pixel within the quad: <span class="math display">\[\frac{\partial
+p}{\partial x} \approx p(x + 1, y) - p(x, y)\]</span></li>
+<li><strong><code>dFdy(p)</code></strong>: Computes the partial
+derivative of expression <code>p</code> with respect to the vertical
+screen coordinate (<span class="math inline">\(y\)</span>). It subtracts
+the value of <code>p</code> in the bottom/top pixel from the adjacent
+vertical pixel within the quad: <span
+class="math display">\[\frac{\partial p}{\partial y} \approx p(x, y + 1)
+- p(x, y)\]</span></li>
+</ul>
+<p>Depending on the hardware and the target API (such as OpenGL vs.
+Vulkan), the positive direction of the vertical axis (<span
+class="math inline">\(y\)</span>) can vary between pointing upward or
+downward in window coordinates, directly affecting the sign of the value
+returned by <code>dFdy</code>.</p>
+<h3 id="key-differences">Key Differences</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Feature</th>
+<th style="text-align: left;"><code>dFdx</code></th>
+<th style="text-align: left;"><code>dFdy</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Axis of Calculation</strong></td>
+<td style="text-align: left;">Horizontal screen axis (<span
+class="math inline">\(X\)</span>)</td>
+<td style="text-align: left;">Vertical screen axis (<span
+class="math inline">\(Y\)</span>)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Comparison Direction</strong></td>
+<td style="text-align: left;">Left-to-right adjacent pixels</td>
+<td style="text-align: left;">Top-to-bottom / bottom-to-top adjacent
+pixels</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Primary Sensitivity</strong></td>
+<td style="text-align: left;">Sensitive to horizontal changes</td>
+<td style="text-align: left;">Sensitive to vertical changes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Orientation
+Dependence</strong></td>
+<td style="text-align: left;">Invariant across standard APIs</td>
+<td style="text-align: left;">Sign may flip depending on clip
+space/framebuffer conventions</td>
+</tr>
+</tbody>
+</table>
+<h3 id="common-applications">Common Applications</h3>
+<h4 id="1-calculating-flat-face-normals">1. Calculating Flat Face
+Normals</h4>
+<p>When a 3D mesh lacks per-vertex normal attributes, you can calculate
+the surface normal entirely within the fragment shader by taking the
+cross product of the screen-space derivatives of the world- or
+view-space position:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> normal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="bu">cross</span><span class="op">(</span><span class="bu">dFdx</span><span class="op">(</span>v_worldPosition<span class="op">),</span> <span class="bu">dFdy</span><span class="op">(</span>v_worldPosition<span class="op">)));</span></span></code></pre></div>
+<p>Because <code>dFdx</code> supplies a tangent vector along the
+horizontal axis and <code>dFdy</code> supplies a bitangent vector along
+the vertical axis, their cross product yields the geometric surface
+normal perpendicular to both.</p>
+<h4 id="2-procedural-anti-aliasing">2. Procedural Anti-Aliasing</h4>
+<p>When generating procedural patterns (like stripes, grids, or
+checkerboards), sharp color boundaries cause aliasing artifacts.
+Combining <code>dFdx</code> and <code>dFdy</code> with the GLSL function
+<code>fwidth</code> calculates the total rate of change over a single
+pixel footprint:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// fwidth(v) is equivalent to: abs(dFdx(v)) + abs(dFdy(v))</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> delta <span class="op">=</span> <span class="bu">fwidth</span><span class="op">(</span>v_uv<span class="op">.</span><span class="fu">x</span><span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> edge <span class="op">=</span> <span class="bu">smoothstep</span><span class="op">(</span><span class="fl">0.5</span> <span class="op">-</span> delta<span class="op">,</span> <span class="fl">0.5</span> <span class="op">+</span> delta<span class="op">,</span> v_uv<span class="op">.</span><span class="fu">x</span><span class="op">);</span></span></code></pre></div>
+<h4 id="3-manual-mipmap-selection">3. Manual Mipmap Selection</h4>
+<p>Texture sampling functions like <code>texture()</code> implicitly use
+<code>dFdx</code> and <code>dFdy</code> on the supplied texture
+coordinates to determine how quickly a texture is shrinking or
+stretching across pixels. If derivatives change rapidly—meaning the
+texture coordinates jump across a small screen distance—the GPU selects
+a lower-resolution mipmap level to reduce aliasing.</p>
+<h3 id="coarse-vs-fine-derivatives">Coarse vs. Fine Derivatives</h3>
+<p>Modern GLSL versions (GLSL 4.5+ or via the
+<code>GL_AMD_shader_trinary_minmax</code> /
+<code>GL_ARB_derivative_control</code> extensions) provide explicit
+variants:</p>
+<ul>
+<li><strong><code>dFdxCoarse</code> / <code>dFdyCoarse</code></strong>:
+Computes one derivative per <span class="math inline">\(2 \times
+2\)</span> quad, sharing the result among all four fragments to save
+processing overhead.</li>
+<li><strong><code>dFdxFine</code> / <code>dFdyFine</code></strong>:
+Computes unique derivatives for each pixel row or column within the
+quad, providing higher-precision results at a slight computational
+cost.</li>
+</ul>
+<p>Calling standard <code>dFdx</code> or <code>dFdy</code> allows the
+driver and GPU implementation to choose between coarse and fine
+approximations based on internal performance heuristics.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

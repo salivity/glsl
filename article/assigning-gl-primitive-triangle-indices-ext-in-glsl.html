@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assigning gl_PrimitiveTriangleIndicesEXT in GLSL - glsl</title>
+    <meta name="description" content="In a GLSL mesh shader using the GLEXTmeshshader extension, assigning triangle index triplets to glPrimitiveTriangleIndicesEXT defines the topology of the generated primitives. This process requires configuring the shader layout for triangle primitives, a">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/assigning-gl-primitive-triangle-indices-ext-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Assigning gl_PrimitiveTriangleIndicesEXT in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/assigning-gl-primitive-triangle-indices-ext-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In a GLSL mesh shader using the GLEXTmeshshader extension, assigning triangle index triplets to glPrimitiveTriangleIndicesEXT defines the topology of the generated primitives. This process requires configuring the shader layout for triangle primitives, a" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="assigning-gl_primitivetriangleindicesext-in-glsl">Assigning
+gl_PrimitiveTriangleIndicesEXT in GLSL</h1>
+<p>In a GLSL mesh shader using the <code>GL_EXT_mesh_shader</code>
+extension, assigning triangle index triplets to
+<code>gl_PrimitiveTriangleIndicesEXT</code> defines the topology of the
+generated primitives. This process requires configuring the shader
+layout for triangle primitives, allocating primitive counts using
+<code>SetMeshOutputsEXT</code>, and mapping three local vertex indices
+via a <code>uvec3</code> vector to the target primitive index within the
+output array.</p>
+<h3 id="shader-configuration-and-built-in-declaration">Shader
+Configuration and Built-In Declaration</h3>
+<p>To output triangle primitives, the shader must enable the
+<code>GL_EXT_mesh_shader</code> extension and declare
+<code>triangles</code> in the output layout qualifier:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_mesh_shader : require</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">32</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">triangles</span><span class="op">,</span> <span class="dt">max_vertices</span> <span class="op">=</span> <span class="dv">64</span><span class="op">,</span> max_primitives <span class="op">=</span> <span class="dv">126</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span></code></pre></div>
+<p>When <code>triangles</code> is specified as the output layout, GLSL
+implicitly defines the built-in output array for indices as:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">uvec3</span> gl_PrimitiveTriangleIndicesEXT<span class="op">[];</span></span></code></pre></div>
+<h3 id="allocating-outputs">Allocating Outputs</h3>
+<p>Before writing to <code>gl_PrimitiveTriangleIndicesEXT</code>, the
+workgroup must set the actual number of emitted vertices and primitives
+by calling <code>SetMeshOutputsEXT</code>. Only the first invocation
+typically needs to call this, or all invocations can execute it with
+uniform values:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">SetMeshOutputsEXT</span><span class="op">(</span>numVertices<span class="op">,</span> numPrimitives<span class="op">);</span></span></code></pre></div>
+<h3 id="assigning-index-triplets">Assigning Index Triplets</h3>
+<p>Each element in <code>gl_PrimitiveTriangleIndicesEXT</code>
+corresponds to a single output triangle. The index triplet assigned must
+be a <code>uvec3</code>, where each component refers to a 0-based local
+vertex index emitted within the same mesh shader workgroup (ranging from
+<code>0</code> to <code>numVertices - 1</code>).</p>
+<p>Assignment is typically distributed across threads in the workgroup
+using <code>gl_LocalInvocationIndex</code>:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> primIndex <span class="op">=</span> <span class="bu">gl_LocalInvocationIndex</span><span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>primIndex <span class="op">&lt;</span> numPrimitives<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> i0 <span class="op">=</span> primIndex <span class="op">*</span> <span class="dv">3</span> <span class="op">+</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> i1 <span class="op">=</span> primIndex <span class="op">*</span> <span class="dv">3</span> <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> i2 <span class="op">=</span> primIndex <span class="op">*</span> <span class="dv">3</span> <span class="op">+</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    gl_PrimitiveTriangleIndicesEXT<span class="op">[</span>primIndex<span class="op">]</span> <span class="op">=</span> <span class="dt">uvec3</span><span class="op">(</span>i0<span class="op">,</span> i1<span class="op">,</span> i2<span class="op">);</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="key-considerations">Key Considerations</h3>
+<ul>
+<li><strong>Local Vertex Scope:</strong> The index values do not
+reference global buffers; they reference the workgroup-local vertex
+outputs defined in <code>gl_MeshVerticesEXT</code> or custom
+<code>out</code> vertex arrays.</li>
+<li><strong>Winding Order:</strong> The component order inside
+<code>uvec3(i0, i1, i2)</code> determines front- and back-facing
+orientations based on the pipeline's configured rasterization state
+(such as counter-clockwise or clockwise).</li>
+<li><strong>Index Bounds:</strong> The indices in each
+<code>uvec3</code> must not exceed or equal the vertex count passed to
+<code>SetMeshOutputsEXT</code>, and the array index for
+<code>gl_PrimitiveTriangleIndicesEXT</code> must be strictly less than
+the specified primitive count.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

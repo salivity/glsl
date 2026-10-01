@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding GL_CLAMP_TO_BORDER in GLSL - glsl</title>
+    <meta name="description" content="This article provides an overview of how the GLCLAMPTOBORDER texture wrap mode operates when sampling textures in OpenGL Shading Language (GLSL). It explains the interaction between CPU-side texture parameter configuration, the underlying hardware textur">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-gl-clamp-to-border-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding GL_CLAMP_TO_BORDER in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-gl-clamp-to-border-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of how the GLCLAMPTOBORDER texture wrap mode operates when sampling textures in OpenGL Shading Language (GLSL). It explains the interaction between CPU-side texture parameter configuration, the underlying hardware textur" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-gl_clamp_to_border-in-glsl">Understanding
+GL_CLAMP_TO_BORDER in GLSL</h1>
+<p>This article provides an overview of how the
+<code>GL_CLAMP_TO_BORDER</code> texture wrap mode operates when sampling
+textures in OpenGL Shading Language (GLSL). It explains the interaction
+between CPU-side texture parameter configuration, the underlying
+hardware texture sampling unit, filtering mechanics, and how GLSL
+shaders transparently handle out-of-bounds coordinates.</p>
+<h3 id="how-gl_clamp_to_border-works-in-glsl">How GL_CLAMP_TO_BORDER
+Works in GLSL</h3>
+<p>In GLSL, shader code does not require any special functions or
+conditional statements to handle <code>GL_CLAMP_TO_BORDER</code>. When
+using standard texture sampling functions—such as
+<code>texture()</code>, <code>textureLod()</code>, or
+<code>texelFetch()</code>—the texture hardware handles coordinate
+evaluation automatically.</p>
+<p>When a texture coordinate falls outside the normalized range of
+<code>[0.0, 1.0]</code>, the hardware texture sampling unit detects that
+the coordinate has exceeded the boundary. Instead of clamping to the
+outer edge pixels (<code>GL_CLAMP_TO_EDGE</code>) or repeating the
+pattern (<code>GL_REPEAT</code>), it returns a constant predefined
+border color.</p>
+<h3 id="specifying-the-border-color">Specifying the Border Color</h3>
+<p>The border color is a state configured on the CPU side through the
+OpenGL API, not inside the GLSL shader itself. It is assigned to a
+texture object or a sampler object:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> borderColor<span class="op">[]</span> <span class="op">=</span> <span class="op">{</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">,</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">,</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">,</span> <span class="fl">1.0</span><span class="bu">f</span> <span class="op">};</span> <span class="co">// RGBA</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>glTexParameterfv<span class="op">(</span>GL_TEXTURE_2D<span class="op">,</span> GL_TEXTURE_BORDER_COLOR<span class="op">,</span> borderColor<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>glTexParameteri<span class="op">(</span>GL_TEXTURE_2D<span class="op">,</span> GL_TEXTURE_WRAP_S<span class="op">,</span> GL_CLAMP_TO_BORDER<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>glTexParameteri<span class="op">(</span>GL_TEXTURE_2D<span class="op">,</span> GL_TEXTURE_WRAP_T<span class="op">,</span> GL_CLAMP_TO_BORDER<span class="op">);</span></span></code></pre></div>
+<p>When a sampler in GLSL samples from this texture with coordinates
+such as <code>vec2(-0.2, 0.5)</code> or <code>vec2(1.5, 1.2)</code>, the
+returned <code>vec4</code> will be
+<code>vec4(0.0, 0.0, 0.0, 1.0)</code>.</p>
+<h3 id="impact-of-texture-filtering">Impact of Texture Filtering</h3>
+<p>The exact value returned near the edges depends on the minification
+and magnification filters (<code>GL_TEXTURE_MIN_FILTER</code> and
+<code>GL_TEXTURE_MAG_FILTER</code>):</p>
+<ul>
+<li><strong>GL_NEAREST</strong>: The texture unit chooses the nearest
+texel. If the sample coordinate maps past the outer boundary of the
+outermost texel centers, the exact border color is returned
+immediately.</li>
+<li><strong>GL_LINEAR</strong>: The texture unit linearly interpolates
+between the edge texels and the border color across a half-texel wide
+strip along the perimeter. Coordinates near the border smoothly
+transition into the border color rather than switching abruptly.</li>
+</ul>
+<h3 id="special-texture-types">Special Texture Types</h3>
+<ul>
+<li><strong>Integer Textures</strong>: When using signed or unsigned
+integer formats (such as <code>isampler2D</code> or
+<code>usampler2D</code>), <code>glTexParameterIiv</code> or
+<code>glTexParameterIuiv</code> must be used to define the border color.
+Passing standard float values will cause undefined behavior or
+clamping.</li>
+<li><strong>Depth and Shadow Textures</strong>: When depth comparison
+modes (<code>GL_COMPARE_REF_TO_TEXTURE</code>) are active, the border
+color's depth component is used in the comparison operation. This is
+commonly leveraged in shadow mapping to ensure areas outside the shadow
+map frustum evaluate consistently as either fully in shadow or fully
+lit.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

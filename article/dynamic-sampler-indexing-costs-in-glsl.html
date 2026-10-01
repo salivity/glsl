@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Sampler Indexing Costs in GLSL - glsl</title>
+    <meta name="description" content="Dynamically indexing arrays of samplers in GLSL fragment shaders introduces significant performance penalties that can severely degrade rendering efficiency. When a shader indexes a sampler array using a non-uniform variable—such as one derived from pe">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/dynamic-sampler-indexing-costs-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Dynamic Sampler Indexing Costs in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/dynamic-sampler-indexing-costs-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Dynamically indexing arrays of samplers in GLSL fragment shaders introduces significant performance penalties that can severely degrade rendering efficiency. When a shader indexes a sampler array using a non-uniform variable—such as one derived from pe" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="dynamic-sampler-indexing-costs-in-glsl">Dynamic Sampler Indexing
+Costs in GLSL</h1>
+<p>Dynamically indexing arrays of samplers in GLSL fragment shaders
+introduces significant performance penalties that can severely degrade
+rendering efficiency. When a shader indexes a sampler array using a
+non-uniform variable—such as one derived from per-vertex attributes,
+mathematical operations, or fragment coordinates—the GPU cannot optimize
+texture fetching in the same way it does with uniform access. The
+primary performance costs stem from warp divergence, hardware-enforced
+instruction serialization, compiler-generated switch emulation,
+increased register pressure, and severe texture cache thrashing.</p>
+<h3 id="warp-divergence-and-execution-serialization">Warp Divergence and
+Execution Serialization</h3>
+<p>Modern GPUs execute fragment shaders in parallel lockstep groups
+known as warps (NVIDIA) or wavefronts (AMD), typically consisting of 32
+or 64 threads. These threads share a single instruction pointer. When
+samplers are indexed statically or with dynamically uniform values
+(where every thread in the warp uses the exact same index), the warp
+fetches texture data collectively in a single, coordinated memory
+transaction.</p>
+<p>When the index varies across threads within the same warp
+(non-uniform dynamic indexing), the hardware cannot execute a single
+shared texture fetch instruction. Instead, it must serialize the memory
+fetches. The GPU effectively masks inactive threads and iterates through
+every distinct texture requested across the active warp. If four
+neighboring fragments in a quad request four different textures, the
+texture fetch instructions must execute four times instead of once,
+reducing warp throughput proportionally.</p>
+<h3 id="emulated-control-flow-and-code-bloat">Emulated Control Flow and
+Code Bloat</h3>
+<p>Not all GPU hardware or graphics APIs support native non-uniform
+resource indexing at the microcode level. Historically, the OpenGL
+Shading Language standard required sampler array indices to be
+dynamically uniform expressions. While modern GLSL and extensions like
+<code>GL_EXT_nonuniform_qualifier</code> permit non-uniform access,
+underlying drivers frequently handle this by unrolling the dynamic index
+into a hardware switch statement:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// What the developer writes:</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> color <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>mySamplers<span class="op">[</span><span class="dt">index</span><span class="op">],</span> uv<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// What the compiler often generates behind the scenes:</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> color<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span><span class="dt">index</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span>      color <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>mySamplers<span class="op">[</span><span class="dv">0</span><span class="op">],</span> uv<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span><span class="dt">index</span> <span class="op">==</span> <span class="dv">1</span><span class="op">)</span> color <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>mySamplers<span class="op">[</span><span class="dv">1</span><span class="op">],</span> uv<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span><span class="dt">index</span> <span class="op">==</span> <span class="dv">2</span><span class="op">)</span> color <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>mySamplers<span class="op">[</span><span class="dv">2</span><span class="op">],</span> uv<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">// ...repeated for the entire array size</span></span></code></pre></div>
+<p>This dynamic branch unrolling bloats the shader's instruction cache
+footprint, disrupts hardware instruction prefetching, and incurs heavy
+branching overhead.</p>
+<h3 id="increased-register-pressure-and-occupancy-loss">Increased
+Register Pressure and Occupancy Loss</h3>
+<p>The structural overhead of evaluating dynamic branches and managing
+variable texture descriptors directly increases general-purpose register
+(VGPR) allocation per thread. As a shader requires more registers to
+track divergent state and intermediate fetch results, the GPU has fewer
+available registers for other concurrent workloads.</p>
+<p>This drop in available registers reduces GPU occupancy—the ratio of
+active warps to the theoretical maximum supported by the compute unit.
+Lower occupancy diminishes the GPU’s ability to hide memory latency,
+amplifying stalls caused by high-latency global memory fetches.</p>
+<h3 id="texture-cache-inefficiency">Texture Cache Inefficiency</h3>
+<p>Texture sampling units rely heavily on spatial and temporal locality
+to maximize L1 and L2 texture cache hit rates. When adjacent fragments
+sample from the same texture at nearby UV coordinates, data is fetched
+once from memory and shared via cache lines.</p>
+<p>Dynamic sampler indexing disrupts this paradigm. When adjacent
+fragments within a pixel quad pull from entirely separate texture
+allocations, the cache cannot leverage spatial locality. Each thread
+requests cache lines from completely disconnected address spaces,
+saturating memory buses and causing frequent cache line evictions (cache
+thrashing), which forces the GPU to repeatedly stall on high-latency
+VRAM fetches.</p>
+<h3 id="high-performance-alternatives">High-Performance
+Alternatives</h3>
+<p>To avoid the performance degradation of dynamic sampler indexing,
+modern rendering pipelines leverage alternative structures:</p>
+<ul>
+<li><strong>2D Texture Arrays (<code>sampler2DArray</code>):</strong>
+Texture arrays share dimensions, format, and mip-map levels across
+layers. They use a standard 3D coordinate
+(<code>vec3(u, v, layer)</code>), allowing native, hardware-level layer
+switching with zero warp divergence or branch unrolling.</li>
+<li><strong>Bindless Textures
+(<code>GL_ARB_bindless_texture</code>):</strong> Bindless rendering
+converts textures into 64-bit GPU memory handles stored in standard
+uniform buffers or SSBOs, bypassing traditional descriptor binding
+limits with native pointer-like access.</li>
+<li><strong>Texture Atlases:</strong> Packing multiple textures into a
+single large texture avoids array indexing entirely, trading index
+calculations for UV coordinate offset math.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

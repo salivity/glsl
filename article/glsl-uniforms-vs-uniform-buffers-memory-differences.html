@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Uniforms vs Uniform Buffers: Memory Differences - glsl</title>
+    <meta name="description" content="This article examines how standard uniform variables and uniform buffer blocks (Uniform Buffer Objects, or UBOs) differ in their memory consumption within OpenGL Shading Language (GLSL). While both mechanisms pass constant data from the CPU to shader sta">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-uniforms-vs-uniform-buffers-memory-differences">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Uniforms vs Uniform Buffers: Memory Differences - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-uniforms-vs-uniform-buffers-memory-differences" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article examines how standard uniform variables and uniform buffer blocks (Uniform Buffer Objects, or UBOs) differ in their memory consumption within OpenGL Shading Language (GLSL). While both mechanisms pass constant data from the CPU to shader sta" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-uniforms-vs-uniform-buffers-memory-differences">GLSL
+Uniforms vs Uniform Buffers: Memory Differences</h1>
+<p>This article examines how standard uniform variables and uniform
+buffer blocks (Uniform Buffer Objects, or UBOs) differ in their memory
+consumption within OpenGL Shading Language (GLSL). While both mechanisms
+pass constant data from the CPU to shader stages, they rely on
+fundamentally different storage architectures, alignment constraints,
+and allocation rules. Understanding these differences allows developers
+to optimize GPU memory footprint and avoid common pitfalls related to
+data padding and redundant storage.</p>
+<h3 id="internal-storage-architecture">Internal Storage
+Architecture</h3>
+<p>Standard uniform variables are stored in the shader program's default
+uniform block, which is managed directly by the graphics driver. Each
+program object maintains its own independent storage space for these
+uniforms. If multiple shader programs require the same set of uniform
+values, the data must be uploaded and duplicated in memory for every
+program.</p>
+<p>In contrast, uniform buffer blocks are backed by dedicated GPU buffer
+objects (UBOs) in video memory (VRAM). This allows a single memory
+allocation to be bound to multiple shader programs simultaneously. By
+decoupling the uniform data from the individual shader program state,
+UBOs eliminate memory duplication when the same parameters are shared
+across different shaders.</p>
+<h3 id="alignment-padding-and-internal-fragmentation">Alignment,
+Padding, and Internal Fragmentation</h3>
+<p>Memory efficiency at the byte level differs significantly due to
+layout specifications:</p>
+<ul>
+<li><strong>Standard Uniforms:</strong> The driver's internal compiler
+can pack standard uniforms tightly according to hardware-specific
+capabilities. Because these uniforms are updated via functions like
+<code>glUniform*</code>, the driver handles the exact layout behind the
+scenes, minimizing wasted padding between individual scalars and
+vectors.</li>
+<li><strong>Uniform Buffer Blocks:</strong> UBOs typically use
+standardized memory layouts—most notably <code>std140</code>—to ensure
+consistent memory offsets across different hardware vendors. The
+<code>std140</code> layout enforces strict alignment rules:
+<ul>
+<li><code>vec3</code> and <code>vec4</code> are both aligned to 16-byte
+boundaries, meaning a <code>vec3</code> wastes 4 bytes of padding.</li>
+<li>Every element in an array within a UBO is padded to the size of a
+<code>vec4</code> (16 bytes), regardless of the underlying data type. An
+array of <code>float</code> values will consume four times its raw data
+size.</li>
+<li>Nested structures are aligned to 16 bytes.</li>
+</ul></li>
+</ul>
+<p>This explicit layout often introduces internal memory fragmentation
+(padding overhead) that standard uniforms avoid.</p>
+<h3 id="allocation-limits-and-capacity">Allocation Limits and
+Capacity</h3>
+<p>The maximum allowable memory size creates another distinct
+operational difference:</p>
+<ul>
+<li><strong>Standard Uniforms:</strong> Memory capacity is measured in
+components (individual <code>float</code>, <code>int</code>, or
+<code>bool</code> values) via queries like
+<code>GL_MAX_VERTEX_UNIFORM_COMPONENTS</code> or
+<code>GL_MAX_FRAGMENT_UNIFORM_COMPONENTS</code>. These limits are
+relatively small, often ranging from 1,024 to 4,096 components (roughly
+4 KB to 16 KB) per stage.</li>
+<li><strong>Uniform Buffer Blocks:</strong> Memory limits are defined by
+<code>GL_MAX_UNIFORM_BLOCK_SIZE</code>, which guarantees at least 16 KB
+per block, though modern implementations routinely support 64 KB or
+more. Furthermore, an application can bind multiple uniform blocks
+concurrently up to <code>GL_MAX_UNIFORM_BUFFER_BINDINGS</code>.</li>
+</ul>
+<h3 id="summary-of-memory-trade-offs">Summary of Memory Trade-Offs</h3>
+<p>Standard uniform variables consume less memory per variable because
+the driver packs them tightly without strict alignment padding, but they
+scale poorly when identical data is needed across multiple programs due
+to memory duplication. Uniform buffer blocks require extra memory per
+data structure to satisfy alignment rules like <code>std140</code>, but
+they yield a net reduction in overall GPU memory consumption when
+sharing large datasets, matrices, or material parameters across multiple
+shaders.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

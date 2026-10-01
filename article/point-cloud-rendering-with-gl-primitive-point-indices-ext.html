@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Point Cloud Rendering with gl_PrimitivePointIndicesEXT - glsl</title>
+    <meta name="description" content="This article explains how the glPrimitivePointIndicesEXT built-in variable functions within GLSL mesh shaders to accelerate and optimize point cloud rendering. By shifting the traditional input-assembler topology management into compute-driven mesh shade">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/point-cloud-rendering-with-gl-primitive-point-indices-ext">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Point Cloud Rendering with gl_PrimitivePointIndicesEXT - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/point-cloud-rendering-with-gl-primitive-point-indices-ext" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the glPrimitivePointIndicesEXT built-in variable functions within GLSL mesh shaders to accelerate and optimize point cloud rendering. By shifting the traditional input-assembler topology management into compute-driven mesh shade" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="point-cloud-rendering-with-gl_primitivepointindicesext">Point
+Cloud Rendering with gl_PrimitivePointIndicesEXT</h1>
+<p>This article explains how the
+<code>gl_PrimitivePointIndicesEXT</code> built-in variable functions
+within GLSL mesh shaders to accelerate and optimize point cloud
+rendering. By shifting the traditional input-assembler topology
+management into compute-driven mesh shader stages, developers can
+dynamically cull, generate, and index massive datasets—such as LiDAR
+scans or photogrammetry data—directly on the GPU with minimal memory
+overhead.</p>
+<h3 id="the-role-of-gl_primitivepointindicesext">The Role of
+gl_PrimitivePointIndicesEXT</h3>
+<p>In the <code>GL_EXT_mesh_shader</code> extension, mesh shaders
+replace traditional vertex and geometry pipelines, providing a
+compute-like programming model for primitive generation. When configured
+for point rendering using the <code>layout(points) out;</code> execution
+mode, the mesh shader must define how output vertices form individual
+point primitives.</p>
+<p>The built-in output array <code>gl_PrimitivePointIndicesEXT[]</code>
+serves this purpose. For every emitted point primitive, the shader
+writes a single vertex index to this array:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">64</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">points</span><span class="op">,</span> <span class="dt">max_vertices</span> <span class="op">=</span> <span class="dv">64</span><span class="op">,</span> max_primitives <span class="op">=</span> <span class="dv">64</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> gl_MeshPerVertexEXT <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> <span class="bu">gl_Position</span><span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> gl_MeshVerticesEXT<span class="op">[];</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> gId <span class="op">=</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> lId <span class="op">=</span> <span class="bu">gl_LocalInvocationIndex</span><span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Set total vertices and primitives produced by this workgroup</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">SetMeshOutputsEXT</span><span class="op">(</span><span class="dv">64</span><span class="op">,</span> <span class="dv">64</span><span class="op">);</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute or fetch point coordinates</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    gl_MeshVerticesEXT<span class="op">[</span>lId<span class="op">].</span><span class="fu">gl_Position</span> <span class="op">=</span> <span class="fu">fetchPointPosition</span><span class="op">(</span>gId<span class="op">);</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Map the primitive directly to the vertex</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    gl_PrimitivePointIndicesEXT<span class="op">[</span>lId<span class="op">]</span> <span class="op">=</span> lId<span class="op">;</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Each element in <code>gl_PrimitivePointIndicesEXT</code> corresponds
+to a point primitive that the hardware rasterizer will draw, referencing
+an attribute entry defined in <code>gl_MeshVerticesEXT</code>.</p>
+<h3 id="dynamic-topology-and-index-compaction">Dynamic Topology and
+Index Compaction</h3>
+<p>Traditional point rendering pipelines require predefined index
+buffers or depend entirely on drawing unindexed arrays. If individual
+points must be discarded (due to frustum culling, distance-based
+level-of-detail (LOD), or classification filtering), traditional
+pipelines often execute vertex shaders for culled points anyway or rely
+on compute shader pre-passes to compact index buffers.</p>
+<p><code>gl_PrimitivePointIndicesEXT</code> eliminates the need for
+external compaction passes:</p>
+<ol type="1">
+<li><strong>Per-Point Filtering:</strong> Threads within a mesh shader
+workgroup evaluate point visibility (e.g., against camera frustum planes
+or depth thresholds).</li>
+<li><strong>Subgroup Ballot Compaction:</strong> Visible points are
+compacted using subgroup operations (e.g., <code>subgroupBallot</code>
+and <code>subgroupExclusiveAdd</code>).</li>
+<li><strong>Sparse Index Assignment:</strong> Only passing points are
+assigned an index inside <code>gl_PrimitivePointIndicesEXT</code>, while
+non-visible points consume neither primitive slots nor rasterization
+bandwidth.</li>
+<li><strong>Dynamic Output Sizing:</strong> The final count of visible
+points is passed directly to
+<code>SetMeshOutputsEXT(vertexCount, primitiveCount)</code>, ensuring
+zero rasterizer overhead for culled data.</li>
+</ol>
+<h3 id="gpu-memory-bandwidth-reduction">GPU Memory Bandwidth
+Reduction</h3>
+<p>Point clouds typically consist of millions to billions of samples,
+making memory bandwidth the primary rendering bottleneck. By using mesh
+shaders with <code>gl_PrimitivePointIndicesEXT</code>, point cloud data
+structures can be decoded on the fly:</p>
+<ul>
+<li><strong>Compressed Storage:</strong> Point positions can be stored
+as 8-bit or 16-bit quantized integers, octree nodes, or spherical
+coordinates.</li>
+<li><strong>On-Chip Expansion:</strong> Threads unpack and transform raw
+memory into floating-point coordinates within workgroup local storage or
+registers before writing to <code>gl_MeshVerticesEXT</code>.</li>
+<li><strong>Zero Index Buffer Allocation:</strong> Because point indices
+are generated algebraically in shader code
+(<code>gl_PrimitivePointIndicesEXT[i] = i</code>), applications avoid
+storing and streaming multi-gigabyte index buffers across the PCIe bus
+and VRAM.</li>
+</ul>
+<h3 id="integration-with-clustered-point-hierarchies">Integration with
+Clustered Point Hierarchies</h3>
+<p>Modern spatial partitioning algorithms divide dense point clouds into
+hierarchical bounding volumes or clusters (such as "point-lets"). Task
+shaders (object shaders) act as a coarse filter, determining whether an
+entire point cluster resides within the view frustum or requires a
+specific LOD.</p>
+<p>Once a cluster passes the task stage, it dispatches the corresponding
+mesh shader. The mesh shader workgroup then uses
+<code>gl_PrimitivePointIndicesEXT</code> to generate the precise stream
+of visible primitives. This hierarchical approach matches modern GPU
+SIMD architectures and allows massive point clouds to be rendered at
+native hardware limits without CPU intervention.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

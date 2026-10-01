@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does GLSL Shadow Sampler Depth Comparison Work? - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), shadow samplers automate the depth-testing stage of shadow mapping directly in hardware during texture lookup. Instead of returning raw depth values for manual software comparison, shadow samplers like sampler2DShadow c">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-glsl-shadow-sampler-depth-comparison-work">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does GLSL Shadow Sampler Depth Comparison Work? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-glsl-shadow-sampler-depth-comparison-work" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), shadow samplers automate the depth-testing stage of shadow mapping directly in hardware during texture lookup. Instead of returning raw depth values for manual software comparison, shadow samplers like sampler2DShadow c" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-glsl-shadow-sampler-depth-comparison-work">How Does
+GLSL Shadow Sampler Depth Comparison Work?</h1>
+<p>In OpenGL Shading Language (GLSL), shadow samplers automate the
+depth-testing stage of shadow mapping directly in hardware during
+texture lookup. Instead of returning raw depth values for manual
+software comparison, shadow samplers like <code>sampler2DShadow</code>
+compare a reference depth coordinate against the depth recorded in the
+shadow map. This article explores the internal mechanics of shadow
+samplers, how hardware Percentage Closer Filtering (PCF) functions, and
+how to configure both host OpenGL and GLSL shaders to use this
+feature.</p>
+<h2
+id="understanding-the-standard-depth-texture-vs-shadow-samplers">Understanding
+the Standard Depth Texture vs. Shadow Samplers</h2>
+<p>In a naive shadow mapping pipeline, depth information from the
+light’s point of view is written to a standard depth texture and
+accessed in shaders using a <code>sampler2D</code>. To determine
+visibility, the fragment shader executes two distinct operations:
+fetching the stored depth value via <code>texture()</code> and then
+performing an explicit conditional check (such as
+<code>currentDepth &gt; sampledDepth</code>) to test if a fragment is
+occluded.</p>
+<p>Shadow samplers replace this manual process. By declaring the texture
+uniform as a shadow type—such as <code>sampler2DShadow</code> or
+<code>samplerCubeShadow</code>—the GPU combines the texture fetch and
+the comparison operation into a single built-in hardware
+instruction.</p>
+<h2 id="the-role-of-the-reference-coordinate">The Role of the Reference
+Coordinate</h2>
+<p>When sampling from a standard texture, GLSL requires coordinates
+corresponding to the texture’s dimensions (e.g., <span
+class="math inline">\((u, v)\)</span> for 2D textures). When sampling
+with a shadow sampler, an additional coordinate component is
+required:</p>
+<ul>
+<li>For <code>sampler2DShadow</code>, coordinates are passed as a
+<code>vec3(u, v, ref_z)</code>.</li>
+<li>For projected coordinates, <code>textureProj()</code> accepts a
+<code>vec4(u, v, z, w)</code>, which performs perspective division
+automatically to derive <span
+class="math inline">\(\frac{ref\_z}{w}\)</span>.</li>
+</ul>
+<p>The extra component, <span class="math inline">\(ref\_z\)</span>,
+represents the reference depth: the distance from the light source to
+the currently processed surface fragment. The GPU compares this
+reference value directly against the texel values stored in the shadow
+map.</p>
+<h2 id="opengl-host-state-configuration">OpenGL Host State
+Configuration</h2>
+<p>Shadow samplers do not function automatically without setting the
+appropriate texture comparison parameters on the OpenGL host side. Two
+specific texture parameters must be configured using
+<code>glTexParameteri</code>:</p>
+<ol type="1">
+<li><strong><code>GL_TEXTURE_COMPARE_MODE</code></strong>: Must be set
+to <code>GL_COMPARE_REF_TO_TEXTURE</code>. This signals the hardware to
+activate its internal comparison logic instead of returning raw depth
+data.</li>
+<li><strong><code>GL_TEXTURE_COMPARE_FUNC</code></strong>: Defines the
+condition under which a fragment is considered "in light" (evaluates to
+<span class="math inline">\(1.0\)</span>). Typically, this is set to
+<code>GL_LEQUAL</code> (Less than or Equal), meaning if <span
+class="math inline">\(ref\_z \le depth_{map}\)</span>, the fragment is
+visible to the light.</li>
+</ol>
+<p>If <code>GL_TEXTURE_COMPARE_MODE</code> is left as
+<code>GL_NONE</code> (the default state), sampling a shadow sampler
+yields undefined behavior or compilation warnings depending on the GLSL
+version.</p>
+<h2 id="hardware-pcf-and-bilinear-filtering">Hardware PCF and Bilinear
+Filtering</h2>
+<p>The most significant advantage of using shadow samplers over manual
+shader comparisons is hardware-level Percentage Closer Filtering
+(PCF).</p>
+<p>When using standard <code>sampler2D</code> with bilinear filtering
+(<code>GL_LINEAR</code>), the GPU linearly interpolates between raw
+depth values. Interpolating depth values produces incorrect intermediate
+distances, causing severe visual artifacts along silhouette edges.
+Consequently, standard depth maps must rely on nearest-neighbor
+filtering (<code>GL_NEAREST</code>).</p>
+<p>When <code>GL_COMPARE_REF_TO_TEXTURE</code> and
+<code>GL_LINEAR</code> are active simultaneously, the hardware changes
+how interpolation executes:</p>
+<ol type="1">
+<li>The GPU reads the four nearest depth texels surrounding the sampling
+coordinate.</li>
+<li>It compares the reference depth <span
+class="math inline">\(ref\_z\)</span> against each of the four texels
+individually, yielding four binary results (<span
+class="math inline">\(0.0\)</span> or <span
+class="math inline">\(1.0\)</span>).</li>
+<li>It performs standard bilinear interpolation across the four
+comparison results.</li>
+</ol>
+<p>The resulting output from
+<code>texture(shadowMap, vec3(uv, ref_z))</code> is a continuous
+floating-point value in the range <span class="math inline">\([0.0,
+1.0]\)</span>. This value represents the percentage of the sampled area
+illuminated by the light, producing smoothly anti-aliased shadow edges
+with zero shader overhead.</p>
+<h2 id="glsl-implementation-example">GLSL Implementation Example</h2>
+<p>Integrating a 2D shadow sampler into a fragment shader requires
+minimal code:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec4</span> FragPosLightSpace<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2DShadow</span> shadowMap<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">CalculateShadow</span><span class="op">(</span><span class="dt">vec4</span> fragPosLightSpace<span class="op">)</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Perform perspective divide to transform to Normalized Device Coordinates [-1, 1]</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> projCoords <span class="op">=</span> fragPosLightSpace<span class="op">.</span><span class="fu">xyz</span> <span class="op">/</span> fragPosLightSpace<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Transform coordinates to the [0, 1] range for texture sampling</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    projCoords <span class="op">=</span> projCoords <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Prevent shadowing outside the light frustum&#39;s far plane</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>projCoords<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;</span> <span class="fl">1.0</span><span class="op">)</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">{</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Built-in shadow comparison:</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="co">// projCoords.xy = UV coordinates</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="co">// projCoords.z  = Reference depth to compare against the depth map</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> shadowFactor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>shadowMap<span class="op">,</span> projCoords<span class="op">);</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> shadowFactor<span class="op">;</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> visibility <span class="op">=</span> <span class="fu">CalculateShadow</span><span class="op">(</span>FragPosLightSpace<span class="op">);</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> lightIntensity <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">)</span> <span class="op">*</span> visibility<span class="op">;</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>lightIntensity<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Shadow samplers provide an efficient, hardware-accelerated mechanism
+for depth testing and edge softening in modern graphics pipelines,
+eliminating boilerplate comparison logic and manual multi-tap filtering
+algorithms.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

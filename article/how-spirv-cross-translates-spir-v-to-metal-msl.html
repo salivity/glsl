@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How SPIRV-Cross Translates SPIR-V to Metal MSL - glsl</title>
+    <meta name="description" content="This article provides an overview of how SPIRV-Cross decompiles and transforms SPIR-V bytecode—originally compiled from GLSL—into valid Metal Shading Language (MSL) code. The translation process relies on parsing the binary instructions into an Abstr">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-spirv-cross-translates-spir-v-to-metal-msl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How SPIRV-Cross Translates SPIR-V to Metal MSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-spirv-cross-translates-spir-v-to-metal-msl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of how SPIRV-Cross decompiles and transforms SPIR-V bytecode—originally compiled from GLSL—into valid Metal Shading Language (MSL) code. The translation process relies on parsing the binary instructions into an Abstr" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-spirv-cross-translates-spir-v-to-metal-msl">How SPIRV-Cross
+Translates SPIR-V to Metal MSL</h1>
+<p>This article provides an overview of how SPIRV-Cross decompiles and
+transforms SPIR-V bytecode—originally compiled from GLSL—into valid
+Metal Shading Language (MSL) code. The translation process relies on
+parsing the binary instructions into an Abstract Syntax Tree (AST),
+resolving structural and semantic mismatches between Vulkan-style
+shaders and Apple's Metal graphics API, remapping resource bindings, and
+emitting idiomatic, compile-ready C++-based MSL source code.</p>
+<h3 id="1-bytecode-parsing-and-ast-construction">1. Bytecode Parsing and
+AST Construction</h3>
+<p>The translation pipeline begins by ingesting the raw SPIR-V binary,
+which consists of a stream of 32-bit words containing operation codes
+(opcodes) and operands. SPIRV-Cross iterates through these opcodes
+sequentially to identify data types, constants, global variables,
+function definitions, and execution flow instructions.</p>
+<p>Instead of translating opcode-by-opcode directly into source text,
+SPIRV-Cross builds an internal high-level representation (AST) along
+with a Control Flow Graph (CFG). This intermediate model reconstructs
+control-flow structures such as <code>if-else</code> branches, loops,
+and <code>switch</code> statements from low-level SPIR-V branch
+instructions (<code>OpBranch</code>,
+<code>OpBranchConditional</code>).</p>
+<h3 id="2-type-system-and-semantic-mapping">2. Type System and Semantic
+Mapping</h3>
+<p>Once the AST is formed, SPIRV-Cross maps SPIR-V types and operations
+to their MSL equivalents:</p>
+<ul>
+<li><strong>Basic Types and Vectors:</strong> SPIR-V vector and scalar
+definitions are converted into Metal standard types (e.g.,
+<code>OpTypeVector</code> with 32-bit floats becomes
+<code>metal::float4</code>, <code>OpTypeMatrix</code> becomes
+<code>metal::float4x4</code>).</li>
+<li><strong>Built-in Variables:</strong> GLSL built-ins captured in
+SPIR-V are mapped to Metal attributes. For example,
+<code>gl_Position</code> translates to the <code>[[position]]</code>
+attribute, <code>gl_VertexIndex</code> becomes
+<code>[[vertex_id]]</code>, and <code>gl_FragCoord</code> becomes a
+parameter marked with <code>[[position]]</code>.</li>
+<li><strong>Standard Intrinsics:</strong> GLSL extended instructions
+(GLSL.std.450), such as mathematical functions (<code>mix</code>,
+<code>clamp</code>, <code>dot</code>), are converted into corresponding
+functions inside the <code>metal::</code> namespace.</li>
+</ul>
+<h3 id="3-reconciling-resource-binding-differences">3. Reconciling
+Resource Binding Differences</h3>
+<p>Vulkan and Metal use fundamentally different resource-binding models.
+GLSL-derived SPIR-V uses descriptor sets and bindings (e.g.,
+<code>layout(set = X, binding = Y)</code>), whereas MSL addresses
+resources via explicit hardware binding tables:
+<code>[[buffer(n)]]</code>, <code>[[texture(n)]]</code>, and
+<code>[[sampler(n)]]</code>.</p>
+<p>SPIRV-Cross resolves this discrepancy by maintaining a resource
+remapping table. It analyzes the descriptor sets present in the bytecode
+and assigns them to specific linear indices compatible with Metal.
+SPIRV-Cross can either flatten descriptor sets into flat hardware table
+slots or synthesize Metal Argument Buffers (structures marked with
+<code>[[buffer(n)]]</code> containing embedded resources) to preserve
+the original descriptor layout.</p>
+<h3 id="4-splitting-combined-image-samplers">4. Splitting Combined Image
+Samplers</h3>
+<p>In GLSL, textures and samplers are frequently declared as combined
+objects (such as <code>sampler2D</code>). In contrast, Metal strictly
+decouples sampled textures (<code>texture2d&lt;float&gt;</code>) from
+the sampling state (<code>sampler</code>).</p>
+<p>When SPIR-V contains <code>OpTypeSampledImage</code>, SPIRV-Cross
+decomposes the combined object into two distinct MSL arguments: a
+<code>texture2d</code> and a <code>sampler</code>. At the call sites
+where the texture is read, SPIRV-Cross transforms operations like
+<code>texture()</code> into Metal member function calls on the texture
+object (e.g., <code>tex.sample(smp, coords)</code>), passing both
+resolved resources.</p>
+<h3 id="5-function-signature-and-memory-layout-generation">5. Function
+Signature and Memory Layout Generation</h3>
+<p>MSL shaders are functions with specific stage attributes
+(<code>vertex</code>, <code>fragment</code>, <code>kernel</code>) rather
+than a single <code>void main()</code> entry point that relies on global
+state.</p>
+<p>SPIRV-Cross aggregates all uniform buffers, storage buffers, inputs,
+outputs, and push constants referenced by the SPIR-V entry point and
+restructures them into explicit parameters for the generated MSL
+entry-point function. Stage inputs are packed into an MSL struct tagged
+with the <code>[[stage_in]]</code> attribute, while outputs are returned
+as a structured value. Additionally, SPIR-V push constant blocks are
+converted to standard buffers bound to a designated
+<code>[[buffer(n)]]</code> slot.</p>
+<h3 id="6-msl-code-emission">6. MSL Code Emission</h3>
+<p>The final phase uses the <code>CompilerMSL</code> backend to traverse
+the finalized AST and emit valid MSL text. This stage ensures that
+language-specific constraints are respected:</p>
+<ul>
+<li>Inserts required headers, primarily
+<code>#include &lt;metal_stdlib&gt;</code> and
+<code>using namespace metal;</code>.</li>
+<li>Resolves naming collisions and sanitizes identifiers that clash with
+reserved Metal keywords.</li>
+<li>Enforces proper memory address space qualifiers
+(<code>device</code>, <code>constant</code>, <code>thread</code>, or
+<code>threadgroup</code>) on pointers and references.</li>
+</ul>
+<p>The resulting output is a self-contained, human-readable MSL text
+file capable of being compiled directly by Apple's Metal shader compiler
+(<code>metallib</code>).</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

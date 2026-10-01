@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>sparseTextureLodARB Return Codes in GLSL - glsl</title>
+    <meta name="description" content="This article explains how the sparseTextureLodARB function in OpenGL Shading Language (GLSL) signals uncommitted memory pages. It covers the mechanics of the function's return code, the role of implementation-dependent values, and the proper built-in fun">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/sparse-texture-lod-arb-return-codes-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="sparseTextureLodARB Return Codes in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/sparse-texture-lod-arb-return-codes-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the sparseTextureLodARB function in OpenGL Shading Language (GLSL) signals uncommitted memory pages. It covers the mechanics of the function's return code, the role of implementation-dependent values, and the proper built-in fun" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="sparsetexturelodarb-return-codes-in-glsl">sparseTextureLodARB
+Return Codes in GLSL</h1>
+<p>This article explains how the <code>sparseTextureLodARB</code>
+function in OpenGL Shading Language (GLSL) signals uncommitted memory
+pages. It covers the mechanics of the function's return code, the role
+of implementation-dependent values, and the proper built-in function
+used to detect non-resident texels.</p>
+<h3 id="the-return-value-of-sparsetexturelodarb">The Return Value of
+sparseTextureLodARB</h3>
+<p>In the <code>GL_ARB_sparse_texture</code> extension, texture sampling
+functions do not return the sampled color directly. Instead, they write
+the sampled data to an <code>out</code> parameter and return an
+<code>int</code> representing the residency status of the accessed
+memory.</p>
+<p>The signature is structured as follows:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> <span class="fu">sparseTextureLodARB</span><span class="op">(</span>gsampler2D <span class="dt">sampler</span><span class="op">,</span> <span class="dt">vec2</span> P<span class="op">,</span> <span class="dt">float</span> lod<span class="op">,</span> <span class="dt">out</span> <span class="dt">vec4</span> texel<span class="op">);</span></span></code></pre></div>
+<h3 id="uncommitted-memory-and-sparsetexelsresidentarb">Uncommitted
+Memory and sparseTexelsResidentARB</h3>
+<p>The exact numeric integer returned by
+<code>sparseTextureLodARB</code> to indicate uncommitted memory is
+<strong>implementation-dependent</strong>. The specification does not
+define a fixed constant (such as <code>0</code> or <code>-1</code>) for
+non-resident pages across different GPU hardware vendors.</p>
+<p>To determine whether the lookup accessed uncommitted or committed
+pages, GLSL provides the built-in function
+<code>sparseTexelsResidentARB</code>:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> <span class="fu">sparseTexelsResidentARB</span><span class="op">(</span><span class="dt">int</span> code<span class="op">);</span></span></code></pre></div>
+<ul>
+<li>If all memory pages required for the footprint of the lookup are
+committed, passing the return code to
+<code>sparseTexelsResidentARB</code> returns <code>true</code>.</li>
+<li>If any page required by the lookup is uncommitted (non-resident),
+passing the return code to <code>sparseTexelsResidentARB</code> returns
+<code>false</code>.</li>
+</ul>
+<h3 id="handling-non-resident-data">Handling Non-Resident Data</h3>
+<p>When <code>sparseTexelsResidentARB</code> returns <code>false</code>,
+the value written to the <code>texel</code> output variable is undefined
+or implementation-dependent, and the application must handle the missing
+data manually.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> texelColor<span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> code <span class="op">=</span> <span class="fu">sparseTextureLodARB</span><span class="op">(</span>mySparseSampler<span class="op">,</span> texCoords<span class="op">,</span> lodLevel<span class="op">,</span> texelColor<span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span><span class="fu">sparseTexelsResidentARB</span><span class="op">(</span>code<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Texel data resides in committed memory</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> texelColor<span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Texel data resides in uncommitted memory</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span> <span class="co">// Fallback color or lower-detail alternative</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Applications should never compare the integer return code directly
+against numeric literals. Always pass the integer code directly to
+<code>sparseTexelsResidentARB</code> to guarantee correct residency
+detection across all hardware.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

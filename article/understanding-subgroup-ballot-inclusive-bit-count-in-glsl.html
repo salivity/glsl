@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding subgroupBallotInclusiveBitCount in GLSL - glsl</title>
+    <meta name="description" content="This article provides a direct explanation of the subgroupBallotInclusiveBitCount function in GLSL, covering its exact computation, how it handles invocation masks, and its role in shader programming. In modern graphics and compute pipelines, subgroup op">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-subgroup-ballot-inclusive-bit-count-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding subgroupBallotInclusiveBitCount in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-subgroup-ballot-inclusive-bit-count-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a direct explanation of the subgroupBallotInclusiveBitCount function in GLSL, covering its exact computation, how it handles invocation masks, and its role in shader programming. In modern graphics and compute pipelines, subgroup op" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="understanding-subgroupballotinclusivebitcount-in-glsl">Understanding
+subgroupBallotInclusiveBitCount in GLSL</h1>
+<p>This article provides a direct explanation of the
+<code>subgroupBallotInclusiveBitCount</code> function in GLSL, covering
+its exact computation, how it handles invocation masks, and its role in
+shader programming. In modern graphics and compute pipelines, subgroup
+operations allow threads within the same SIMD unit to communicate
+efficiently without accessing shared memory. This guide focuses on how
+<code>subgroupBallotInclusiveBitCount</code> calculates population
+counts up to and including the calling invocation, demonstrating its
+behavior and common use cases like prefix sums and parallel stream
+compaction.</p>
+<hr />
+<h3 id="what-subgroupballotinclusivebitcount-computes">What
+<code>subgroupBallotInclusiveBitCount</code> Computes</h3>
+<p>In GLSL (specifically via the
+<code>GL_KHR_shader_subgroup_ballot</code> or Vulkan subgroup
+extensions), <code>subgroupBallotInclusiveBitCount(uvec4 value)</code>
+computes the number of bits set to <code>1</code> in the provided
+<code>value</code> bitmask from bit index <code>0</code> up to and
+<strong>including</strong> the current invocation's index
+(<code>gl_SubgroupInvocationID</code>).</p>
+<p>The ballot bitmask is represented as a 128-bit vector
+(<code>uvec4</code>), where each bit corresponds to an invocation in the
+subgroup:</p>
+<ul>
+<li>Bit <code>0</code> corresponds to invocation index
+<code>0</code>.</li>
+<li>Bit <code>n</code> corresponds to invocation index
+<code>n</code>.</li>
+</ul>
+<h3 id="the-computation-process">The Computation Process</h3>
+<p>When an invocation calls
+<code>subgroupBallotInclusiveBitCount(value)</code>:</p>
+<ol type="1">
+<li><strong>Mask Generation:</strong> The hardware constructs an
+internal mask where all bit indices from <code>0</code> to
+<code>gl_SubgroupInvocationID</code> are set to <code>1</code>, and all
+bits with indices greater than <code>gl_SubgroupInvocationID</code> are
+set to <code>0</code>.</li>
+<li><strong>Bitwise AND:</strong> This internal mask is logically ANDed
+with the input <code>uvec4 value</code>.</li>
+<li><strong>Population Count (popcount):</strong> The function returns
+the total number of set bits (<code>1</code>s) remaining after the
+masking operation.</li>
+</ol>
+<p>Because this operation is <strong>inclusive</strong>, if the current
+invocation's own bit in <code>value</code> is <code>1</code>, it is
+counted in the final result.</p>
+<h3 id="inclusive-vs-exclusive-comparison">Inclusive vs. Exclusive
+Comparison</h3>
+<p>To understand the inclusive count clearly, consider the difference
+between the two standard bit count functions:</p>
+<ul>
+<li><strong><code>subgroupBallotInclusiveBitCount(value)</code></strong>:
+Counts bits set to <code>1</code> in the range
+<code>[0, gl_SubgroupInvocationID]</code>.</li>
+<li><strong><code>subgroupBallotExclusiveBitCount(value)</code></strong>:
+Counts bits set to <code>1</code> in the range
+<code>[0, gl_SubgroupInvocationID - 1]</code>.</li>
+</ul>
+<p>If a ballot mask has bits set at indices 0, 2, and 3:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Invocation ID
+(<code>gl_SubgroupInvocationID</code>)</th>
+<th style="text-align: left;">Bit in Ballot</th>
+<th style="text-align: left;">Inclusive Count</th>
+<th style="text-align: left;">Exclusive Count</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">0</td>
+<td style="text-align: left;">1</td>
+<td style="text-align: left;"><strong>1</strong></td>
+<td style="text-align: left;">0</td>
+</tr>
+<tr>
+<td style="text-align: left;">1</td>
+<td style="text-align: left;">0</td>
+<td style="text-align: left;"><strong>1</strong></td>
+<td style="text-align: left;">1</td>
+</tr>
+<tr>
+<td style="text-align: left;">2</td>
+<td style="text-align: left;">1</td>
+<td style="text-align: left;"><strong>2</strong></td>
+<td style="text-align: left;">1</td>
+</tr>
+<tr>
+<td style="text-align: left;">3</td>
+<td style="text-align: left;">1</td>
+<td style="text-align: left;"><strong>3</strong></td>
+<td style="text-align: left;">2</td>
+</tr>
+</tbody>
+</table>
+<h3 id="typical-use-case-stream-compaction">Typical Use Case: Stream
+Compaction</h3>
+<p>The primary use case for <code>subgroupBallotInclusiveBitCount</code>
+is determining the target index when compacting data across a
+subgroup:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Evaluate a condition across all invocations</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> condition <span class="op">=</span> localData <span class="op">&gt;</span> threshold<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Get a bitmask of all invocations where condition is true</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">uvec4</span> ballot <span class="op">=</span> <span class="fu">subgroupBallot</span><span class="op">(</span>condition<span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>condition<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Determine the 1-based output rank within this subgroup</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> rank <span class="op">=</span> <span class="fu">subgroupBallotInclusiveBitCount</span><span class="op">(</span>ballot<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Convert to a 0-based index to write out compacted data</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> outputIndex <span class="op">=</span> baseOffset <span class="op">+</span> <span class="op">(</span>rank <span class="op">-</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    outputBuffer<span class="op">[</span>outputIndex<span class="op">]</span> <span class="op">=</span> localData<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Using the inclusive variant provides the 1-based rank of the current
+invocation among active threads, which directly informs how many total
+elements will be written by threads up to that point.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

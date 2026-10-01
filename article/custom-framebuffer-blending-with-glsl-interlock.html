@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Framebuffer Blending With GLSL Interlock - glsl</title>
+    <meta name="description" content="Custom programmable blending in GLSL fragment shaders frequently suffers from read-modify-write data hazards when multiple overlapping fragments execute concurrently on the GPU. The GLARBfragmentshaderinterlock extension addresses this issue through the">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/custom-framebuffer-blending-with-glsl-interlock">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Custom Framebuffer Blending With GLSL Interlock - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/custom-framebuffer-blending-with-glsl-interlock" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Custom programmable blending in GLSL fragment shaders frequently suffers from read-modify-write data hazards when multiple overlapping fragments execute concurrently on the GPU. The GLARBfragmentshaderinterlock extension addresses this issue through the" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="custom-framebuffer-blending-with-glsl-interlock">Custom
+Framebuffer Blending With GLSL Interlock</h1>
+<p>Custom programmable blending in GLSL fragment shaders frequently
+suffers from read-modify-write data hazards when multiple overlapping
+fragments execute concurrently on the GPU. The
+<code>GL_ARB_fragment_shader_interlock</code> extension addresses this
+issue through the <code>beginInvocationInterlockARB()</code> and
+<code>endInvocationInterlockARB()</code> intrinsics, which establish a
+synchronized critical section per fragment coordinate. This article
+details the mechanics behind how invocation interlocks prevent race
+conditions, enforce primitive submission ordering, and facilitate
+deterministic custom framebuffer blending without hardware-level data
+corruption.</p>
+<h2 id="the-read-modify-write-concurrency-hazard">The Read-Modify-Write
+Concurrency Hazard</h2>
+<p>Standard fixed-function hardware blending operates late in the
+graphics pipeline at the Render Output (ROP) stage, which has built-in
+atomic arbitration. However, when implementing programmable blending,
+order-independent transparency (OIT), or custom accumulation buffers,
+fragment shaders must read from an image or buffer, compute an arbitrary
+blend operation, and write the result back into storage.</p>
+<p>Because modern GPUs execute hundreds of fragment invocations
+concurrently across multiple compute units, fragments belonging to
+overlapping primitives often target identical <code>(x, y)</code> pixel
+coordinates at the same time. This concurrency produces a classic
+read-modify-write race condition:</p>
+<ol type="1">
+<li><strong>Fragment A</strong> reads the pixel color from the
+framebuffer.</li>
+<li><strong>Fragment B</strong> reads the same original pixel color
+before Fragment A writes its update.</li>
+<li>Both fragments calculate their custom blend equations locally.</li>
+<li>Both fragments write back their results, causing one fragment's
+contribution to overwrite and permanently discard the other's.</li>
+</ol>
+<h2 id="establishing-the-critical-section">Establishing the Critical
+Section</h2>
+<p><code>beginInvocationInterlockARB()</code> prevents this hazard by
+establishing a hardware-enforced critical section within the shader
+invocation. Any instructions placed between
+<code>beginInvocationInterlockARB()</code> and
+<code>endInvocationInterlockARB()</code> are guaranteed to execute with
+mutual exclusion relative to other fragments targeting the same spatial
+coordinate:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_ARB_fragment_shader_interlock : require</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>pixel_interlock_ordered<span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>rgba8<span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">image2D</span> framebufferImage<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span> pixelCoord <span class="op">=</span> <span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">xy</span><span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> incomingColor <span class="op">=</span> <span class="fu">calculateFragmentColor</span><span class="op">();</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Critical section begins</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">beginInvocationInterlockARB</span><span class="op">();</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> currentColor <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>framebufferImage<span class="op">,</span> pixelCoord<span class="op">);</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> blendedColor <span class="op">=</span> <span class="fu">customBlend</span><span class="op">(</span>currentColor<span class="op">,</span> incomingColor<span class="op">);</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">imageStore</span><span class="op">(</span>framebufferImage<span class="op">,</span> pixelCoord<span class="op">,</span> blendedColor<span class="op">);</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">endInvocationInterlockARB</span><span class="op">();</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Critical section ends</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>When a fragment invocation reaches
+<code>beginInvocationInterlockARB()</code>, the GPU checks whether
+another invocation is currently operating on that same pixel coordinate.
+If an active invocation is inside its critical section, subsequent
+arriving fragments targeting that pixel stall their execution until the
+prior fragment calls <code>endInvocationInterlockARB()</code>.</p>
+<h2 id="enforcing-primitive-submission-order">Enforcing Primitive
+Submission Order</h2>
+<p>Preventing overlapping writes is often insufficient for blending
+algorithms; non-commutative operations like standard over-operator alpha
+blending require operations to occur in the exact sequence specified by
+the CPU draw calls.</p>
+<p>The interlock extension resolves this by supporting ordered
+qualifiers, such as <code>layout(pixel_interlock_ordered) in</code>.
+When ordered qualifiers are declared,
+<code>beginInvocationInterlockARB()</code> ensures that overlapping
+fragments enter the critical section strictly in API primitive
+submission order.</p>
+<p>Under the hood, this relies on GPU rasterization hardware
+features—such as Rasterizer Order Views (ROVs) on Direct3D-compatible
+hardware or Intel Pixel Sync. As primitives are rasterized, each
+fragment inherits a sequence tag reflecting its submission order. The
+interlock hardware logic evaluates these tags, pausing any fragment that
+reaches <code>beginInvocationInterlockARB()</code> out of order until
+all preceding overlapping fragments have completed and exited their
+interlock blocks.</p>
+<h2 id="scope-and-granularity">Scope and Granularity</h2>
+<p>The synchronization scope is governed by layout qualifiers configured
+in the shader:</p>
+<ul>
+<li><strong><code>pixel_interlock_ordered</code> /
+<code>pixel_interlock_unordered</code>:</strong> Evaluates locks at
+whole-pixel granularity (<code>(x, y)</code>). All fragments covering
+the same pixel coordinate are serialized.</li>
+<li><strong><code>sample_interlock_ordered</code> /
+<code>sample_interlock_unordered</code>:</strong> Evaluates locks at
+multisample sample granularity (<code>(x, y, sample_id)</code>). This
+limits serialization only to fragments modifying the exact same sample
+within a multisampled render target (MSAA), enabling higher concurrency
+across neighboring samples.</li>
+</ul>
+<p>Unordered variations eliminate the sequence tag verification,
+providing mutual exclusion without enforcing primitive submission order.
+This mode is optimal for commutative operations, such as additive
+blending or building spatial hash maps, where execution order does not
+affect the final mathematical result.</p>
+<h2 id="performance-considerations">Performance Considerations</h2>
+<p>Because <code>beginInvocationInterlockARB()</code> stalls GPU threads
+that map to identical coordinates, expansive critical sections can
+degrade performance through thread divergence and pipeline
+serialization.</p>
+<p>To maximize throughput, all memory accesses, texture lookups,
+lighting evaluations, and discard tests that do not depend on the target
+framebuffer data should be computed before invoking
+<code>beginInvocationInterlockARB()</code>. Confining the interlock
+solely to the final image load, math operation, and image store
+minimizes thread residency inside the critical section, freeing
+execution units to resume concurrent execution across the rest of the
+wavefront.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

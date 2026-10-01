@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GL_NV_mesh_shader vs GL_EXT_mesh_shader in GLSL - glsl</title>
+    <meta name="description" content="This article compares NVIDIA’s vendor-specific GLNVmeshshader extension with the cross-vendor GLEXTmeshshader extension in GLSL. While both extensions replace the traditional vertex, geometry, and tessellation pipeline with a cooperative, compute-like">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/gl-nv-mesh-shader-vs-gl-ext-mesh-shader-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GL_NV_mesh_shader vs GL_EXT_mesh_shader in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/gl-nv-mesh-shader-vs-gl-ext-mesh-shader-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article compares NVIDIA’s vendor-specific GLNVmeshshader extension with the cross-vendor GLEXTmeshshader extension in GLSL. While both extensions replace the traditional vertex, geometry, and tessellation pipeline with a cooperative, compute-like" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="gl_nv_mesh_shader-vs-gl_ext_mesh_shader-in-glsl">GL_NV_mesh_shader
+vs GL_EXT_mesh_shader in GLSL</h1>
+<p>This article compares NVIDIA’s vendor-specific
+<code>GL_NV_mesh_shader</code> extension with the cross-vendor
+<code>GL_EXT_mesh_shader</code> extension in GLSL. While both extensions
+replace the traditional vertex, geometry, and tessellation pipeline with
+a cooperative, compute-like programming model using task (amplification)
+and mesh stages, the EXT version introduces standardized syntax, more
+explicit memory management, dynamic primitive sizing, and
+multidimensional workgroup spawning.</p>
+<h3 id="task-dispatch-and-workgroup-spawning">Task Dispatch and
+Workgroup Spawning</h3>
+<p>In <code>GL_NV_mesh_shader</code>, the task shader triggers
+subsequent mesh shader workgroups using the built-in variable
+<code>gl_TaskCountNV</code>. This restricts invocation generation to a
+one-dimensional dispatch count:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// GL_NV_mesh_shader</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>gl_TaskCountNV <span class="op">=</span> <span class="dv">16</span><span class="op">;</span></span></code></pre></div>
+<p>In <code>GL_EXT_mesh_shader</code>, workgroup generation is handled
+functionally via the built-in function <code>EmitMeshTasksEXT()</code>,
+which supports three-dimensional workgroup dispatch grids:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// GL_EXT_mesh_shader</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">EmitMeshTasksEXT</span><span class="op">(</span>taskCountX<span class="op">,</span> taskCountY<span class="op">,</span> taskCountZ<span class="op">);</span></span></code></pre></div>
+<p>Once <code>EmitMeshTasksEXT()</code> executes, control flow
+terminates or ignores subsequent emissions, making task dispatch
+explicit and aligned with compute dispatch conventions.</p>
+<h3 id="task-payload-communication">Task Payload Communication</h3>
+<p>Both specifications pass data from the task shader to the mesh shader
+through a shared memory payload, but the declarations and storage
+qualifiers differ:</p>
+<ul>
+<li><p><strong>NV Extension:</strong> The payload is defined using the
+<code>taskNV</code> storage qualifier applied to an output block in the
+task shader, and as an input block in the mesh shader:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// In task shader (NV)</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>taskNV <span class="dt">out</span> TaskData <span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> <span class="dt">offset</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> taskOut<span class="op">;</span></span></code></pre></div></li>
+<li><p><strong>EXT Extension:</strong> The payload uses the
+<code>taskPayloadSharedEXT</code> storage qualifier, which functions
+similarly to shared workgroup memory. Both the task and mesh shaders
+declare the same variable layout:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// In task and mesh shaders (EXT)</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> TaskData <span class="op">{</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> <span class="dt">offset</span><span class="op">;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>taskPayloadSharedEXT TaskData taskPayload<span class="op">;</span></span></code></pre></div></li>
+</ul>
+<h3 id="dynamic-primitive-and-vertex-output-allocation">Dynamic
+Primitive and Vertex Output Allocation</h3>
+<p>Under <code>GL_NV_mesh_shader</code>, the number of vertices and
+primitives written by a mesh workgroup is implicitly determined by the
+maximum bounds declared in the layout qualifiers
+(<code>max_vertices</code> and <code>max_primitives</code>), or manually
+capped by what indices are populated:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// GL_NV_mesh_shader</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">32</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">max_vertices</span> <span class="op">=</span> <span class="dv">64</span><span class="op">,</span> max_primitives <span class="op">=</span> <span class="dv">126</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">triangles</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span></code></pre></div>
+<p><code>GL_EXT_mesh_shader</code> retains maximum bounds in the layout
+declaration for hardware allocation purposes, but mandates an explicit
+runtime call to <code>SetMeshOutputCountsEXT()</code> before writing
+per-primitive or per-vertex data:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">// GL_EXT_mesh_shader</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">32</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">max_vertices</span> <span class="op">=</span> <span class="dv">64</span><span class="op">,</span> max_primitives <span class="op">=</span> <span class="dv">126</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">triangles</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">SetMeshOutputCountsEXT</span><span class="op">(</span>actualNumVertices<span class="op">,</span> actualNumPrimitives<span class="op">);</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Writes to vertices and primitives follow</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Omitting <code>SetMeshOutputCountsEXT()</code> or writing outputs
+beyond the specified counts produces undefined behavior.</p>
+<h3 id="primitive-index-representation">Primitive Index
+Representation</h3>
+<p>The two extensions structure index output buffers differently:</p>
+<ul>
+<li><p><strong>NV Extension:</strong> Uses a flat output array,
+<code>gl_PrimitiveIndicesNV[]</code>. For a triangle topology, every
+three consecutive indices correspond to a single primitive:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>gl_PrimitiveIndicesNV<span class="op">[</span><span class="bu">gl_LocalInvocationIndex</span> <span class="op">*</span> <span class="dv">3</span> <span class="op">+</span> <span class="dv">0</span><span class="op">]</span> <span class="op">=</span> idx0<span class="op">;</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>gl_PrimitiveIndicesNV<span class="op">[</span><span class="bu">gl_LocalInvocationIndex</span> <span class="op">*</span> <span class="dv">3</span> <span class="op">+</span> <span class="dv">1</span><span class="op">]</span> <span class="op">=</span> idx1<span class="op">;</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>gl_PrimitiveIndicesNV<span class="op">[</span><span class="bu">gl_LocalInvocationIndex</span> <span class="op">*</span> <span class="dv">3</span> <span class="op">+</span> <span class="dv">2</span><span class="op">]</span> <span class="op">=</span> idx2<span class="op">;</span></span></code></pre></div></li>
+<li><p><strong>EXT Extension:</strong> Uses strongly-typed vector arrays
+matching the output topology. For triangles, indices are assigned as a
+<code>uvec3</code> to <code>gl_PrimitiveTriangleIndicesEXT[]</code> (or
+<code>uvec2</code> to <code>gl_PrimitiveLineIndicesEXT[]</code> for
+lines, and <code>uint</code> to
+<code>gl_PrimitivePointIndicesEXT[]</code> for points):</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>gl_PrimitiveTriangleIndicesEXT<span class="op">[</span><span class="bu">gl_LocalInvocationIndex</span><span class="op">]</span> <span class="op">=</span> <span class="dt">uvec3</span><span class="op">(</span>idx0<span class="op">,</span> idx1<span class="op">,</span> idx2<span class="op">);</span></span></code></pre></div></li>
+</ul>
+<h3
+id="built-in-output-structures-and-per-primitive-qualifiers">Built-in
+Output Structures and Per-Primitive Qualifiers</h3>
+<p><code>GL_NV_mesh_shader</code> provides a built-in per-vertex array
+<code>gl_MeshVerticesNV[]</code> containing traditional vertex outputs
+like <code>gl_Position</code> and <code>gl_PointSize</code>. Custom
+per-primitive attributes are denoted using the
+<code>perprimitiveNV</code> qualifier on output blocks or variables.</p>
+<p><code>GL_EXT_mesh_shader</code> standardizes this using
+<code>gl_MeshVerticesEXT[]</code> for standard vertex attributes and
+introduces <code>gl_MeshPrimitivesEXT[]</code> for per-primitive
+built-ins (such as <code>gl_PrimitiveID</code>, <code>gl_Layer</code>,
+and <code>gl_CullPrimitiveEXT</code>). Custom outputs are divided using
+the explicit qualifiers <code>perprimitiveEXT</code> or vertex-scoped
+array blocks:</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co">// GL_EXT_mesh_shader custom outputs</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> outColor<span class="op">[];</span>                     <span class="co">// Per-vertex attribute</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> perprimitiveEXT <span class="dt">out</span> <span class="dt">uint</span> outMaterialID<span class="op">[];</span> <span class="co">// Per-primitive attribute</span></span></code></pre></div>
+<h3 id="summary-of-key-syntax-differences">Summary of Key Syntax
+Differences</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Feature</th>
+<th style="text-align: left;"><code>GL_NV_mesh_shader</code></th>
+<th style="text-align: left;"><code>GL_EXT_mesh_shader</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Workgroup Generation</strong></td>
+<td style="text-align: left;"><code>gl_TaskCountNV = N;</code></td>
+<td
+style="text-align: left;"><code>EmitMeshTasksEXT(x, y, z);</code></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Payload Storage</strong></td>
+<td style="text-align: left;"><code>taskNV out / in</code></td>
+<td style="text-align: left;"><code>taskPayloadSharedEXT</code></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Output Count
+Definition</strong></td>
+<td style="text-align: left;">Implicit / maximum bound</td>
+<td style="text-align: left;">Explicit via
+<code>SetMeshOutputCountsEXT(v, p)</code></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Triangle Index
+Output</strong></td>
+<td style="text-align: left;">Flat
+<code>uint gl_PrimitiveIndicesNV[]</code></td>
+<td style="text-align: left;">Vector
+<code>uvec3 gl_PrimitiveTriangleIndicesEXT[]</code></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Per-Primitive
+Qualifier</strong></td>
+<td style="text-align: left;"><code>perprimitiveNV</code></td>
+<td style="text-align: left;"><code>perprimitiveEXT</code></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Built-in Arrays</strong></td>
+<td style="text-align: left;"><code>gl_MeshVerticesNV[]</code></td>
+<td style="text-align: left;"><code>gl_MeshVerticesEXT[]</code>,
+<code>gl_MeshPrimitivesEXT[]</code></td>
+</tr>
+</tbody>
+</table></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

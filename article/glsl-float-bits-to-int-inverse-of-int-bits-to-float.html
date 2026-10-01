@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL floatBitsToInt: Inverse of intBitsToFloat - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), transferring data between floating-point representations and raw binary integer formats is handled through bitwise reinterpretation rather than numerical type casting. While intBitsToFloat reconstructs an IEEE 754 32-bi">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-float-bits-to-int-inverse-of-int-bits-to-float">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL floatBitsToInt: Inverse of intBitsToFloat - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-float-bits-to-int-inverse-of-int-bits-to-float" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), transferring data between floating-point representations and raw binary integer formats is handled through bitwise reinterpretation rather than numerical type casting. While intBitsToFloat reconstructs an IEEE 754 32-bi" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-floatbitstoint-inverse-of-intbitstofloat">GLSL
+floatBitsToInt: Inverse of intBitsToFloat</h1>
+<p>In OpenGL Shading Language (GLSL), transferring data between
+floating-point representations and raw binary integer formats is handled
+through bitwise reinterpretation rather than numerical type casting.
+While <code>intBitsToFloat</code> reconstructs an IEEE 754 32-bit
+floating-point value from a raw signed integer's binary layout, its
+direct inverse function is <code>floatBitsToInt</code> (along with its
+unsigned counterpart, <code>floatBitsToUint</code>). This article
+explains how these functions operate as exact inverses, the difference
+between bit-reinterpretation and numeric conversion, and the edge cases
+to consider when round-tripping float values in GPU shaders.</p>
+<h2 id="bitwise-reinterpretation-vs-standard-casting">Bitwise
+Reinterpretation vs. Standard Casting</h2>
+<p>Standard type conversions such as <code>float(myInt)</code> or
+<code>int(myFloat)</code> perform numerical transformations. For
+instance, converting the integer <code>1</code> to a float transforms
+the value into <code>1.0</code>, changing the underlying bit structure
+entirely.</p>
+<p>In contrast, bit-casting functions preserve the exact binary
+pattern:</p>
+<ul>
+<li><strong><code>intBitsToFloat(int value)</code></strong>: Interprets
+the raw 32 bits of a signed integer as an IEEE 754 single-precision
+floating-point number.</li>
+<li><strong><code>uintBitsToFloat(uint value)</code></strong>: Performs
+the same operation using an unsigned integer bitfield.</li>
+<li><strong><code>floatBitsToInt(float value)</code></strong>: The
+inverse operation; takes a floating-point number and returns a signed
+32-bit integer containing the identical bit layout (1 sign bit, 8
+exponent bits, 23 mantissa bits).</li>
+<li><strong><code>floatBitsToUint(float value)</code></strong>: The
+unsigned inverse; returns the raw bit pattern as a 32-bit unsigned
+integer.</li>
+</ul>
+<h2 id="function-signatures-and-inversion-mechanics">Function Signatures
+and Inversion Mechanics</h2>
+<p>The GLSL standard library defines these operations component-wise for
+scalars and vectors (<code>vec2</code>, <code>vec3</code>,
+<code>vec4</code>, and their integer equivalents):</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Converting raw integer bits back to floats</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>genType <span class="bu">intBitsToFloat</span><span class="op">(</span>genIType value<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>genType <span class="bu">uintBitsToFloat</span><span class="op">(</span>genUType value<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Converting floats to raw integer bits (Inverse)</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>genIType <span class="bu">floatBitsToInt</span><span class="op">(</span>genType value<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>genUType <span class="bu">floatBitsToUint</span><span class="op">(</span>genType value<span class="op">);</span></span></code></pre></div>
+<p>When round-tripping a value from an integer representation to a float
+and back, the equality holds true:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> originalBits <span class="op">=</span> <span class="bn">0x3F800000</span><span class="op">;</span> <span class="co">// Binary representation of 1.0</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> restoredFloat <span class="op">=</span> <span class="bu">intBitsToFloat</span><span class="op">(</span>originalBits<span class="op">);</span> <span class="co">// Value is 1.0</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> recoveredBits <span class="op">=</span> <span class="bu">floatBitsToInt</span><span class="op">(</span>restoredFloat<span class="op">);</span>  <span class="co">// Yields 0x3F800000</span></span></code></pre></div>
+<h2 id="behavior-with-special-floating-point-values">Behavior with
+Special Floating-Point Values</h2>
+<p>When using <code>floatBitsToInt</code> to inspect or restore
+floating-point data, specific IEEE 754 behaviors apply:</p>
+<h3 id="signed-zeros">Signed Zeros</h3>
+<p>Positive zero (<code>+0.0</code>) and negative zero
+(<code>-0.0</code>) evaluate as numerically equal under standard
+comparison (<code>+0.0 == -0.0</code>), but they have distinct bit
+patterns. <code>floatBitsToInt(+0.0)</code> produces
+<code>0x00000000</code>, while <code>floatBitsToInt(-0.0)</code>
+produces <code>0x80000000</code> (or <code>-2147483648</code>). Using
+<code>intBitsToFloat</code> on either pattern preserves the sign bit
+correctly.</p>
+<h3 id="infinities">Infinities</h3>
+<p>Positive infinity (<code>+inf</code>) corresponds to
+<code>0x7F800000</code>, and negative infinity (<code>-inf</code>)
+corresponds to <code>0xFF800000</code>. Passing these values to
+<code>intBitsToFloat</code> reconstructs true mathematical infinity.</p>
+<h3 id="not-a-number-nan-handling">Not-a-Number (NaN) Handling</h3>
+<p>Any bit pattern where the exponent field consists entirely of ones
+and the mantissa is non-zero represents a NaN. While
+<code>intBitsToFloat</code> will reliably yield a NaN value, converting
+a NaN back via <code>floatBitsToInt</code> may not guarantee the exact
+preservation of the original payload bits on all GPU architectures, as
+some hardware canonicalizes NaNs during intermediate register moves.</p>
+<h3 id="subnormals-and-flush-to-zero-ftz">Subnormals and Flush-to-Zero
+(FTZ)</h3>
+<p>On GPUs operating under flush-to-zero (FTZ) modes for performance
+reasons, subnormal numbers (numbers extremely close to zero where the
+exponent bits are all zero) might be truncated to <code>0.0</code>. If
+FTZ is enforced by hardware, round-tripping subnormal bit patterns
+through <code>intBitsToFloat</code> and <code>floatBitsToInt</code> may
+collapse the pattern to <code>0x00000000</code>.</p>
+<h2 id="typical-use-cases">Typical Use Cases</h2>
+<ol type="1">
+<li><strong>GPU Data Packing and Unpacking:</strong> Storing packed
+vertex attributes or custom formats inside standard integer arrays (like
+Shader Storage Buffer Objects) and unpacking them inside shader stages
+without precision degradation.</li>
+<li><strong>Bitwise Float Manipulation:</strong> Applying bitwise
+operations directly to floats, such as toggling sign bits with an XOR
+mask or manually extracting exponent bits for fast custom
+range-compression algorithms.</li>
+<li><strong>Hashing and Encoding:</strong> Generating pseudo-random
+hashes from float values by inspecting their raw underlying bits using
+<code>floatBitsToUint</code>.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding layout(isolines) in GLSL Shaders - glsl</title>
+    <meta name="description" content="The layout(isolines) execution mode in GLSL Tessellation Evaluation Shaders (TES) directs the hardware tessellator to generate sets of independent line strips across a normalized two-dimensional parameter space. Instead of generating triangles or quads,">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-layout-isolines-in-glsl-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding layout(isolines) in GLSL Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-layout-isolines-in-glsl-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The layout(isolines) execution mode in GLSL Tessellation Evaluation Shaders (TES) directs the hardware tessellator to generate sets of independent line strips across a normalized two-dimensional parameter space. Instead of generating triangles or quads," />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-layoutisolines-in-glsl-shaders">Understanding
+layout(isolines) in GLSL Shaders</h1>
+<p>The <code>layout(isolines)</code> execution mode in GLSL Tessellation
+Evaluation Shaders (TES) directs the hardware tessellator to generate
+sets of independent line strips across a normalized two-dimensional
+parameter space. Instead of generating triangles or quads, the
+tessellation primitive generator evaluates the outer tessellation levels
+to determine both the total number of parallel lines and the degree of
+subdivision along each line. This configuration is widely used for
+rendering hair, curves, contours, and wireframe grid effects.</p>
+<h3 id="domain-definition-and-coordinates">Domain Definition and
+Coordinates</h3>
+<p>When <code>layout(isolines)</code> is specified, the tessellation
+domain is defined as a unit square <span class="math inline">\([0, 1]
+\times [0, 1]\)</span>. Inside the Tessellation Evaluation Shader, the
+input variable <code>gl_TessCoord</code> provides the barycentric or
+parametric coordinate of the generated vertex:</p>
+<ul>
+<li><code>gl_TessCoord.x</code> represents the position along an
+individual isoline strip, ranging from <span
+class="math inline">\(0.0\)</span> to <span
+class="math inline">\(1.0\)</span>.</li>
+<li><code>gl_TessCoord.y</code> represents the normalized offset of the
+current line strip within the domain.</li>
+<li><code>gl_TessCoord.z</code> is unused and set to <span
+class="math inline">\(0.0\)</span>.</li>
+</ul>
+<p>Each line strip is generated parallel to the u-axis (<span
+class="math inline">\(x\)</span>), holding the v-axis (<span
+class="math inline">\(y\)</span>) constant across the entire length of
+that strip.</p>
+<h3 id="tessellation-levels">Tessellation Levels</h3>
+<p>The isoline generator evaluates only the first two entries of
+<code>gl_TessLevelOuter</code>. The remaining outer levels and all inner
+levels (<code>gl_TessLevelInner</code>) are ignored:</p>
+<ul>
+<li><strong><code>gl_TessLevelOuter[0]</code> (Line Count):</strong>
+Determines the number of isolines to generate. The value is clamped to
+implementation limits and rounded to an integer. If this level is less
+than or equal to zero, all geometry is culled. Unlike standard quad or
+triangle tessellation, <code>gl_TessLevelOuter[0]</code> produces <span
+class="math inline">\(n\)</span> lines distributed evenly across the
+domain, typically at <span class="math inline">\(y =
+\frac{i}{n}\)</span> where <span class="math inline">\(i \in [0,
+n-1]\)</span>.</li>
+<li><strong><code>gl_TessLevelOuter[1]</code> (Segment Count):</strong>
+Determines how many segments each line strip is divided into. A value of
+<span class="math inline">\(m\)</span> segments produces <span
+class="math inline">\(m + 1\)</span> vertices per line strip along the
+x-axis.</li>
+</ul>
+<h3 id="spacing-and-subdivision-behavior">Spacing and Subdivision
+Behavior</h3>
+<p>Subdivision modes defined in the TES layout declaration interact with
+isolines in specific ways:</p>
+<ul>
+<li><strong><code>equal_spacing</code>:</strong> The segment count
+defined by <code>gl_TessLevelOuter[1]</code> is rounded to the nearest
+integer, and segments are partitioned equally across <span
+class="math inline">\([0, 1]\)</span>.</li>
+<li><strong><code>fractional_even_spacing</code> and
+<code>fractional_odd_spacing</code>:</strong> These modes apply
+exclusively to <code>gl_TessLevelOuter[1]</code>. Vertices along the
+strip adjust smoothly as the tessellation level changes dynamically,
+preventing sudden popping artifacts along the curve.</li>
+<li><strong>Line Count Spacing:</strong>
+<code>gl_TessLevelOuter[0]</code> is not affected by fractional spacing
+modes; it always behaves as an integer division without smooth blending
+between line counts.</li>
+</ul>
+<h3 id="primitive-output">Primitive Output</h3>
+<p>The output of the tessellator in this mode is a sequence of
+non-connecting line strips. Each strip contains vertices ordered
+sequentially from <code>gl_TessCoord.x = 0.0</code> to
+<code>gl_TessCoord.x = 1.0</code>. The primitives are emitted directly
+to downstream pipeline stages (such as the Geometry Shader or
+Rasterizer) as individual line segments within each strip. If the
+optional <code>point_mode</code> layout qualifier is enabled, the
+hardware skips line strip assembly and renders every evaluated vertex as
+an individual point primitive instead.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

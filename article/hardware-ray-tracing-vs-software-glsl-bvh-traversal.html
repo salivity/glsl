@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hardware Ray Tracing vs Software GLSL BVH Traversal - glsl</title>
+    <meta name="description" content="This article examines the core differences between native hardware ray tracing pipelines and software-based Bounding Volume Hierarchy (BVH) traversal implemented in GLSL. While both techniques calculate light transport by intersecting rays with 3D geomet">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/hardware-ray-tracing-vs-software-glsl-bvh-traversal">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Hardware Ray Tracing vs Software GLSL BVH Traversal - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/hardware-ray-tracing-vs-software-glsl-bvh-traversal" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article examines the core differences between native hardware ray tracing pipelines and software-based Bounding Volume Hierarchy (BVH) traversal implemented in GLSL. While both techniques calculate light transport by intersecting rays with 3D geomet" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="hardware-ray-tracing-vs-software-glsl-bvh-traversal">Hardware
+Ray Tracing vs Software GLSL BVH Traversal</h1>
+<p>This article examines the core differences between native hardware
+ray tracing pipelines and software-based Bounding Volume Hierarchy (BVH)
+traversal implemented in GLSL. While both techniques calculate light
+transport by intersecting rays with 3D geometry, they diverge
+fundamentally in their execution model, memory utilization, hardware
+requirements, and overall performance. Understanding these distinctions
+clarifies why dedicated ray tracing architectures vastly outperform
+compute-based software traversal, and when a software approach remains
+viable.</p>
+<h3 id="execution-model-and-silicon-architecture">Execution Model and
+Silicon Architecture</h3>
+<p>Hardware ray tracing relies on dedicated fixed-function units
+integrated directly into modern GPUs, such as NVIDIA RT Cores or AMD Ray
+Accelerators. When an application initiates a ray query via modern
+graphics APIs (such as Vulkan Ray Tracing or DirectX Raytracing), these
+dedicated units handle ray-box and ray-triangle intersection tests
+independently of the primary execution cores. This offloads compute
+units, allowing arithmetic logic units (ALUs) to continue running
+shading or compute tasks in parallel.</p>
+<p>In contrast, software BVH traversal in GLSL relies entirely on
+general-purpose compute or fragment shaders. The GPU's standard ALUs
+must execute every instruction required for the traversal algorithm,
+including node parsing, coordinate transformations, and mathematical
+intersection tests. Because the work is executed on general-purpose
+stream processors, it competes directly with other rendering workloads
+for computational resources.</p>
+<h3 id="divergence-and-stack-management">Divergence and Stack
+Management</h3>
+<p>Ray traversal is an inherently divergent workload; neighboring rays
+frequently hit completely different objects or traverse different depths
+of the scene hierarchy.</p>
+<ul>
+<li><strong>Hardware Pipelines:</strong> Modern ray tracing hardware
+incorporates specialized scheduling logic to mitigate thread divergence.
+Traversal hardware can dynamically reorder and regroup coherent rays
+across warps or wavefronts, significantly improving execution efficiency
+and cache locality. Hardware pipelines also manage the traversal stack
+automatically in dedicated, low-latency memory.</li>
+<li><strong>Software GLSL:</strong> Standard GLSL shaders have no native
+support for ray reordering or hardware traversal stacks. Developers must
+implement traversal using either a stackless algorithm (such as rope
+trees or packet tracing) or maintain a manual stack in local register
+memory or shared memory. Because GPUs execute in SIMD/SIMT lockstep,
+when rays within the same workgroup diverge down different paths of the
+BVH, execution stalls occur as threads wait for the longest path to
+finish.</li>
+</ul>
+<h3 id="bvh-construction-and-memory-representation">BVH Construction and
+Memory Representation</h3>
+<p>The creation and storage of the acceleration structure differ
+significantly in complexity and optimization:</p>
+<ul>
+<li><strong>Hardware Acceleration Structures:</strong> In hardware
+pipelines, the API partitions the BVH into a two-level hierarchy:
+Bottom-Level Acceleration Structures (BLAS) for geometry and Top-Level
+Acceleration Structures (TLAS) for scene instances. The driver and
+hardware build and optimize these structures internally using
+proprietary, hardware-tailored layouts that maximize cache line
+utilization.</li>
+<li><strong>Software BVH in GLSL:</strong> In a software implementation,
+the developer must design the data structure, construct the BVH on the
+CPU (or via custom compute shaders), flatten it into a 1D format, and
+upload it via Shader Storage Buffer Objects (SSBOs) or texture buffers.
+Accessing these structures requires manual memory fetches in GLSL,
+introducing significant memory latency without the benefit of dedicated
+ray-tracing cache hierarchies.</li>
+</ul>
+<h3 id="compatibility-flexibility-and-use-cases">Compatibility,
+Flexibility, and Use Cases</h3>
+<ul>
+<li><strong>Compatibility:</strong> Software BVH traversal in GLSL can
+run on virtually any platform that supports modern OpenGL, WebGL 2.0, or
+compute shaders, making it independent of dedicated hardware. Hardware
+pipelines strictly require modern, RT-capable GPUs and APIs that expose
+ray tracing extensions.</li>
+<li><strong>Flexibility:</strong> Software traversal grants complete
+control over the traversal algorithm, custom intersection logic, and
+memory packing, which is useful for specialized mathematical primitives,
+custom volume rendering, or academic experimentation. However, for
+complex scenes with high polygon counts and real-time frame rate
+demands, hardware-accelerated ray tracing remains several orders of
+magnitude faster due to fixed-function silicon and dedicated memory
+paths.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

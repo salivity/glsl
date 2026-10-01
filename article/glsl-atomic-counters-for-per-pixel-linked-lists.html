@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Atomic Counters for Per-Pixel Linked Lists - glsl</title>
+    <meta name="description" content="Atomic counters in OpenGL Shading Language (GLSL) act as thread-safe, global dynamic allocators that grant unique buffer indices to concurrent fragment shader threads. In the context of per-pixel linked lists—a common technique used for Order-Independe">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-atomic-counters-for-per-pixel-linked-lists">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Atomic Counters for Per-Pixel Linked Lists - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-atomic-counters-for-per-pixel-linked-lists" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Atomic counters in OpenGL Shading Language (GLSL) act as thread-safe, global dynamic allocators that grant unique buffer indices to concurrent fragment shader threads. In the context of per-pixel linked lists—a common technique used for Order-Independe" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-atomic-counters-for-per-pixel-linked-lists">GLSL Atomic
+Counters for Per-Pixel Linked Lists</h1>
+<p>Atomic counters in OpenGL Shading Language (GLSL) act as thread-safe,
+global dynamic allocators that grant unique buffer indices to concurrent
+fragment shader threads. In the context of per-pixel linked lists—a
+common technique used for Order-Independent Transparency (OIT)—they
+allow arbitrary numbers of overlapping fragments to claim storage space
+within a shared linear buffer without data races or memory
+corruption.</p>
+<h3 id="the-challenge-of-per-pixel-linked-lists">The Challenge of
+Per-Pixel Linked Lists</h3>
+<p>Rendering transparent geometry in arbitrary order requires recording
+every fragment that covers a specific screen coordinate, sorting those
+fragments by depth, and blending them in back-to-front order. Because
+the number of overlapping surfaces per pixel cannot be known ahead of
+time, modern GPU pipelines use a two-part data structure: a 2D
+screen-sized head-pointer texture and a large, flat node buffer
+(implemented via Shader Storage Buffer Objects, or SSBOs).</p>
+<p>Thousands of fragment shader invocations execute simultaneously
+across GPU compute units. When multiple fragments need to write to the
+shared node buffer at the same time, allocating memory without
+synchronization causes race conditions, resulting in threads overwriting
+each other’s data and corrupting the linked lists.</p>
+<h3 id="how-atomic-counters-allocate-nodes">How Atomic Counters Allocate
+Nodes</h3>
+<p>An atomic counter solves this concurrency problem by functioning as a
+high-performance "bump allocator." It maintains a single, globally
+synchronized unsigned integer value stored in fast on-chip or device
+memory.</p>
+<p>The allocation workflow operates as follows:</p>
+<ol type="1">
+<li><strong>Requesting a Unique Index:</strong> When a fragment shader
+runs, it executes the GLSL built-in function
+<code>atomicCounterIncrement(counter)</code> (or <code>atomicAdd</code>
+on a buffer variable). This instruction reads the counter's current
+value and increments it by one as a single, indivisible hardware
+operation.</li>
+<li><strong>Guaranteed Collision-Free Slot:</strong> Even if hundreds of
+threads call the increment function in the exact same clock cycle, the
+GPU hardware serializes the increments. Each thread receives a
+completely distinct integer representing an available index in the
+global node buffer.</li>
+<li><strong>Writing Node Payload:</strong> The fragment uses this
+returned index to write its attributes—such as color, alpha, depth, and
+a pointer to the previous node—into the node buffer without any risk of
+another fragment overwriting its data.</li>
+<li><strong>Updating the Head Pointer:</strong> The fragment then links
+its newly written node to the head of the corresponding pixel's linked
+list using <code>imageAtomicExchange</code> on the 2D head-pointer
+texture. The old head index is preserved inside the new node as the
+<code>next</code> pointer, while the new node's index becomes the
+current head.</li>
+</ol>
+<h3 id="memory-safety-and-overflow">Memory Safety and Overflow</h3>
+<p>Because atomic counters provide a monotonically increasing index,
+they make memory bounds checking trivial. A fragment shader can evaluate
+the index returned by the atomic counter against the maximum capacity of
+the node buffer:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> nodeIndex <span class="op">=</span> <span class="bu">atomicCounterIncrement</span><span class="op">(</span>nodeCounter<span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>nodeIndex <span class="op">&lt;</span> MAX_NODES<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Write fragment payload and update head pointer</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>If <code>nodeIndex</code> exceeds <code>MAX_NODES</code>, the
+fragment can cleanly discard its payload, preventing out-of-bounds
+memory writes that could crash the GPU driver or induce undefined
+rendering artifacts.</p>
+<h3 id="conclusion">Conclusion</h3>
+<p>In GLSL per-pixel linked lists, atomic counters serve as the critical
+synchronization primitive. By handling dynamic index generation
+atomically at the hardware level, they turn a flat, pre-allocated GPU
+buffer into a safe, lock-free memory pool capable of tracking complex
+overlapping surface geometry in real time.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GLSL bitCount Counts Set Bits in an Integer - glsl</title>
+    <meta name="description" content="This article explains how the bitCount function works in OpenGL Shading Language (GLSL) to calculate the number of set bits in an integer. It covers the underlying hardware mechanisms—such as dedicated GPU population count instructions—as well as the">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-glsl-bit-count-counts-set-bits-in-an-integer">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GLSL bitCount Counts Set Bits in an Integer - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-glsl-bit-count-counts-set-bits-in-an-integer" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the bitCount function works in OpenGL Shading Language (GLSL) to calculate the number of set bits in an integer. It covers the underlying hardware mechanisms—such as dedicated GPU population count instructions—as well as the" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-glsl-bitcount-counts-set-bits-in-an-integer">How GLSL
+bitCount Counts Set Bits in an Integer</h1>
+<p>This article explains how the <code>bitCount</code> function works in
+OpenGL Shading Language (GLSL) to calculate the number of set bits in an
+integer. It covers the underlying hardware mechanisms—such as dedicated
+GPU population count instructions—as well as the algorithmic fallbacks
+based on parallel bitwise arithmetic and the handling of signed versus
+unsigned types.</p>
+<h2 id="what-is-bitcount-in-glsl">What is bitCount in GLSL?</h2>
+<p>The <code>bitCount</code> function is a built-in GLSL intrinsic
+introduced in GLSL 4.00 (and via the <code>GL_ARB_gpu_shader5</code>
+extension). It takes an integer—scalar or vector, signed or unsigned—and
+returns the number of bits set to <code>1</code> in the binary
+representation of each component. In computer science, this operation is
+commonly referred to as a <strong>population count</strong>
+(<code>popcount</code>) or Hamming weight.</p>
+<p>The function supports the following types:</p>
+<ul>
+<li><code>int</code> and <code>uint</code> (returning
+<code>int</code>)</li>
+<li><code>ivec2</code>, <code>ivec3</code>, <code>ivec4</code>
+(returning <code>ivec2</code>, <code>ivec3</code>,
+<code>ivec4</code>)</li>
+<li><code>uvec2</code>, <code>uvec3</code>, <code>uvec4</code>
+(returning <code>ivec2</code>, <code>ivec3</code>,
+<code>ivec4</code>)</li>
+</ul>
+<h2 id="hardware-level-execution">Hardware-Level Execution</h2>
+<p>On modern graphics processing units (GPUs) from NVIDIA, AMD, Intel,
+and Apple, <code>bitCount</code> is generally not computed through a
+software loop. Instead, the shader compiler translates
+<code>bitCount</code> directly into a single hardware assembly
+instruction:</p>
+<ul>
+<li><strong>NVIDIA:</strong> Translates to the <code>POPC</code>
+(Population Count) instruction in PTX/SASS.</li>
+<li><strong>AMD:</strong> Translates to <code>V_BCNT_U32_B32</code> (or
+similar variants) in GCN/RDNA ISA.</li>
+<li><strong>Intel:</strong> Translates to <code>cbit</code> in Intel GPU
+assembly.</li>
+</ul>
+<p>Because dedicated Arithmetic Logic Units (ALUs) execute this
+instruction, <code>bitCount</code> typically runs in a single clock
+cycle per thread, making it substantially faster than manual looping or
+lookup tables.</p>
+<h2 id="algorithmic-implementation-software-fallback">Algorithmic
+Implementation (Software Fallback)</h2>
+<p>When dedicated hardware instructions are unavailable or emulated,
+compilers implement <code>bitCount</code> using a divide-and-conquer
+parallel bit-counting algorithm. This algorithm masks and shifts bits in
+parallel rather than evaluating bits sequentially:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> software_popcount<span class="op">(</span>uint x<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    x <span class="op">=</span> x <span class="op">-</span> <span class="op">((</span>x <span class="op">&gt;&gt;</span> <span class="dv">1</span><span class="op">)</span> <span class="op">&amp;</span> <span class="bn">0x55555555</span><span class="bu">u</span><span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    x <span class="op">=</span> <span class="op">(</span>x <span class="op">&amp;</span> <span class="bn">0x33333333</span><span class="bu">u</span><span class="op">)</span> <span class="op">+</span> <span class="op">((</span>x <span class="op">&gt;&gt;</span> <span class="dv">2</span><span class="op">)</span> <span class="op">&amp;</span> <span class="bn">0x33333333</span><span class="bu">u</span><span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    x <span class="op">=</span> <span class="op">(</span>x <span class="op">+</span> <span class="op">(</span>x <span class="op">&gt;&gt;</span> <span class="dv">4</span><span class="op">))</span> <span class="op">&amp;</span> <span class="bn">0x0F0F0F0F</span><span class="bu">u</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    x <span class="op">=</span> x <span class="op">+</span> <span class="op">(</span>x <span class="op">&gt;&gt;</span> <span class="dv">8</span><span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    x <span class="op">=</span> x <span class="op">+</span> <span class="op">(</span>x <span class="op">&gt;&gt;</span> <span class="dv">16</span><span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dt">int</span><span class="op">(</span>x <span class="op">&amp;</span> <span class="bn">0x0000003F</span><span class="bu">u</span><span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<ol type="1">
+<li><strong>Pairs of bits:</strong> The first step counts the number of
+set bits in each 2-bit field using the mask <code>0x55555555</code>
+(<code>0101...</code>).</li>
+<li><strong>Nibbles (4-bit):</strong> The second step sums adjacent
+2-bit counts into 4-bit fields using <code>0x33333333</code>
+(<code>0011...</code>).</li>
+<li><strong>Bytes (8-bit):</strong> The sums are combined into 8-bit
+fields with <code>0x0F0F0F0F</code> (<code>00001111...</code>).</li>
+<li><strong>Final Accumulation:</strong> Subsequent shifts
+(<code>&gt;&gt; 8</code> and <code>&gt;&gt; 16</code>) add all byte sums
+together, masking the final result with <code>0x3F</code> (decimal 63,
+enough to hold a maximum value of 32).</li>
+</ol>
+<h2 id="signed-vs-unsigned-behavior">Signed vs. Unsigned Behavior</h2>
+<p>GLSL accepts both signed (<code>int</code>) and unsigned
+(<code>uint</code>) integers in <code>bitCount</code>. For signed types,
+the function operates on the two's complement binary representation.
+Negative numbers include set bits for the sign and value
+representations. For example:</p>
+<ul>
+<li><code>bitCount(1)</code> returns <code>1</code>
+(<code>...00000001</code>).</li>
+<li><code>bitCount(-1)</code> returns <code>32</code> because
+<code>-1</code> in 32-bit two's complement is <code>0xFFFFFFFF</code>
+(all 32 bits set).</li>
+</ul>
+<h2 id="example-glsl-usage">Example GLSL Usage</h2>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">64</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> DataBuffer <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> inputValues<span class="op">[];</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span>  outputCounts<span class="op">[];</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> id <span class="op">=</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculates the number of set bits directly using the hardware popcount</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    outputCounts<span class="op">[</span>id<span class="op">]</span> <span class="op">=</span> <span class="bu">bitCount</span><span class="op">(</span>inputValues<span class="op">[</span>id<span class="op">]);</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

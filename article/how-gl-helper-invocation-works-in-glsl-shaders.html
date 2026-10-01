@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How gl_HelperInvocation Works in GLSL Shaders - glsl</title>
+    <meta name="description" content="In modern GPU pipelines, fragment shaders execute in lockstep groups called 2x2 quads to compute screen-space derivatives for operations like mipmapping and texture filtering. When a geometric primitive only partially covers a quad, the GPU must still ex">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-gl-helper-invocation-works-in-glsl-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How gl_HelperInvocation Works in GLSL Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-gl-helper-invocation-works-in-glsl-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In modern GPU pipelines, fragment shaders execute in lockstep groups called 2x2 quads to compute screen-space derivatives for operations like mipmapping and texture filtering. When a geometric primitive only partially covers a quad, the GPU must still ex" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-gl_helperinvocation-works-in-glsl-shaders">How
+gl_HelperInvocation Works in GLSL Shaders</h1>
+<p>In modern GPU pipelines, fragment shaders execute in lockstep groups
+called 2x2 quads to compute screen-space derivatives for operations like
+mipmapping and texture filtering. When a geometric primitive only
+partially covers a quad, the GPU must still execute the uncovered
+fragments so neighboring threads can compute finite differences. This
+article explains how the built-in GLSL variable
+<code>gl_HelperInvocation</code> identifies these non-covered or
+discarded fragment threads that run solely to support derivative
+calculations for their active neighbors.</p>
+<h3 id="the-2x2-quad-architecture-and-derivatives">The 2x2 Quad
+Architecture and Derivatives</h3>
+<p>GPUs process fragments in fixed 2x2 pixel clusters known as quads.
+This structure is required to calculate partial derivatives, such as
+<code>dFdx</code> and <code>dFdy</code>, which rely on the difference
+between adjacent pixel values across horizontal and vertical axes.
+Texture sampling routines depend on these derivatives to determine the
+appropriate Level of Detail (LOD) and prevent aliasing.</p>
+<p>When a rasterized primitive touches at least one pixel in a 2x2 quad,
+the hardware must execute all four fragment lanes together in Single
+Instruction, Multiple Data (SIMD) or Single Instruction, Multiple
+Threads (SIMT) lockstep. If a pixel inside the quad falls outside the
+primitive's boundary, its execution lane cannot simply be turned off if
+adjacent covered pixels require derivative calculations.</p>
+<h3 id="what-is-a-helper-invocation">What Is a Helper Invocation?</h3>
+<p>Fragments within a quad that fall outside the triangle boundary, or
+fragments that have called the <code>discard</code> instruction, are
+designated as "helper invocations."</p>
+<p>Helper invocations execute the same shader instructions alongside the
+covered fragments so that their intermediate register values can be read
+across the SIMD lanes. However, they are marked with an execution mask
+that guarantees their final results will not be written to the
+framebuffer or depth/stencil buffers.</p>
+<h3 id="how-gl_helperinvocation-detects-inactive-threads">How
+<code>gl_HelperInvocation</code> Detects Inactive Threads</h3>
+<p>The built-in variable <code>gl_HelperInvocation</code> is a boolean
+introduced natively in OpenGL 4.5 (and via the
+<code>ARB_shader_image_load_store</code> extension). It provides the
+shader with direct access to the hardware's internal thread execution
+mask.</p>
+<ol type="1">
+<li><strong>Hardware Coverage Masking:</strong> During the rasterization
+phase, the fixed-function rasterizer generates a coverage mask for each
+2x2 quad. If a fragment's sample point is not covered by the primitive,
+the hardware flags that specific lane as a helper thread.</li>
+<li><strong>Dynamic Flagging on Discard:</strong> If an active fragment
+executes the <code>discard</code> keyword, the GPU does not immediately
+terminate the lane. Instead, the hardware transitions the lane into a
+helper invocation. This ensures subsequent derivative calculations in
+neighboring lanes remain mathematically valid.</li>
+<li><strong>Register Evaluation:</strong> When a shader reads
+<code>gl_HelperInvocation</code>, the GPU evaluates the current
+execution mask for that lane. If the lane is marked as an uncovered
+fragment or a discarded fragment, <code>gl_HelperInvocation</code>
+evaluates to <code>true</code>. Otherwise, it evaluates to
+<code>false</code>.</li>
+</ol>
+<h3 id="practical-implications-and-side-effects">Practical Implications
+and Side Effects</h3>
+<p>While the hardware automatically discards framebuffer writes from
+helper invocations, it does not automatically suppress global memory
+side effects. Operations such as:</p>
+<ul>
+<li>Atomic operations (e.g., <code>atomicAdd</code>)</li>
+<li>Image store operations (<code>imageStore</code>)</li>
+<li>Shader Storage Buffer Object (SSBO) writes</li>
+</ul>
+<p>will still execute on helper threads unless explicitly guarded. An
+unguarded atomic counter, for instance, would be incremented by helper
+invocations along primitive edges, producing inaccurate results.</p>
+<p>Developers use <code>gl_HelperInvocation</code> to bypass these
+side-effect operations:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(!</span><span class="bu">gl_HelperInvocation</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Safely perform buffer writes or atomic operations</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">atomicCounterIncrement</span><span class="op">(</span>myCounter<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By checking this boolean, shaders can prevent invalid memory
+modifications and avoid unnecessary compute-heavy operations within
+lanes that exist exclusively to satisfy neighboring quad
+derivatives.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

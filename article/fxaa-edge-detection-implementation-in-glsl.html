@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FXAA Edge Detection Implementation in GLSL - glsl</title>
+    <meta name="description" content="This article provides a practical guide to implementing the edge detection stage of Fast Approximate Anti-Aliasing (FXAA) in OpenGL Shading Language (GLSL). FXAA is a screen-space technique that smooths jagged silhouettes by analyzing local color contras">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/fxaa-edge-detection-implementation-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="FXAA Edge Detection Implementation in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/fxaa-edge-detection-implementation-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a practical guide to implementing the edge detection stage of Fast Approximate Anti-Aliasing (FXAA) in OpenGL Shading Language (GLSL). FXAA is a screen-space technique that smooths jagged silhouettes by analyzing local color contras" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="fxaa-edge-detection-implementation-in-glsl">FXAA Edge Detection
+Implementation in GLSL</h1>
+<p>This article provides a practical guide to implementing the edge
+detection stage of Fast Approximate Anti-Aliasing (FXAA) in OpenGL
+Shading Language (GLSL). FXAA is a screen-space technique that smooths
+jagged silhouettes by analyzing local color contrast rather than
+evaluating geometric primitives. Readers will learn how FXAA converts
+color data to luminance, samples orthogonal neighbor pixels, evaluates
+local contrast against relative and absolute thresholds, and determines
+whether an edge is oriented horizontally or vertically.</p>
+<h2 id="the-principles-of-fxaa-edge-detection">The Principles of FXAA
+Edge Detection</h2>
+<p>FXAA detects edges based on human perceptual brightness, known as
+luminance, rather than raw RGB differences or depth buffer
+discontinuities. By processing luminance values of a target pixel
+alongside its immediate neighbors, the shader calculates the local
+contrast range. If this contrast exceeds predetermined thresholds, the
+pixel is flagged as an edge that requires blending.</p>
+<h3 id="1-calculating-perceived-luminance">1. Calculating Perceived
+Luminance</h3>
+<p>Luminance (<span class="math inline">\(L\)</span>) is typically
+derived using standard colorimetric conversion coefficients that reflect
+human eye sensitivity to green wavelengths:</p>
+<p><span class="math display">\[L = 0.299 \cdot R + 0.587 \cdot G +
+0.114 \cdot B\]</span></p>
+<p>In optimized rendering pipelines, luminance can be pre-calculated and
+stored inside the alpha channel of the primary render target to avoid
+redundant computations during the post-processing pass.</p>
+<h3 id="2-gathering-local-neighborhood-samples">2. Gathering Local
+Neighborhood Samples</h3>
+<p>To detect an edge, the fragment shader samples the center pixel and
+its four direct orthogonal neighbors: North, South, East, and West.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> texCoord <span class="op">=</span> <span class="op">...;</span> <span class="co">// Normalized screen coordinates [0, 1]</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> inverseScreenSize <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">/</span> screenWidth<span class="op">,</span> <span class="fl">1.0</span> <span class="op">/</span> screenHeight<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Sample center and cardinal directions</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> lumaCenter <span class="op">=</span> <span class="fu">rgb2luma</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>screenTexture<span class="op">,</span> texCoord<span class="op">).</span><span class="fu">rgb</span><span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> lumaDown   <span class="op">=</span> <span class="fu">rgb2luma</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>screenTexture<span class="op">,</span> texCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">)</span> <span class="op">*</span> inverseScreenSize<span class="op">).</span><span class="fu">rgb</span><span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> lumaUp     <span class="op">=</span> <span class="fu">rgb2luma</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>screenTexture<span class="op">,</span> texCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span>  <span class="fl">1.0</span><span class="op">)</span> <span class="op">*</span> inverseScreenSize<span class="op">).</span><span class="fu">rgb</span><span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> lumaLeft   <span class="op">=</span> <span class="fu">rgb2luma</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>screenTexture<span class="op">,</span> texCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(-</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">*</span> inverseScreenSize<span class="op">).</span><span class="fu">rgb</span><span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> lumaRight  <span class="op">=</span> <span class="fu">rgb2luma</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>screenTexture<span class="op">,</span> texCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">*</span> inverseScreenSize<span class="op">).</span><span class="fu">rgb</span><span class="op">);</span></span></code></pre></div>
+<h3 id="3-contrast-evaluation-and-thresholding">3. Contrast Evaluation
+and Thresholding</h3>
+<p>The algorithm determines the minimum and maximum luminance values
+among the sampled pixels to calculate the local contrast range:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> lumaMin <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>lumaCenter<span class="op">,</span> <span class="bu">min</span><span class="op">(</span><span class="bu">min</span><span class="op">(</span>lumaDown<span class="op">,</span> lumaUp<span class="op">),</span> <span class="bu">min</span><span class="op">(</span>lumaLeft<span class="op">,</span> lumaRight<span class="op">)));</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> lumaMax <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>lumaCenter<span class="op">,</span> <span class="bu">max</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>lumaDown<span class="op">,</span> lumaUp<span class="op">),</span> <span class="bu">max</span><span class="op">(</span>lumaLeft<span class="op">,</span> lumaRight<span class="op">)));</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> lumaRange <span class="op">=</span> lumaMax <span class="op">-</span> lumaMin<span class="op">;</span></span></code></pre></div>
+<p>To avoid processing flat surfaces or areas hidden in deep shadows,
+the local range is evaluated against two thresholds:</p>
+<ul>
+<li><strong>Relative Threshold (<code>EDGE_THRESHOLD</code>):</strong>
+Trims edges inside low-contrast areas (typically tuned between
+<code>0.125</code> and <code>0.250</code>).</li>
+<li><strong>Absolute Threshold
+(<code>EDGE_THRESHOLD_MIN</code>):</strong> Prevents edge detection in
+near-black regions where aliasing is imperceptible (typically tuned
+between <code>0.0312</code> and <code>0.0833</code>).</li>
+</ul>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define FXAA_EDGE_THRESHOLD 0.166</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#define FXAA_EDGE_THRESHOLD_MIN 0.0833</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>lumaRange <span class="op">&lt;</span> <span class="bu">max</span><span class="op">(</span>FXAA_EDGE_THRESHOLD_MIN<span class="op">,</span> lumaMax <span class="op">*</span> FXAA_EDGE_THRESHOLD<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// No anti-aliasing needed; return center color directly</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">discard</span><span class="op">;</span> </span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="complete-glsl-edge-detection-and-direction-pass">Complete GLSL
+Edge Detection and Direction Pass</h2>
+<p>Once a pixel passes the threshold check, the algorithm samples
+diagonal neighbors (North-West, North-East, South-West, South-East) to
+compute directional gradients. This step establishes whether the edge
+runs predominantly along the horizontal or vertical axis.</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec2</span> vTexCoord<span class="op">;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> screenTexture<span class="op">;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec2</span> uInverseScreenSize<span class="op">;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="pp">#define FXAA_EDGE_THRESHOLD 0.166</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="pp">#define FXAA_EDGE_THRESHOLD_MIN 0.0625</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">rgb2luma</span><span class="op">(</span><span class="dt">vec3</span> rgb<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">dot</span><span class="op">(</span>rgb<span class="op">,</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.299</span><span class="op">,</span> <span class="fl">0.587</span><span class="op">,</span> <span class="fl">0.114</span><span class="op">));</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Center luminance</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> colorCenter <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>screenTexture<span class="op">,</span> vTexCoord<span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaCenter <span class="op">=</span> <span class="fu">rgb2luma</span><span class="op">(</span>colorCenter<span class="op">);</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Cardinal neighbor luminance</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaDown  <span class="op">=</span> <span class="fu">rgb2luma</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>screenTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">)</span> <span class="op">*</span> uInverseScreenSize<span class="op">).</span><span class="fu">rgb</span><span class="op">);</span></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaUp    <span class="op">=</span> <span class="fu">rgb2luma</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>screenTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span>  <span class="fl">1.0</span><span class="op">)</span> <span class="op">*</span> uInverseScreenSize<span class="op">).</span><span class="fu">rgb</span><span class="op">);</span></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaLeft  <span class="op">=</span> <span class="fu">rgb2luma</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>screenTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(-</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">*</span> uInverseScreenSize<span class="op">).</span><span class="fu">rgb</span><span class="op">);</span></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaRight <span class="op">=</span> <span class="fu">rgb2luma</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>screenTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">*</span> uInverseScreenSize<span class="op">).</span><span class="fu">rgb</span><span class="op">);</span></span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute range and evaluate thresholds</span></span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaMin <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>lumaCenter<span class="op">,</span> <span class="bu">min</span><span class="op">(</span><span class="bu">min</span><span class="op">(</span>lumaDown<span class="op">,</span> lumaUp<span class="op">),</span> <span class="bu">min</span><span class="op">(</span>lumaLeft<span class="op">,</span> lumaRight<span class="op">)));</span></span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaMax <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>lumaCenter<span class="op">,</span> <span class="bu">max</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>lumaDown<span class="op">,</span> lumaUp<span class="op">),</span> <span class="bu">max</span><span class="op">(</span>lumaLeft<span class="op">,</span> lumaRight<span class="op">)));</span></span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaRange <span class="op">=</span> lumaMax <span class="op">-</span> lumaMin<span class="op">;</span></span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>lumaRange <span class="op">&lt;</span> <span class="bu">max</span><span class="op">(</span>FXAA_EDGE_THRESHOLD_MIN<span class="op">,</span> lumaMax <span class="op">*</span> FXAA_EDGE_THRESHOLD<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>        FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>colorCenter<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Corner luminance for orientation determination</span></span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaDownLeft  <span class="op">=</span> <span class="fu">rgb2luma</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>screenTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(-</span><span class="fl">1.0</span><span class="op">,</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">)</span> <span class="op">*</span> uInverseScreenSize<span class="op">).</span><span class="fu">rgb</span><span class="op">);</span></span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaUpRight   <span class="op">=</span> <span class="fu">rgb2luma</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>screenTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span> <span class="fl">1.0</span><span class="op">,</span>  <span class="fl">1.0</span><span class="op">)</span> <span class="op">*</span> uInverseScreenSize<span class="op">).</span><span class="fu">rgb</span><span class="op">);</span></span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaUpLeft    <span class="op">=</span> <span class="fu">rgb2luma</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>screenTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(-</span><span class="fl">1.0</span><span class="op">,</span>  <span class="fl">1.0</span><span class="op">)</span> <span class="op">*</span> uInverseScreenSize<span class="op">).</span><span class="fu">rgb</span><span class="op">);</span></span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaDownRight <span class="op">=</span> <span class="fu">rgb2luma</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>screenTexture<span class="op">,</span> vTexCoord <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span> <span class="fl">1.0</span><span class="op">,</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">)</span> <span class="op">*</span> uInverseScreenSize<span class="op">).</span><span class="fu">rgb</span><span class="op">);</span></span>
+<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Combine cardinal and diagonal deltas to measure edge orientation</span></span>
+<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaDownUp    <span class="op">=</span> lumaDown <span class="op">+</span> lumaUp<span class="op">;</span></span>
+<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaLeftRight <span class="op">=</span> lumaLeft <span class="op">+</span> lumaRight<span class="op">;</span></span>
+<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-47"><a href="#cb4-47" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaLeftCorners  <span class="op">=</span> lumaDownLeft <span class="op">+</span> lumaUpLeft<span class="op">;</span></span>
+<span id="cb4-48"><a href="#cb4-48" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaDownCorners  <span class="op">=</span> lumaDownLeft <span class="op">+</span> lumaDownRight<span class="op">;</span></span>
+<span id="cb4-49"><a href="#cb4-49" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaRightCorners <span class="op">=</span> lumaDownRight <span class="op">+</span> lumaUpRight<span class="op">;</span></span>
+<span id="cb4-50"><a href="#cb4-50" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lumaUpCorners    <span class="op">=</span> lumaUpRight <span class="op">+</span> lumaUpLeft<span class="op">;</span></span>
+<span id="cb4-51"><a href="#cb4-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-52"><a href="#cb4-52" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Gradient calculations</span></span>
+<span id="cb4-53"><a href="#cb4-53" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> edgeHorizontal <span class="op">=</span> <span class="bu">abs</span><span class="op">(-</span><span class="fl">2.0</span> <span class="op">*</span> lumaLeft <span class="op">+</span> lumaLeftCorners<span class="op">)</span>  <span class="op">+</span></span>
+<span id="cb4-54"><a href="#cb4-54" aria-hidden="true" tabindex="-1"></a>                           <span class="bu">abs</span><span class="op">(-</span><span class="fl">2.0</span> <span class="op">*</span> lumaCenter <span class="op">+</span> lumaDownUp<span class="op">)</span> <span class="op">*</span> <span class="fl">2.0</span> <span class="op">+</span></span>
+<span id="cb4-55"><a href="#cb4-55" aria-hidden="true" tabindex="-1"></a>                           <span class="bu">abs</span><span class="op">(-</span><span class="fl">2.0</span> <span class="op">*</span> lumaRight <span class="op">+</span> lumaRightCorners<span class="op">);</span></span>
+<span id="cb4-56"><a href="#cb4-56" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-57"><a href="#cb4-57" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> edgeVertical   <span class="op">=</span> <span class="bu">abs</span><span class="op">(-</span><span class="fl">2.0</span> <span class="op">*</span> lumaUp <span class="op">+</span> lumaUpCorners<span class="op">)</span>      <span class="op">+</span></span>
+<span id="cb4-58"><a href="#cb4-58" aria-hidden="true" tabindex="-1"></a>                           <span class="bu">abs</span><span class="op">(-</span><span class="fl">2.0</span> <span class="op">*</span> lumaCenter <span class="op">+</span> lumaLeftRight<span class="op">)</span> <span class="op">*</span> <span class="fl">2.0</span> <span class="op">+</span></span>
+<span id="cb4-59"><a href="#cb4-59" aria-hidden="true" tabindex="-1"></a>                           <span class="bu">abs</span><span class="op">(-</span><span class="fl">2.0</span> <span class="op">*</span> lumaDown <span class="op">+</span> lumaDownCorners<span class="op">);</span></span>
+<span id="cb4-60"><a href="#cb4-60" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-61"><a href="#cb4-61" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> isHorizontal <span class="op">=</span> edgeHorizontal <span class="op">&gt;=</span> edgeVertical<span class="op">;</span></span>
+<span id="cb4-62"><a href="#cb4-62" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-63"><a href="#cb4-63" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Edge detected: output debug visualizer or proceed to the blending stage</span></span>
+<span id="cb4-64"><a href="#cb4-64" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> isHorizontal <span class="op">?</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">:</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb4-65"><a href="#cb4-65" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The resulting boolean <code>isHorizontal</code> identifies the normal
+direction required for subsequent sub-pixel edge tracing and texture
+filtering passes across the detected boundary.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

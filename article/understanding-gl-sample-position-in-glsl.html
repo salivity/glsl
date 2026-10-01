@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding gl_SamplePosition in GLSL - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), glSamplePosition is a built-in fragment shader input variable that supplies the exact sub-pixel coordinates of the current sample point within a pixel. This article explains the data provided by glSamplePosition, ho">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-gl-sample-position-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding gl_SamplePosition in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-gl-sample-position-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), glSamplePosition is a built-in fragment shader input variable that supplies the exact sub-pixel coordinates of the current sample point within a pixel. This article explains the data provided by glSamplePosition, ho" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-gl_sampleposition-in-glsl">Understanding
+gl_SamplePosition in GLSL</h1>
+<p>In the OpenGL Shading Language (GLSL), <code>gl_SamplePosition</code>
+is a built-in fragment shader input variable that supplies the exact
+sub-pixel coordinates of the current sample point within a pixel. This
+article explains the data provided by <code>gl_SamplePosition</code>,
+how its coordinate space is defined, the conditions required to use it,
+and how it benefits advanced multisampling techniques in graphical
+rendering.</p>
+<h2 id="what-gl_sampleposition-represents">What gl_SamplePosition
+Represents</h2>
+<p>The <code>gl_SamplePosition</code> variable is a two-component
+floating-point vector (<code>vec2</code>) available during multisample
+fragment processing. It provides the exact spatial location of the
+specific sample currently being evaluated, relative to the boundaries of
+the corresponding pixel.</p>
+<p>Rather than treating a pixel as an indivisible point or a single
+center location, multisampling requires fragments to evaluate multiple
+discrete locations across the surface of a pixel.
+<code>gl_SamplePosition</code> explicitly returns these sub-pixel
+positions.</p>
+<h2 id="coordinate-space-and-bounds">Coordinate Space and Bounds</h2>
+<p>The values provided by <code>gl_SamplePosition</code> are normalized
+within the range <code>[0.0, 1.0]</code> along both axes:</p>
+<ul>
+<li><strong>Origin <code>(0.0, 0.0)</code>:</strong> Corresponds to the
+lower-left corner of the pixel area.</li>
+<li><strong>Pixel Center <code>(0.5, 0.5)</code>:</strong> Corresponds
+to the geometric center of the pixel.</li>
+<li><strong>Upper Limit <code>(1.0, 1.0)</code>:</strong> Corresponds to
+the upper-right corner of the pixel area.</li>
+</ul>
+<p>Because sample placement patterns vary by hardware architecture and
+antialiasing modes (such as standard grid, rotated grid, or jittered
+sampling), the values in <code>gl_SamplePosition</code> reflect the
+specific implementation chosen by the graphics driver and GPU for that
+sample.</p>
+<h2 id="prerequisites-and-activation">Prerequisites and Activation</h2>
+<p><code>gl_SamplePosition</code> is introduced in GLSL 4.00 (or earlier
+via the <code>GL_ARB_sample_shading</code> extension). To read
+meaningful sub-pixel values from it, the rendering pipeline must meet
+specific criteria:</p>
+<ol type="1">
+<li><strong>Multisampling Enabled:</strong> The active framebuffer must
+be configured with multisampling (MSAA) with more than one sample per
+pixel.</li>
+<li><strong>Per-Sample Shading Active:</strong> Fragment shaders
+typically execute once per pixel by default, even when multisampling is
+enabled. Accessing <code>gl_SamplePosition</code> or declaring fragment
+inputs with the <code>sample</code> interpolation qualifier forces
+per-sample frequency execution, meaning the fragment shader runs once
+for every covered sample rather than once per primitive per pixel.</li>
+</ol>
+<h2 id="practical-applications">Practical Applications</h2>
+<p>Access to <code>gl_SamplePosition</code> is essential for tasks
+requiring sub-pixel accuracy, including:</p>
+<ul>
+<li><strong>Custom Resolving:</strong> Implementing custom filters when
+blending multisample render targets into a final single-sample
+image.</li>
+<li><strong>Analytical Anti-Aliasing:</strong> Evaluating procedural
+edges, vector graphics, or Signed Distance Fields (SDFs) with high
+precision against the exact physical sample point.</li>
+<li><strong>Sub-Pixel Jitter Correction:</strong> Compensating for
+camera jitter or spatial offsets in temporal antialiasing (TAA)
+implementations.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

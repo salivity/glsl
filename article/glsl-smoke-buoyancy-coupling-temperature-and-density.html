@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Smoke Buoyancy: Coupling Temperature and Density - glsl</title>
+    <meta name="description" content="This article explains how to simulate realistic smoke buoyancy in real-time fluid solvers by coupling temperature and density fields inside a GLSL compute shader. It covers the governing physical approximation, the mathematical formulation for buoyant ac">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-smoke-buoyancy-coupling-temperature-and-density">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Smoke Buoyancy: Coupling Temperature and Density - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-smoke-buoyancy-coupling-temperature-and-density" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to simulate realistic smoke buoyancy in real-time fluid solvers by coupling temperature and density fields inside a GLSL compute shader. It covers the governing physical approximation, the mathematical formulation for buoyant ac" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-smoke-buoyancy-coupling-temperature-and-density">GLSL Smoke
+Buoyancy: Coupling Temperature and Density</h1>
+<p>This article explains how to simulate realistic smoke buoyancy in
+real-time fluid solvers by coupling temperature and density fields
+inside a GLSL compute shader. It covers the governing physical
+approximation, the mathematical formulation for buoyant acceleration,
+and the step-by-step implementation of an external force pass within a
+modern GPU compute pipeline.</p>
+<h2 id="the-physics-the-boussinesq-approximation">The Physics: The
+Boussinesq Approximation</h2>
+<p>In real-time smoke simulation based on the incompressible
+Navier-Stokes equations, buoyancy is typically modeled using the
+Boussinesq approximation. This approximation assumes that variations in
+fluid density are negligible except where they contribute to the
+gravitational buoyant force.</p>
+<p>Warm smoke rises because thermal expansion makes it lighter than
+surrounding air, while heavy particulate concentrations (smoke density)
+pull it downward under gravity. The upward buoyant force <span
+class="math inline">\(F_{\text{buoy}}\)</span> acting along the vertical
+axis is defined as:</p>
+<p><span class="math display">\[F_{\text{buoy}} = \left( -\alpha \rho +
+\beta (T - T_{\text{amb}}) \right) \hat{y}\]</span></p>
+<ul>
+<li><span class="math inline">\(\rho\)</span>: The local smoke
+density.</li>
+<li><span class="math inline">\(T\)</span>: The local temperature.</li>
+<li><span class="math inline">\(T_{\text{amb}}\)</span>: The ambient
+room temperature.</li>
+<li><span class="math inline">\(\alpha\)</span>: A positive scalar
+weighting the downward gravitational pull of dense smoke.</li>
+<li><span class="math inline">\(\beta\)</span>: A positive scalar
+controlling thermal lift (thermal expansion coefficient).</li>
+<li><span class="math inline">\(\hat{y}\)</span>: The normalized
+vertical direction vector (typically <span class="math inline">\((0, 1,
+0)\)</span>).</li>
+</ul>
+<p>When the gas is hot (<span class="math inline">\(T &gt;
+T_{\text{amb}}\)</span>), the thermal term dominates and accelerates the
+fluid upward. As the smoke cools or accumulates heavy density, the
+downward pull balances or overcomes the thermal lift, creating natural
+swirling plumes and mushroom caps.</p>
+<h2 id="storing-fluid-states-on-the-gpu">Storing Fluid States on the
+GPU</h2>
+<p>In a typical GLSL pipeline, the 3D fluid domain is represented using
+3D textures. You will generally use:</p>
+<ul>
+<li><code>velocityTexture</code> (format <code>RGBA16F</code> or
+<code>RGBA32F</code>): Stores the 3D velocity vector <span
+class="math inline">\((u, v, w)\)</span> in the RGB channels.</li>
+<li><code>densityTexture</code> (format <code>R16F</code> or
+<code>R32F</code>): Stores scalar smoke concentration <span
+class="math inline">\(\rho\)</span>.</li>
+<li><code>temperatureTexture</code> (format <code>R16F</code> or
+<code>R32F</code>): Stores scalar temperature <span
+class="math inline">\(T\)</span>.</li>
+</ul>
+<p>Alternatively, density and temperature can be packed into a single
+two-channel <code>RG16F</code> texture to reduce memory bandwidth and
+cache misses during texture sampling.</p>
+<h2 id="glsl-compute-shader-implementation">GLSL Compute Shader
+Implementation</h2>
+<p>The buoyancy calculation is executed as an explicit force
+accumulation step. It runs after the advection stage and before the
+pressure projection (divergence-free projection) stage of the fluid
+solver.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">8</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">8</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">8</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Textures</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> rgba16f<span class="op">)</span> <span class="kw">uniform</span> <span class="dt">readonly</span> <span class="dt">image3D</span> u_VelocityIn<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> r16f<span class="op">)</span>    <span class="kw">uniform</span> <span class="dt">readonly</span> <span class="dt">image3D</span> u_Density<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">2</span><span class="op">,</span> r16f<span class="op">)</span>    <span class="kw">uniform</span> <span class="dt">readonly</span> <span class="dt">image3D</span> u_Temperature<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">3</span><span class="op">,</span> rgba16f<span class="op">)</span> <span class="kw">uniform</span> <span class="dt">writeonly</span> <span class="dt">image3D</span> u_VelocityOut<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co">// Simulation parameters</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_DeltaTime<span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_AmbientTemperature<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_Alpha<span class="op">;</span> <span class="co">// Density weight</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_Beta<span class="op">;</span>  <span class="co">// Temperature buoyancy weight</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> cell <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">xyz</span><span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> size <span class="op">=</span> <span class="bu">imageSize</span><span class="op">(</span>u_VelocityIn<span class="op">);</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Boundary check</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>cell<span class="op">.</span><span class="fu">x</span> <span class="op">&gt;=</span> size<span class="op">.</span><span class="fu">x</span> <span class="op">||</span> cell<span class="op">.</span><span class="fu">y</span> <span class="op">&gt;=</span> size<span class="op">.</span><span class="fu">y</span> <span class="op">||</span> cell<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;=</span> size<span class="op">.</span><span class="fu">z</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Read current state</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> velocity <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>u_VelocityIn<span class="op">,</span> cell<span class="op">).</span><span class="fu">xyz</span><span class="op">;</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> density <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>u_Density<span class="op">,</span> cell<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> temp    <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>u_Temperature<span class="op">,</span> cell<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate vertical buoyant force</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> thermalLift <span class="op">=</span> u_Beta <span class="op">*</span> <span class="op">(</span>temp <span class="op">-</span> u_AmbientTemperature<span class="op">);</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> densityWeight <span class="op">=</span> u_Alpha <span class="op">*</span> density<span class="op">;</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> verticalForce <span class="op">=</span> thermalLift <span class="op">-</span> densityWeight<span class="op">;</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Apply explicit Euler integration along the vertical axis</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    velocity<span class="op">.</span><span class="fu">y</span> <span class="op">+=</span> verticalForce <span class="op">*</span> u_DeltaTime<span class="op">;</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Output updated velocity field</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    <span class="bu">imageStore</span><span class="op">(</span>u_VelocityOut<span class="op">,</span> cell<span class="op">,</span> <span class="dt">vec4</span><span class="op">(</span>velocity<span class="op">,</span> <span class="fl">0.0</span><span class="op">));</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="integrating-into-the-simulation-loop">Integrating into the
+Simulation Loop</h2>
+<p>To maintain stability and realistic motion, integrate the buoyancy
+compute pass into the larger simulation pipeline in the following
+sequence:</p>
+<ol type="1">
+<li><strong>Advection</strong>: Advect velocity, density, and
+temperature using semi-Lagrangian backtracing or higher-order schemes
+(e.g., MacCormack).</li>
+<li><strong>Thermal Cooling and Diffusion</strong>: Apply heat
+dissipation to gradually return temperatures toward <span
+class="math inline">\(T_{\text{amb}}\)</span>, along with optional
+thermal and density diffusion.</li>
+<li><strong>Buoyancy Force Application</strong>: Dispatch the compute
+shader shown above to update the velocity field based on current
+temperature and density values.</li>
+<li><strong>Pressure Projection (Poisson Solve)</strong>: Compute the
+divergence of the updated velocity field and resolve the pressure
+Poisson equation (using Jacobi iterations, Gauss-Seidel, or Multigrid).
+Subtract the pressure gradient from the velocity to enforce mass
+conservation (incompressibility).</li>
+</ol>
+<p>Placing buoyancy right before the pressure solve is critical. The
+pressure projection step removes the divergence introduced by the
+localized upward acceleration, converting pure vertical velocity into
+the circular vorticity patterns characteristic of rising smoke
+plumes.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

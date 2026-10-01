@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alpha to Coverage and Sub-Pixel Masks in GLSL - glsl</title>
+    <meta name="description" content="Alpha-to-coverage is a GPU hardware technique that bridges the gap between traditional alpha testing and multi-sample anti-aliasing (MSAA) by translating a fragment's alpha value directly into a sub-pixel coverage mask. Instead of relying on a binary dis">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/alpha-to-coverage-and-sub-pixel-masks-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Alpha to Coverage and Sub-Pixel Masks in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/alpha-to-coverage-and-sub-pixel-masks-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Alpha-to-coverage is a GPU hardware technique that bridges the gap between traditional alpha testing and multi-sample anti-aliasing (MSAA) by translating a fragment's alpha value directly into a sub-pixel coverage mask. Instead of relying on a binary dis" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="alpha-to-coverage-and-sub-pixel-masks-in-glsl">Alpha to Coverage
+and Sub-Pixel Masks in GLSL</h1>
+<p>Alpha-to-coverage is a GPU hardware technique that bridges the gap
+between traditional alpha testing and multi-sample anti-aliasing (MSAA)
+by translating a fragment's alpha value directly into a sub-pixel
+coverage mask. Instead of relying on a binary discard operation that
+produces hard, pixelated edges, or alpha blending that requires strict
+back-to-front depth sorting, alpha-to-coverage leverages multi-sampling
+hardware to render order-independent, anti-aliased transparency for
+assets like foliage, hair, and chain-link fences.</p>
+<h2 id="the-traditional-pipeline-vs-alpha-to-coverage">The Traditional
+Pipeline vs. Alpha-to-Coverage</h2>
+<p>In standard GLSL fragment shading with MSAA enabled, the GPU
+determines a primitive's visibility by generating an initial
+<strong>geometric coverage mask</strong>. For a 4x MSAA render target,
+this is a 4-bit mask where each bit represents whether a specific
+sub-pixel sample point falls within the boundaries of the polygon being
+rasterized.</p>
+<p>When traditional alpha testing is implemented via the GLSL
+<code>discard</code> keyword:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>color<span class="op">.</span><span class="fu">a</span> <span class="op">&lt;</span> <span class="fl">0.5</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">discard</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The entire fragment is eliminated. Every bit in the coverage mask is
+cleared to zero, resulting in binary visibility: a pixel is either 100%
+visible or completely invisible. This causes aliasing and harsh
+borders.</p>
+<h2 id="how-alpha-to-coverage-modifies-the-coverage-mask">How
+Alpha-to-Coverage Modifies the Coverage Mask</h2>
+<p>When you enable <code>GL_SAMPLE_ALPHA_TO_COVERAGE</code>, the
+hardware intercepts the fragment shader's output alpha component
+(<code>color.a</code>, clamped between 0.0 and 1.0) before writing to
+the framebuffer. It converts this scalar floating-point value into an
+additional temporary bitmask:</p>
+<ol type="1">
+<li><strong>Quantization</strong>: The scalar alpha value is mapped to a
+discrete number of samples. In a 4x MSAA buffer, alpha is quantized into
+5 discrete levels: <span class="math inline">\(0/4\)</span> (0%), <span
+class="math inline">\(1/4\)</span> (25%), <span
+class="math inline">\(2/4\)</span> (50%), <span
+class="math inline">\(3/4\)</span> (75%), and <span
+class="math inline">\(4/4\)</span> (100%).</li>
+<li><strong>Mask Generation</strong>: The hardware generates an
+<strong>alpha coverage mask</strong> where the number of active bits
+corresponds to the quantized alpha level. For instance, an alpha value
+of 0.5 activates 2 out of the 4 bits in a 4x MSAA configuration.</li>
+<li><strong>Bitwise AND Operation</strong>: The GPU performs a bitwise
+logical <code>AND</code> operation between the original geometric
+coverage mask and the generated alpha coverage mask:</li>
+</ol>
+<p><span class="math display">\[\text{Final Mask} = \text{Geometric
+Mask} \ \&amp; \ \text{Alpha Mask}\]</span></p>
+<p>If a sample point was already outside the triangle's geometric
+boundary (a bit of <code>0</code> in the geometric mask), it remains
+<code>0</code>. If it was inside (<code>1</code>), its final visibility
+depends on the bit produced by the alpha value.</p>
+<h2 id="dithering-and-sample-distribution">Dithering and Sample
+Distribution</h2>
+<p>GPUs do not simply activate samples sequentially (such as always
+picking the first two samples for an alpha of 0.5). Doing so would
+create severe screen-door artifacts and unnatural banding when
+overlapping surfaces are drawn.</p>
+<p>Instead, the hardware uses predefined, dithered patterns that vary
+based on the fragment's screen-space coordinates <span
+class="math inline">\((x, y)\)</span>. By staggering which sub-pixel
+samples are active across neighboring pixels:</p>
+<ul>
+<li>Overlapping alpha-tested surfaces combine organically.</li>
+<li>The sub-pixel coverage creates a visual gradient equivalent to
+partial transparency when resolved to a final display.</li>
+<li>Depth testing and depth writes still function normally on a
+per-sample basis, preventing the sorting artifacts typically associated
+with standard blending.</li>
+</ul>
+<h2 id="glsl-fragment-output-and-alpha-to-one">GLSL Fragment Output and
+Alpha-to-One</h2>
+<p>In GLSL, the fragment shader simply writes the final color and alpha
+value to the output variable:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec2</span> TexCoords<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> textureSampler<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> texColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>textureSampler<span class="op">,</span> TexCoords<span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> texColor<span class="op">;</span> </span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>If alpha-to-coverage is enabled on the OpenGL context via:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>glEnable<span class="op">(</span>GL_SAMPLE_ALPHA_TO_COVERAGE<span class="op">);</span></span></code></pre></div>
+<p>No manual discard is required in GLSL. The rasterizer reads
+<code>FragColor.a</code> directly and updates the sample masks.</p>
+<p>Optionally, developers can enable
+<code>GL_SAMPLE_ALPHA_TO_ONE</code>, which sets the fragment's alpha
+value to 1.0 after the coverage mask has been computed. This prevents
+alpha-to-coverage from accidentally scaling downstream alpha blending
+passes when both features are active simultaneously.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Volumetric Light Shaft Rendering in GLSL - glsl</title>
+    <meta name="description" content="Volumetric light shafts, commonly known as sunbeams or god rays, are rendered in real-time graphics by simulating participating media along a camera's viewing ray. In GLSL, this is achieved through ray marching, where the fragment shader samples points a">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/volumetric-light-shaft-rendering-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Volumetric Light Shaft Rendering in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/volumetric-light-shaft-rendering-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Volumetric light shafts, commonly known as sunbeams or god rays, are rendered in real-time graphics by simulating participating media along a camera's viewing ray. In GLSL, this is achieved through ray marching, where the fragment shader samples points a" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="volumetric-light-shaft-rendering-in-glsl">Volumetric Light Shaft
+Rendering in GLSL</h1>
+<p>Volumetric light shafts, commonly known as sunbeams or god rays, are
+rendered in real-time graphics by simulating participating media along a
+camera's viewing ray. In GLSL, this is achieved through ray marching,
+where the fragment shader samples points along a ray traveling from the
+camera into the scene, tests each point against a shadow map for
+visibility, and accumulates in-scattered light based on phase functions
+and atmospheric transmittance. This article explains the step-by-step
+mechanics of calculating, attenuating, and accumulating sunbeam
+intensity across discrete ray samples directly within a GLSL shader.</p>
+<h3 id="the-ray-marching-model">The Ray Marching Model</h3>
+<p>To evaluate the light arriving at the camera through participating
+media, the rendering pipeline computes the Radiative Transfer Equation
+(RTE) numerically. A viewing ray is defined by the camera position as
+the origin <span class="math inline">\(\vec{O}\)</span> and a normalized
+viewing direction <span class="math inline">\(\vec{D}\)</span>:</p>
+<p><span class="math display">\[\vec{P}(t) = \vec{O} + t
+\vec{D}\]</span></p>
+<p>The ray march begins at a near distance <span
+class="math inline">\(t_{\text{start}}\)</span> (typically the near
+plane) and ends at <span class="math inline">\(t_{\text{end}}\)</span>,
+which is either the scene geometry depth fetched from the depth buffer
+or an artificial maximum distance for skybox rendering. The ray is
+partitioned into <span class="math inline">\(N\)</span> discrete steps
+of length <span class="math inline">\(\Delta t = \frac{t_{\text{end}} -
+t_{\text{start}}}{N}\)</span>.</p>
+<h3 id="per-sample-visibility-and-in-scattering">Per-Sample Visibility
+and In-Scattering</h3>
+<p>For every step <span class="math inline">\(i\)</span> along the ray,
+the world-space sample coordinate <span
+class="math inline">\(\vec{P}_i\)</span> is computed. The shader must
+determine two key factors at this position:</p>
+<ol type="1">
+<li><strong>Visibility (<span
+class="math inline">\(V\)</span>):</strong> The point <span
+class="math inline">\(\vec{P}_i\)</span> is transformed into light
+projection space to sample the directional shadow map. If the sampled
+depth is less than the coordinate's light-space depth, the point is in
+shadow (<span class="math inline">\(V = 0\)</span>). Otherwise, the
+sunbeam hits the media (<span class="math inline">\(V =
+1\)</span>).</li>
+<li><strong>Phase Function (<span
+class="math inline">\(P(\theta)\)</span>):</strong> Atmospheric dust,
+aerosols, and moisture do not scatter light uniformly in all directions
+(Mie scattering). The Henyey-Greenstein phase function or the
+Cornette-Shanks approximation is evaluated using the cosine of the angle
+<span class="math inline">\(\theta\)</span> between the light direction
+<span class="math inline">\(\vec{L}\)</span> and the view ray <span
+class="math inline">\(\vec{D}\)</span>:</li>
+</ol>
+<p><span class="math display">\[P(\theta) = \frac{1 - g^2}{4\pi (1 + g^2
+- 2g \cos\theta)^{3/2}}\]</span></p>
+<p>The asymmetry factor <span class="math inline">\(g \in (-1,
+1)\)</span> dictates the forward or backward scattering bias. For
+prominent sunbeams, a forward-scattering value between <span
+class="math inline">\(0.6\)</span> and <span
+class="math inline">\(0.85\)</span> is standard.</p>
+<h3 id="transmittance-and-beer-lambert-law">Transmittance and
+Beer-Lambert Law</h3>
+<p>Light traveling through media suffers extinction (absorption and
+out-scattering). The proportion of light transmitted over a distance is
+governed by the Beer-Lambert law:</p>
+<p><span class="math display">\[T(d) = e^{-\sigma_t \cdot
+d}\]</span></p>
+<p>where <span class="math inline">\(\sigma_t\)</span> is the extinction
+coefficient. In uniform media, this can be tracked as a running
+transmittance value:</p>
+<ul>
+<li><strong>Transmittance to Eye:</strong> Accounts for light scattered
+at <span class="math inline">\(\vec{P}_i\)</span> that survives
+traveling back to the camera.</li>
+<li><strong>Transmittance from Light:</strong> Accounts for sunbeam
+light reaching <span class="math inline">\(\vec{P}_i\)</span> from the
+top of the atmosphere.</li>
+</ul>
+<h3 id="intensity-accumulation-loop-in-glsl">Intensity Accumulation Loop
+in GLSL</h3>
+<p>The accumulation process combines visibility, phase scattering, and
+attenuation into a single iterative loop within the fragment shader:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> shadowMap<span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> lightSpaceMatrix<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> lightDir<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> lightColor<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> scatteringCoeff<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> extinctionCoeff<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> gFactor<span class="op">;</span> <span class="co">// Henyey-Greenstein asymmetry</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">henyeyGreenstein</span><span class="op">(</span><span class="dt">float</span> cosTheta<span class="op">,</span> <span class="dt">float</span> g<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> g2 <span class="op">=</span> g <span class="op">*</span> g<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> g2<span class="op">)</span> <span class="op">/</span> <span class="op">(</span><span class="fl">4.0</span> <span class="op">*</span> <span class="fl">3.14159265</span> <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">+</span> g2 <span class="op">-</span> <span class="fl">2.0</span> <span class="op">*</span> g <span class="op">*</span> cosTheta<span class="op">,</span> <span class="fl">1.5</span><span class="op">));</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">accumulateSunbeams</span><span class="op">(</span><span class="dt">vec3</span> rayOrigin<span class="op">,</span> <span class="dt">vec3</span> rayDir<span class="op">,</span> <span class="dt">float</span> maxDist<span class="op">,</span> <span class="dt">int</span> steps<span class="op">,</span> <span class="dt">float</span> dither<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> stepSize <span class="op">=</span> maxDist <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>steps<span class="op">);</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosTheta <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>rayDir<span class="op">,</span> <span class="op">-</span>lightDir<span class="op">);</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> phase <span class="op">=</span> <span class="fu">henyeyGreenstein</span><span class="op">(</span>cosTheta<span class="op">,</span> gFactor<span class="op">);</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> accumulatedLight <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> currentTransmittance <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Offset the starting point with noise to reduce visual banding</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> t <span class="op">=</span> stepSize <span class="op">*</span> dither<span class="op">;</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> steps<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> samplePos <span class="op">=</span> rayOrigin <span class="op">+</span> rayDir <span class="op">*</span> t<span class="op">;</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Transform to light space</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec4</span> lightSpacePos <span class="op">=</span> lightSpaceMatrix <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>samplePos<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> projCoords <span class="op">=</span> lightSpacePos<span class="op">.</span><span class="fu">xyz</span> <span class="op">/</span> lightSpacePos<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>        projCoords <span class="op">=</span> projCoords <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Check if sample is within light frustum</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>projCoords<span class="op">.</span><span class="fu">z</span> <span class="op">&lt;=</span> <span class="fl">1.0</span> <span class="op">&amp;&amp;</span> projCoords<span class="op">.</span><span class="fu">x</span> <span class="op">&gt;=</span> <span class="fl">0.0</span> <span class="op">&amp;&amp;</span> projCoords<span class="op">.</span><span class="fu">x</span> <span class="op">&lt;=</span> <span class="fl">1.0</span> <span class="op">&amp;&amp;</span> </span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>            projCoords<span class="op">.</span><span class="fu">y</span> <span class="op">&gt;=</span> <span class="fl">0.0</span> <span class="op">&amp;&amp;</span> projCoords<span class="op">.</span><span class="fu">y</span> <span class="op">&lt;=</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>            <span class="dt">float</span> shadowDepth <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>shadowMap<span class="op">,</span> projCoords<span class="op">.</span><span class="fu">xy</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>            <span class="dt">float</span> shadowBias <span class="op">=</span> <span class="fl">0.002</span><span class="op">;</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>            <span class="dt">float</span> visibility <span class="op">=</span> <span class="op">(</span>projCoords<span class="op">.</span><span class="fu">z</span> <span class="op">-</span> shadowBias <span class="op">&lt;</span> shadowDepth<span class="op">)</span> <span class="op">?</span> <span class="fl">1.0</span> <span class="op">:</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>            <span class="kw">if</span> <span class="op">(</span>visibility <span class="op">&gt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>                <span class="co">// In-scattered light at this step</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>                <span class="dt">float</span> stepExtinction <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>extinctionCoeff <span class="op">*</span> stepSize<span class="op">);</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>                <span class="dt">vec3</span> inScattered <span class="op">=</span> lightColor <span class="op">*</span> phase <span class="op">*</span> scatteringCoeff <span class="op">*</span> visibility<span class="op">;</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>                </span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>                <span class="co">// Accumulate light integrated over step length</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>                accumulatedLight <span class="op">+=</span> currentTransmittance <span class="op">*</span> inScattered <span class="op">*</span> stepSize<span class="op">;</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>                currentTransmittance <span class="op">*=</span> stepExtinction<span class="op">;</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>        t <span class="op">+=</span> stepSize<span class="op">;</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>currentTransmittance <span class="op">&lt;</span> <span class="fl">0.01</span><span class="op">)</span> <span class="kw">break</span><span class="op">;</span> <span class="co">// Early exit if ray is fully extinguished</span></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> accumulatedLight<span class="op">;</span></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="eliminating-banding-with-jittering">Eliminating Banding with
+Jittering</h3>
+<p>Discrete sampling produces visible wood-grain slicing artifacts
+across the screen. To eliminate these patterns without massively
+increasing step counts:</p>
+<ol type="1">
+<li><strong>Screen-Space Noise:</strong> A high-frequency dither value
+(such as interleaved gradient noise or blue noise) is sampled using
+screen coordinates and mapped to the range <span
+class="math inline">\([0, 1)\)</span>.</li>
+<li><strong>Ray Offset:</strong> The initial step distance <span
+class="math inline">\(t\)</span> is multiplied by this noise value. This
+jitters the sample locations along the ray per-pixel, converting
+structural banding into fine, high-frequency noise.</li>
+<li><strong>Temporal Filtering or Blur:</strong> The resulting noise is
+easily resolved using a temporal anti-aliasing (TAA) pass or an
+edge-aware bilateral blur before compositing the volumetric light over
+the final scene color buffer.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

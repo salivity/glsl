@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding GLSL frexp Function Behavior - glsl</title>
+    <meta name="description" content="This article provides a comprehensive overview of how the frexp built-in function operates in the OpenGL Shading Language (GLSL). It explains the mathematical model used to split floating-point numbers into a normalized significand (mantissa) and an inte">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-glsl-frexp-function-behavior">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding GLSL frexp Function Behavior - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-glsl-frexp-function-behavior" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a comprehensive overview of how the frexp built-in function operates in the OpenGL Shading Language (GLSL). It explains the mathematical model used to split floating-point numbers into a normalized significand (mantissa) and an inte" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-glsl-frexp-function-behavior">Understanding GLSL
+frexp Function Behavior</h1>
+<p>This article provides a comprehensive overview of how the
+<code>frexp</code> built-in function operates in the OpenGL Shading
+Language (GLSL). It explains the mathematical model used to split
+floating-point numbers into a normalized significand (mantissa) and an
+integral exponent of two, details the function signatures and argument
+types, covers edge cases such as zero and non-finite inputs, and
+illustrates common use cases in shader programming.</p>
+<h2 id="function-overview-and-signature">Function Overview and
+Signature</h2>
+<p>The <code>frexp</code> function (short for <em>fraction and
+exponent</em>) decomposes a floating-point number <span
+class="math inline">\(x\)</span> into a normalized fraction <span
+class="math inline">\(m\)</span> and an integral power of two <span
+class="math inline">\(e\)</span>, satisfying the relationship:</p>
+<p><span class="math display">\[x = m \times 2^e\]</span></p>
+<p>In GLSL, <code>frexp</code> is declared as an overloaded built-in
+function that operates component-wise on scalar and vector
+floating-point types:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>genType <span class="bu">frexp</span><span class="op">(</span>genType x<span class="op">,</span> <span class="dt">out</span> genIType <span class="bu">exp</span><span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>genDType <span class="bu">frexp</span><span class="op">(</span>genDType x<span class="op">,</span> <span class="dt">out</span> genIType <span class="bu">exp</span><span class="op">);</span></span></code></pre></div>
+<ul>
+<li><strong><code>x</code></strong>: The input value, which can be a
+<code>float</code>, <code>vec2</code>, <code>vec3</code>,
+<code>vec4</code>, or their double-precision variants
+(<code>double</code>, <code>dvec2</code>, etc.).</li>
+<li><strong><code>exp</code></strong>: An output parameter
+(<code>out</code>) holding the computed signed integer exponent. Its
+type matches the component count of <code>x</code> (e.g.,
+<code>int</code>, <code>ivec2</code>, <code>ivec3</code>, or
+<code>ivec4</code>).</li>
+<li><strong>Return Value</strong>: The normalized significand <span
+class="math inline">\(m\)</span>, returned with the same type as
+<code>x</code>.</li>
+</ul>
+<h2 id="mathematical-rules-and-normalization">Mathematical Rules and
+Normalization</h2>
+<p>When <span class="math inline">\(x\)</span> is non-zero,
+<code>frexp</code> isolates the floating-point components based on the
+IEEE 754 standard representation:</p>
+<ol type="1">
+<li><strong>Significand Range</strong>: The returned significand <span
+class="math inline">\(m\)</span> retains the original sign of <span
+class="math inline">\(x\)</span> and falls strictly within the half-open
+interval: <span class="math display">\[0.5 \le |m| &lt;
+1.0\]</span></li>
+<li><strong>Exponent Calculation</strong>: The integer written to the
+<code>exp</code> parameter is chosen such that multiplying <span
+class="math inline">\(m\)</span> by <span
+class="math inline">\(2^{exp}\)</span> exactly reconstructs <span
+class="math inline">\(x\)</span>.</li>
+</ol>
+<p>For example, given an input of <span class="math inline">\(x =
+12.0\)</span>:</p>
+<ul>
+<li>The decomposition is <span class="math inline">\(12.0 = 0.75 \times
+2^4\)</span>.</li>
+<li>The function writes <code>4</code> to <code>exp</code> and returns
+<code>0.75</code>.</li>
+</ul>
+<p>For negative values, such as <span class="math inline">\(x =
+-0.5\)</span>:</p>
+<ul>
+<li>The decomposition is <span class="math inline">\(-0.5 = -0.5 \times
+2^0\)</span>.</li>
+<li>The function writes <code>0</code> to <code>exp</code> and returns
+<code>-0.5</code>.</li>
+</ul>
+<h2 id="edge-cases-and-special-inputs">Edge Cases and Special
+Inputs</h2>
+<p>The GLSL specification defines specific handling for zero and
+non-standard floating-point values:</p>
+<ul>
+<li><strong>Zero (<code>0.0</code> or <code>-0.0</code>)</strong>: If
+<span class="math inline">\(x = 0.0\)</span>, the function returns
+<code>0.0</code> and writes <code>0</code> to <code>exp</code>.</li>
+<li><strong>Infinity and NaN</strong>: If <span
+class="math inline">\(x\)</span> is positive infinity, negative
+infinity, or NaN (Not-a-Number), the values returned and written to
+<code>exp</code> are undefined according to core GLSL specifications.
+Shaders should sanitize or guard against non-finite inputs before
+calling <code>frexp</code>.</li>
+<li><strong>Subnormal (Denormalized) Numbers</strong>: Hardware
+implementations that flush denormals to zero will treat very small
+subnormal floats as zero, yielding a significand and exponent of
+<code>0</code>. On hardware supporting full IEEE 754 subnormals,
+<code>frexp</code> normalizes the value into the range <span
+class="math inline">\([0.5, 1.0)\)</span> and adjusts the exponent
+accordingly.</li>
+</ul>
+<h2 id="code-example">Code Example</h2>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> value <span class="op">=</span> <span class="fl">24.0</span><span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> exponent<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// frexp stores the exponent in the second argument and returns the mantissa</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> mantissa <span class="op">=</span> <span class="bu">frexp</span><span class="op">(</span>value<span class="op">,</span> exponent<span class="op">);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// mantissa == 0.75</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// exponent == 5</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Reconstruction: 0.75 * pow(2.0, 5.0) == 24.0</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> reconstructed <span class="op">=</span> <span class="bu">ldexp</span><span class="op">(</span>mantissa<span class="op">,</span> exponent<span class="op">);</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The complementary built-in function to <code>frexp</code> is
+<code>ldexp(x, exp)</code>, which computes <span class="math inline">\(x
+\times 2^{exp}\)</span> to reconstruct the original value.</p>
+<h2 id="common-use-cases">Common Use Cases</h2>
+<ul>
+<li><strong>Custom Float Packing</strong>: Compressing
+high-dynamic-range (HDR) colors or custom floating-point channels into
+compact integer attributes or lower-bitwidth textures.</li>
+<li><strong>Precision Emulation</strong>: Emulating double-precision
+operations or high-precision math on platforms restricted to 32-bit
+floats.</li>
+<li><strong>Numerical Normalization</strong>: Range reduction in custom
+transcendental functions (like trigonometric, exponential, or
+logarithmic evaluations) to avoid floating-point underflow or precision
+loss.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

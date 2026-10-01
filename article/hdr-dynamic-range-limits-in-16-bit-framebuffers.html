@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HDR Dynamic Range Limits in 16-Bit Framebuffers - glsl</title>
+    <meta name="description" content="High dynamic range (HDR) rendering in GLSL pipelines frequently relies on 16-bit floating-point framebuffers (commonly formatted as GLRGBA16F) to preserve light intensities beyond the standard [0.0, 1.0] range. While 16-bit floats offer a substantial dyn">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/hdr-dynamic-range-limits-in-16-bit-framebuffers">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="HDR Dynamic Range Limits in 16-Bit Framebuffers - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/hdr-dynamic-range-limits-in-16-bit-framebuffers" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="High dynamic range (HDR) rendering in GLSL pipelines frequently relies on 16-bit floating-point framebuffers (commonly formatted as GLRGBA16F) to preserve light intensities beyond the standard [0.0, 1.0] range. While 16-bit floats offer a substantial dyn" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="hdr-dynamic-range-limits-in-16-bit-framebuffers">HDR Dynamic
+Range Limits in 16-Bit Framebuffers</h1>
+<p>High dynamic range (HDR) rendering in GLSL pipelines frequently
+relies on 16-bit floating-point framebuffers (commonly formatted as
+<code>GL_RGBA16F</code>) to preserve light intensities beyond the
+standard [0.0, 1.0] range. While 16-bit floats offer a substantial
+dynamic range compared to standard 8-bit integer buffers, their physical
+bit allocation fundamentally caps peak luminance and introduces
+precision degradation at both extremes of the lighting spectrum. This
+article explains how the technical constraints of half-precision
+floating-point formats limit HDR color reproduction in OpenGL and
+GLSL.</p>
+<h3 id="the-half-precision-fp16-architecture">The Half-Precision (FP16)
+Architecture</h3>
+<p>The standard 16-bit float used in GPUs adheres to the IEEE 754-2008
+binary16 specification. The 16 bits are partitioned into:</p>
+<ul>
+<li><strong>1 sign bit:</strong> Determines positive or negative values
+(mostly unused in pure color channels, which remain positive).</li>
+<li><strong>5 exponent bits:</strong> Determines the magnitude using a
+bias of 15.</li>
+<li><strong>10 mantissa bits:</strong> Represents the significand
+(providing 11 bits of precision with the implicit leading 1 for
+normalized values).</li>
+</ul>
+<p>This structural layout directly dictates the maximum boundaries and
+granular resolution of any color data written from a fragment shader to
+the framebuffer.</p>
+<h3 id="hard-maximum-luminance-and-clipping">Hard Maximum Luminance and
+Clipping</h3>
+<p>The 5-bit exponent limits the maximum finite value an FP16
+framebuffer can store to exactly <strong>65,504.0</strong>.</p>
+<p>In physically based rendering (PBR), shaders often model realistic
+luminance values measured in nits or lux. For example, direct sunlight
+can exceed 100,000 lux. When lighting calculations in GLSL produce
+values exceeding 65,504.0:</p>
+<ol type="1">
+<li>The value overflows to positive infinity (<code>+inf</code>).</li>
+<li>During subsequent sampling or filtering (such as generating mipmaps
+for bloom or applying blur passes), calculations involving
+<code>inf</code> result in <code>NaN</code> (Not a Number) errors or
+blocky white/black artifacting.</li>
+<li>Even if values are clamped manually to 65,504.0 to prevent
+<code>inf</code>, the extreme dynamic highlights are permanently
+flattened before post-processing and tone mapping can interpret the
+data.</li>
+</ol>
+<h3 id="quantization-and-banding-in-bright-regions">Quantization and
+Banding in Bright Regions</h3>
+<p>A floating-point format provides variable precision across its range:
+precision is high near zero and decreases as values increase. The step
+size between representable numbers is determined by the Unit in the Last
+Place (ULP).</p>
+<ul>
+<li>Between <strong>1.0 and 2.0</strong>, the step size is approximately
+<strong>0.000977</strong> (roughly 10 bits of precision).</li>
+<li>Between <strong>256.0 and 512.0</strong>, the step size increases to
+<strong>0.25</strong>.</li>
+<li>Between <strong>32,768.0 and 65,536.0</strong>, the step size
+expands to <strong>32.0</strong>.</li>
+</ul>
+<p>In HDR scenes, large color values represent intense highlights,
+emissive surfaces, and bright atmospheric scattering. When colors in
+these high ranges are modified by secondary passes or adjusted downward
+during camera exposure compensation, the large step size becomes visible
+as severe banding and quantization artifacts. Subtle color gradations
+within bright highlights are discarded by the low mantissa
+precision.</p>
+<h3 id="precision-loss-in-near-zero-shadows">Precision Loss in Near-Zero
+Shadows</h3>
+<p>The smallest positive normalized FP16 value is approximately <span
+class="math inline">\(6.10 \times 10^{-5}\)</span>. While subnormal
+numbers can represent values down to approximately <span
+class="math inline">\(5.96 \times 10^{-8}\)</span>, they do so with a
+reduced number of mantissa bits.</p>
+<p>Furthermore, many modern GPU architectures enforce
+<strong>Flush-to-Zero (FTZ)</strong> mode on 16-bit floating-point
+registers to maintain high throughput. When FTZ is active:</p>
+<ul>
+<li>Any calculation producing a subnormal color value is immediately
+rounded down to <code>0.0</code>.</li>
+<li>Subtle ambient light, deep shadow details, and low-contrast dark
+gradients are crushed into solid black.</li>
+<li>Logarithmic operations in tone mappers fail to reconstruct shadow
+details that were clipped at write-time.</li>
+</ul>
+<h3 id="negative-impact-on-multi-pass-pipelines">Negative Impact on
+Multi-Pass Pipelines</h3>
+<p>Modern rendering pipelines rely on intermediate 16-bit framebuffers
+for effects such as deferred G-buffers, screen-space reflections (SSR),
+auto-exposure calculation, and bloom downsampling.</p>
+<p>When intermediate HDR colors are constrained by FP16 storage:</p>
+<ul>
+<li><strong>Energy Inconsistency:</strong> Blending and additive
+operations (such as multi-light accumulation) lose energy conservation
+if values push into regions with large ULP gaps, where fractional
+contributions fail to alter the stored value.</li>
+<li><strong>Tone Mapping Inefficiencies:</strong> Tone-mapping operators
+(such as ACES, Reinhard, or AgX) depend on a smooth, wide dynamic range
+to compress colors accurately into an LDR output space. Truncation or
+quantization in the FP16 framebuffer occurs <em>before</em> tone
+mapping, permanently baking dynamic range compression errors into the
+final image.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

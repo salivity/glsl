@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Implementing AgX Tone Mapping in GLSL - glsl</title>
+    <meta name="description" content="AgX is a modern image formation architecture designed to replace legacy operators like Reinhard and ACES by resolving dynamic range compression without hue shifting or luminance clipping artifacts. This article details how the AgX color transform is eval">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/implementing-ag-x-tone-mapping-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Implementing AgX Tone Mapping in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/implementing-ag-x-tone-mapping-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="AgX is a modern image formation architecture designed to replace legacy operators like Reinhard and ACES by resolving dynamic range compression without hue shifting or luminance clipping artifacts. This article details how the AgX color transform is eval" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="implementing-agx-tone-mapping-in-glsl">Implementing AgX Tone
+Mapping in GLSL</h1>
+<p>AgX is a modern image formation architecture designed to replace
+legacy operators like Reinhard and ACES by resolving dynamic range
+compression without hue shifting or luminance clipping artifacts. This
+article details how the AgX color transform is evaluated inside a GLSL
+fragment shader, breaking down the pipeline into input gamut inset,
+log-domain dynamic range mapping, sigmoidal contrast application, and
+the final color reconstruction step.</p>
+<h3 id="the-agx-transformation-pipeline">The AgX Transformation
+Pipeline</h3>
+<p>Unlike per-channel operators that alter chromaticity as values
+approach peak luminance, AgX treats dynamic range compression as a
+unified color transformation. Evaluating AgX in GLSL involves four
+sequential stages:</p>
+<ol type="1">
+<li><strong>Gamut Inset Matrix:</strong> Compresses color purity into a
+safe working gamut to avoid out-of-gamut values in highlights.</li>
+<li><strong>Log2 Domain Mapping:</strong> Encodes scene-linear dynamic
+range into normalized log space across a defined exposure range.</li>
+<li><strong>Sigmoidal Contrast Curve:</strong> Applies an S-shaped curve
+to smoothly compress highlights and shadows while maintaining midtone
+fidelity.</li>
+<li><strong>Gamut Outset Matrix:</strong> Restores the compressed color
+volume back to the target color space (such as linear sRGB).</li>
+</ol>
+<h3 id="1-the-inset-matrix">1. The Inset Matrix</h3>
+<p>The input color must be in linear sRGB / Rec.709. The inset matrix
+mixes color channels to desaturate highlights naturally, preventing the
+"ratcheting" hue skews common in per-channel curves:</p>
+<p><span class="math display">\[\begin{bmatrix} R&#39; \\ G&#39; \\
+B&#39; \end{bmatrix} = \mathbf{M}_{\text{inset}} \begin{bmatrix} R \\ G
+\\ B \end{bmatrix}\]</span></p>
+<p>In GLSL, this is computed using a <span
+class="math inline">\(3\times3\)</span> matrix multiplication:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">mat3</span> AgXInsetMatrix <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="fl">0.842479062253094</span><span class="op">,</span> <span class="fl">0.0423282422610123</span><span class="op">,</span> <span class="fl">0.0423756549057051</span><span class="op">,</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="fl">0.0784335996993431</span><span class="op">,</span> <span class="fl">0.878468636469772</span><span class="op">,</span>  <span class="fl">0.0784336121120208</span><span class="op">,</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="fl">0.0792237451477746</span><span class="op">,</span> <span class="fl">0.0791661274605434</span><span class="op">,</span> <span class="fl">0.879142973798617</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> insetColor <span class="op">=</span> AgXInsetMatrix <span class="op">*</span> linearRGB<span class="op">;</span></span></code></pre></div>
+<h3 id="2-log2-encoding-and-dynamic-range-compression">2. Log2 Encoding
+and Dynamic Range Compression</h3>
+<p>AgX defines dynamic range in terms of Exposure Values (EV). The
+standard default covers approximately <span
+class="math inline">\(16.5\)</span> stops, ranging from <span
+class="math inline">\(-10.0\)</span> EV below middle gray to <span
+class="math inline">\(+6.5\)</span> EV above it.</p>
+<p>To evaluate this in GLSL, inputs must be clamped to prevent taking
+the logarithm of non-positive numbers, followed by normalization between
+<span class="math inline">\(0.0\)</span> and <span
+class="math inline">\(1.0\)</span>:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> MIN_EV <span class="op">=</span> <span class="op">-</span><span class="fl">10.0</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> MAX_EV <span class="op">=</span> <span class="fl">6.5</span><span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> safeColor <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>insetColor<span class="op">,</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1e-6</span><span class="op">));</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> logColor <span class="op">=</span> <span class="bu">clamp</span><span class="op">((</span><span class="bu">log2</span><span class="op">(</span>safeColor<span class="op">)</span> <span class="op">-</span> MIN_EV<span class="op">)</span> <span class="op">/</span> <span class="op">(</span>MAX_EV <span class="op">-</span> MIN_EV<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span></code></pre></div>
+<h3 id="3-sigmoid-contrast-application">3. Sigmoid Contrast
+Application</h3>
+<p>Once in normalized log space, a sigmoidal tone reproduction curve
+compresses the highlights and rolls off the shadows. While the full
+OpenColorIO (OCIO) implementation utilizes a 1D LUT or polynomial
+splines, the standard curve can be approximated accurately in GLSL using
+a 6th-order polynomial:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">agxDefaultContrastCurve</span><span class="op">(</span><span class="dt">vec3</span> x<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> x2 <span class="op">=</span> x <span class="op">*</span> x<span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> x4 <span class="op">=</span> x2 <span class="op">*</span> x2<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Fitted polynomial approximation for standard AgX punch</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">+</span> <span class="fl">15.5854</span>  <span class="op">*</span> x4 <span class="op">*</span> x2</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>           <span class="op">-</span> <span class="fl">31.8140</span>  <span class="op">*</span> x4 <span class="op">*</span> x</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>           <span class="op">+</span> <span class="fl">22.4913</span>  <span class="op">*</span> x4</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>           <span class="op">-</span> <span class="fl">5.8045</span>   <span class="op">*</span> x2 <span class="op">*</span> x</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>           <span class="op">+</span> <span class="fl">0.6180</span>   <span class="op">*</span> x2</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>           <span class="op">+</span> <span class="fl">0.0180</span>   <span class="op">*</span> x<span class="op">;</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Applying this function to <code>logColor</code> shapes the tonal
+response across the dynamic range.</p>
+<h3 id="4-the-outset-matrix-and-display-encoding">4. The Outset Matrix
+and Display Encoding</h3>
+<p>The outset matrix reverses the initial channel mixing while
+projecting the compressed range into the display volume:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">mat3</span> AgXOutsetMatrix <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="fl">1.19687902425892</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.0528968517599569</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.0529716355084728</span><span class="op">,</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">-</span><span class="fl">0.0980208811401368</span><span class="op">,</span> <span class="fl">1.15190312990417</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.0980434501171241</span><span class="op">,</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">-</span><span class="fl">0.0990297440797205</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.0989611768448433</span><span class="op">,</span> <span class="fl">1.15107367264116</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> compressedLinear <span class="op">=</span> AgXOutsetMatrix <span class="op">*</span> <span class="fu">agxDefaultContrastCurve</span><span class="op">(</span>logColor<span class="op">);</span></span></code></pre></div>
+<p>Because this returns linear color values intended for display output,
+the result must be clamped and encoded using the standard sRGB transfer
+function (gamma correction):</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> finalColor <span class="op">=</span> <span class="bu">pow</span><span class="op">(</span><span class="bu">clamp</span><span class="op">(</span>compressedLinear<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">),</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">/</span> <span class="fl">2.2</span><span class="op">));</span></span></code></pre></div>
+<h3 id="complete-glsl-implementation">Complete GLSL Implementation</h3>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">agxToneMapping</span><span class="op">(</span><span class="dt">vec3</span> linearRGB<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">mat3</span> AgXInset <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>        <span class="fl">0.842479062253094</span><span class="op">,</span> <span class="fl">0.0423282422610123</span><span class="op">,</span> <span class="fl">0.0423756549057051</span><span class="op">,</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>        <span class="fl">0.0784335996993431</span><span class="op">,</span> <span class="fl">0.878468636469772</span><span class="op">,</span>  <span class="fl">0.0784336121120208</span><span class="op">,</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>        <span class="fl">0.0792237451477746</span><span class="op">,</span> <span class="fl">0.0791661274605434</span><span class="op">,</span> <span class="fl">0.879142973798617</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">mat3</span> AgXOutset <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>        <span class="fl">1.19687902425892</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.0528968517599569</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.0529716355084728</span><span class="op">,</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span><span class="fl">0.0980208811401368</span><span class="op">,</span> <span class="fl">1.15190312990417</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.0980434501171241</span><span class="op">,</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span><span class="fl">0.0990297440797205</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.0989611768448433</span><span class="op">,</span> <span class="fl">1.15107367264116</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> MIN_EV <span class="op">=</span> <span class="op">-</span><span class="fl">10.0</span><span class="op">;</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> MAX_EV <span class="op">=</span> <span class="fl">6.5</span><span class="op">;</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 1. Inset matrix</span></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> val <span class="op">=</span> AgXInset <span class="op">*</span> linearRGB<span class="op">;</span></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 2. Dynamic range log2 compression</span></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>    val <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>val<span class="op">,</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1e-6</span><span class="op">));</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>    val <span class="op">=</span> <span class="bu">clamp</span><span class="op">((</span><span class="bu">log2</span><span class="op">(</span>val<span class="op">)</span> <span class="op">-</span> MIN_EV<span class="op">)</span> <span class="op">/</span> <span class="op">(</span>MAX_EV <span class="op">-</span> MIN_EV<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 3. Sigmoidal contrast curve</span></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> val2 <span class="op">=</span> val <span class="op">*</span> val<span class="op">;</span></span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> val4 <span class="op">=</span> val2 <span class="op">*</span> val2<span class="op">;</span></span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>    val <span class="op">=</span> <span class="fl">15.5854</span> <span class="op">*</span> val4 <span class="op">*</span> val2</span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span> <span class="fl">31.8140</span> <span class="op">*</span> val4 <span class="op">*</span> val</span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>        <span class="op">+</span> <span class="fl">22.4913</span> <span class="op">*</span> val4</span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span> <span class="fl">5.8045</span>  <span class="op">*</span> val2 <span class="op">*</span> val</span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>        <span class="op">+</span> <span class="fl">0.6180</span>  <span class="op">*</span> val2</span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>        <span class="op">+</span> <span class="fl">0.0180</span>  <span class="op">*</span> val<span class="op">;</span></span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 4. Outset matrix</span></span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>    val <span class="op">=</span> AgXOutset <span class="op">*</span> val<span class="op">;</span></span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">clamp</span><span class="op">(</span>val<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

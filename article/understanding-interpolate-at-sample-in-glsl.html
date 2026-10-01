@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding interpolateAtSample in GLSL - glsl</title>
+    <meta name="description" content="This article provides an overview of the interpolateAtSample function in the OpenGL Shading Language (GLSL), detailing its role in multisample anti-aliasing (MSAA) pipelines. Readers will learn how this built-in function enables precise sub-pixel attribu">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-interpolate-at-sample-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding interpolateAtSample in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-interpolate-at-sample-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of the interpolateAtSample function in the OpenGL Shading Language (GLSL), detailing its role in multisample anti-aliasing (MSAA) pipelines. Readers will learn how this built-in function enables precise sub-pixel attribu" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="understanding-interpolateatsample-in-glsl">Understanding
+interpolateAtSample in GLSL</h1>
+<p>This article provides an overview of the
+<code>interpolateAtSample</code> function in the OpenGL Shading Language
+(GLSL), detailing its role in multisample anti-aliasing (MSAA)
+pipelines. Readers will learn how this built-in function enables precise
+sub-pixel attribute sampling, how it differs from default interpolation
+and full per-sample shading, and how to effectively utilize it to
+optimize custom anti-aliasing and deferred rendering algorithms.</p>
+<h2 id="what-is-interpolateatsample">What is interpolateAtSample?</h2>
+<p>Introduced in GLSL 4.00 (and via the <code>GL_ARB_gpu_shader5</code>
+extension), <code>interpolateAtSample</code> is an explicit
+interpolation function. It allows a fragment shader to evaluate any
+passed interpolant (a varying input from the vertex or geometry stage)
+at the exact sub-pixel location of a specified MSAA sample, rather than
+at the default pixel center or centroid.</p>
+<p>Its syntax is defined as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>genType <span class="bu">interpolateAtSample</span><span class="op">(</span>genType interpolant<span class="op">,</span> <span class="dt">int</span> <span class="dt">sample</span><span class="op">);</span></span></code></pre></div>
+<p>The <code>sample</code> parameter represents the zero-based index of
+the target sample within the pixel, ranging from <code>0</code> to
+<code>gl_NumSamples - 1</code>.</p>
+<h2 id="default-interpolation-vs-explicit-sample-interpolation">Default
+Interpolation vs. Explicit Sample Interpolation</h2>
+<p>In standard hardware-accelerated rasterization with MSAA:</p>
+<ul>
+<li><strong>Pixel Center (Default):</strong> The fragment shader
+evaluates inputs at the exact center of the pixel
+<code>(x + 0.5, y + 0.5)</code>, regardless of whether the center is
+covered by the primitive.</li>
+<li><strong>Centroid Interpolation:</strong> When using the
+<code>centroid in</code> qualifier, the GPU evaluates the input at a
+position guaranteed to lie inside the primitive, choosing one of the
+covered sample locations if the center is uncovered.</li>
+<li><strong>Per-Sample Shading:</strong> Using the
+<code>sample in</code> qualifier or reading <code>gl_SampleID</code>
+forces the GPU to execute the entire fragment shader once per covered
+sample, which can severely impact performance.</li>
+</ul>
+<p><code>interpolateAtSample</code> bridges the gap between running
+per-pixel and per-sample shading. The fragment shader can execute once
+per pixel, but conditionally fetch values evaluated at discrete
+sub-pixel sample points when needed.</p>
+<h2 id="the-role-of-interpolateatsample-in-fragment-shading">The Role of
+interpolateAtSample in Fragment Shading</h2>
+<h3 id="selective-per-sample-evaluation">Selective Per-Sample
+Evaluation</h3>
+<p>Running full per-sample shading multiplies the cost of expensive
+operations like lighting, texture fetches, and shadow calculations by
+the number of MSAA samples (e.g., 4x or 8x).
+<code>interpolateAtSample</code> enables selective per-sample
+computation. A shader can perform heavy lighting calculations once per
+pixel, but evaluate high-frequency geometric attributes—such as surface
+normals, texture coordinates, or depth—at specific sub-pixel locations
+only along geometry edges.</p>
+<h3 id="custom-msaa-resolves">Custom MSAA Resolves</h3>
+<p>Hardware-driven MSAA resolve typically performs a box filter (simple
+average) on sample color values. Modern rendering techniques often
+require custom resolve passes, such as tone mapping before downsampling,
+depth edge detection, or custom reconstruction filters.
+<code>interpolateAtSample</code> enables shaders to reconstruct precise
+attribute states for each sub-pixel sample during these resolve
+stages.</p>
+<h3 id="deferred-shading-with-msaa">Deferred Shading with MSAA</h3>
+<p>Deferred rendering traditionally conflicts with MSAA because
+attributes are stored in separate G-Buffer targets. By combining
+multisampled textures (<code>sampler2DMS</code>) with
+<code>interpolateAtSample</code>, engines can identify edge pixels
+(pixels where sample primitives differ) and evaluate G-Buffer parameters
+at exact sample locations without uniform overshading across flat
+surface areas.</p>
+<h2 id="practical-example">Practical Example</h2>
+<p>The following GLSL snippet illustrates how to compute normal variance
+across MSAA samples to detect geometric discontinuities within a single
+pixel execution:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec3</span> vNormal<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> fragColor<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Standard per-pixel normal</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> centerNormal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>vNormal<span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Evaluate normal at sample 0 and sample 1</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> normalSample0 <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="bu">interpolateAtSample</span><span class="op">(</span>vNormal<span class="op">,</span> <span class="dv">0</span><span class="op">));</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> normalSample1 <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="bu">interpolateAtSample</span><span class="op">(</span>vNormal<span class="op">,</span> <span class="dv">1</span><span class="op">));</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Determine variance across sub-pixel locations</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> edgeFactor <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>normalSample0<span class="op">,</span> normalSample1<span class="op">);</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>edgeFactor <span class="op">&lt;</span> <span class="fl">0.95</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        <span class="co">// High variation: handle as geometric edge</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Uniform surface: execute standard lighting</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>        fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>centerNormal <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="performance-and-implementation-considerations">Performance and
+Implementation Considerations</h2>
+<ol type="1">
+<li><strong>Hardware Support:</strong> The underlying GPU hardware must
+support indexed attribute interpolation. Querying invalid sample indices
+(e.g., negative or <span class="math inline">\(\ge
+\text{gl\_NumSamples}\)</span>) yields undefined behavior.</li>
+<li><strong>Derivative Calculations:</strong> Calling implicit
+derivative functions (<code>dFdx</code>, <code>dFdy</code>,
+<code>fwidth</code>) on the results of <code>interpolateAtSample</code>
+can produce undefined or non-uniform results across vendors, as
+derivatives rely on regular <span class="math inline">\(2 \times
+2\)</span> pixel-quad spacing.</li>
+<li><strong>Register Pressure:</strong> Requesting explicit evaluations
+increases register pressure because the GPU must retain sample position
+offsets and plane equation coefficients for the requested interpolants
+throughout the execution of the fragment shader.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

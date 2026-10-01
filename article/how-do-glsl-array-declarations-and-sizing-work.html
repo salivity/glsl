@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Do GLSL Array Declarations and Sizing Work? - glsl</title>
+    <meta name="description" content="Arrays in the OpenGL Shading Language (GLSL) allow developers to store ordered collections of data of the same type, subject to strict declaration syntax, memory layout rules, and compile-time or runtime sizing constraints. Understanding these rules ensu">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-do-glsl-array-declarations-and-sizing-work">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Do GLSL Array Declarations and Sizing Work? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-do-glsl-array-declarations-and-sizing-work" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Arrays in the OpenGL Shading Language (GLSL) allow developers to store ordered collections of data of the same type, subject to strict declaration syntax, memory layout rules, and compile-time or runtime sizing constraints. Understanding these rules ensu" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-do-glsl-array-declarations-and-sizing-work">How Do GLSL
+Array Declarations and Sizing Work?</h1>
+<p>Arrays in the OpenGL Shading Language (GLSL) allow developers to
+store ordered collections of data of the same type, subject to strict
+declaration syntax, memory layout rules, and compile-time or runtime
+sizing constraints. Understanding these rules ensures compatibility
+across different shader stages, hardware architectures, and GLSL
+language versions.</p>
+<h2 id="array-declaration-syntax">Array Declaration Syntax</h2>
+<p>GLSL supports two primary syntaxes for declaring arrays, both of
+which are valid in modern versions of the language.</p>
+<ol type="1">
+<li><strong>C-Style Syntax</strong>: The brackets follow the variable
+name.</li>
+</ol>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> values<span class="op">[</span><span class="dv">4</span><span class="op">];</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> positions<span class="op">[</span><span class="dv">10</span><span class="op">];</span></span></code></pre></div>
+<ol start="2" type="1">
+<li><strong>Type-Style Syntax</strong>: The brackets follow the type
+specifier.</li>
+</ol>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span><span class="op">[</span><span class="dv">4</span><span class="op">]</span> values<span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span><span class="op">[</span><span class="dv">10</span><span class="op">]</span> positions<span class="op">;</span></span></code></pre></div>
+<p>GLSL also supports multidimensional arrays (arrays of arrays). They
+can be declared by appending dimension specifiers:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">mat4</span> transforms<span class="op">[</span><span class="dv">2</span><span class="op">][</span><span class="dv">4</span><span class="op">];</span></span></code></pre></div>
+<h2 id="sizing-rules-and-compile-time-constants">Sizing Rules and
+Compile-Time Constants</h2>
+<p>In standard variable and uniform declarations, array sizes must be
+integral constant expressions evaluated at compile time.</p>
+<ul>
+<li><strong>Explicit Sizing with Constant Expressions</strong>: Array
+dimensions cannot depend on dynamic variables, shader inputs, or
+non-constant runtime calculations. They must resolve to an integer
+greater than zero using literals, <code>const</code> variables, or
+constant operations.</li>
+</ul>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> SIZE <span class="op">=</span> <span class="dv">8</span><span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> data<span class="op">[</span>SIZE <span class="op">*</span> <span class="dv">2</span><span class="op">];</span> <span class="co">// Valid: evaluated at compile time</span></span></code></pre></div>
+<ul>
+<li><strong>Implicit Sizing via Initializers</strong>: An array can be
+declared without an explicit size if it is immediately initialized using
+an array constructor. The compiler infers the dimension from the number
+of arguments provided.</li>
+</ul>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> numbers<span class="op">[]</span> <span class="op">=</span> <span class="dt">int</span><span class="op">[](</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">,</span> <span class="dv">5</span><span class="op">);</span> <span class="co">// Inferred size of 5</span></span></code></pre></div>
+<ul>
+<li><strong>Declaration Without Initial Size</strong>: An unsized array
+can be declared globally and later sized either by a subsequent
+redeclaration with an explicit size or by indexing with a constant
+integral expression before compilation finishes, provided this feature
+is supported by the target GLSL version.</li>
+</ul>
+<h2 id="unsized-arrays-in-shader-storage-buffer-objects-ssbos">Unsized
+Arrays in Shader Storage Buffer Objects (SSBOs)</h2>
+<p>A critical exception to the fixed compile-time size rule applies to
+Shader Storage Buffer Objects (SSBOs).</p>
+<ul>
+<li><strong>Runtime-Sized Arrays</strong>: The last member of a shader
+storage block can be declared as an unsized array
+(<code>type name[];</code>).</li>
+<li><strong>Runtime Determination</strong>: The actual length of this
+buffer-backed array is determined by the size of the OpenGL buffer bound
+at runtime.</li>
+<li><strong>Length Query</strong>: Shaders can query this runtime size
+using the built-in <code>.length()</code> method.</li>
+</ul>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> StorageBlock <span class="op">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> projection<span class="op">;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> dynamicData<span class="op">[];</span> <span class="co">// Valid only as the final member of an SSBO</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<h2 id="array-constructors-and-initialization">Array Constructors and
+Initialization</h2>
+<p>Arrays can be initialized using type-specific constructors. The
+constructor name consists of the element type followed by brackets
+indicating the array size.</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> offsets<span class="op">[</span><span class="dv">3</span><span class="op">]</span> <span class="op">=</span> <span class="dt">vec2</span><span class="op">[</span><span class="dv">3</span><span class="op">](</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">),</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">),</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<p>The number and types of arguments in the constructor must match the
+declared dimension and base type exactly.</p>
+<h2 id="indexing-constraints">Indexing Constraints</h2>
+<p>How arrays are accessed depends on the storage qualifier and shader
+stage:</p>
+<ul>
+<li><strong>Compile-Time Constant Expressions</strong>: Required when
+indexing into arrays where the hardware or GLSL specification requires
+static routing (such as sampler arrays in older GLSL profiles).</li>
+<li><strong>Dynamically Uniform Expressions</strong>: Required when
+indexing certain resource arrays (such as uniform buffers or texture
+samplers in modern GLSL) across all invocations within an execution
+group.</li>
+<li><strong>General Dynamic Expressions</strong>: Standard local
+variables, global variables, and SSBO arrays permit general integer
+expression indexing computed dynamically per invocation.</li>
+</ul>
+<h2 id="the-length-method">The <code>.length()</code> Method</h2>
+<p>GLSL arrays provide an intrinsic <code>.length()</code> method that
+returns an <code>int</code> representing the total number of
+elements.</p>
+<ul>
+<li>For fixed-size arrays, <code>.length()</code> evaluates to a
+compile-time constant expression.</li>
+<li>For unsized arrays in SSBOs, <code>.length()</code> executes at
+runtime to calculate capacity based on the bound buffer range.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

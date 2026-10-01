@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculating SSAO with Depth Buffers in GLSL - glsl</title>
+    <meta name="description" content="Screen-Space Ambient Occlusion (SSAO) approximates the soft contact shadows that occur when geometry blocks ambient light. In real-time rendering, this is calculated entirely in screen space by taking a depth buffer, reconstructing 3D view-space coordina">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/calculating-ssao-with-depth-buffers-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Calculating SSAO with Depth Buffers in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/calculating-ssao-with-depth-buffers-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Screen-Space Ambient Occlusion (SSAO) approximates the soft contact shadows that occur when geometry blocks ambient light. In real-time rendering, this is calculated entirely in screen space by taking a depth buffer, reconstructing 3D view-space coordina" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="calculating-ssao-with-depth-buffers-in-glsl">Calculating SSAO
+with Depth Buffers in GLSL</h1>
+<p>Screen-Space Ambient Occlusion (SSAO) approximates the soft contact
+shadows that occur when geometry blocks ambient light. In real-time
+rendering, this is calculated entirely in screen space by taking a depth
+buffer, reconstructing 3D view-space coordinates, and casting sample
+points inside a normal-aligned hemisphere around each fragment. By
+transforming these samples back into screen space and comparing their
+depth against the depth buffer, an occlusion factor is calculated to
+simulate how exposed a surface point is to ambient lighting.</p>
+<h2 id="1-reconstructing-view-space-positions">1. Reconstructing
+View-Space Positions</h2>
+<p>SSAO relies heavily on geometric data stored in view space. To begin,
+retrieve the non-linear depth value from the depth buffer and
+reconstruct the fragment’s view-space position:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">getViewPos</span><span class="op">(</span><span class="dt">vec2</span> uv<span class="op">,</span> <span class="dt">mat4</span> invProj<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> depth <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>depthTexture<span class="op">,</span> uv<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> clipSpacePos <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>uv <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">,</span> depth <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> viewSpacePos <span class="op">=</span> invProj <span class="op">*</span> clipSpacePos<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> viewSpacePos<span class="op">.</span><span class="fu">xyz</span> <span class="op">/</span> viewSpacePos<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Surface normals must also be accessible, either by decoding them from
+a normal G-Buffer in view space or by deriving them geometrically using
+GLSL screen derivatives:
+<code>normalize(cross(dFdx(fragPos), dFdy(fragPos)))</code>.</p>
+<h2 id="2-generating-the-hemisphere-kernel-and-rotation-noise">2.
+Generating the Hemisphere Kernel and Rotation Noise</h2>
+<p>A sample kernel consists of multiple 3D vectors distributed within a
+hemisphere oriented along the Z-axis (<span class="math inline">\(z \ge
+0\)</span>). Samples are typically pushed closer to the origin using
+quadratic or cubic falloff to prioritize nearby occluders:</p>
+<ul>
+<li><strong>Kernel Generation (CPU):</strong> Random unit vectors are
+generated with <span class="math inline">\(z &gt; 0\)</span>, scaled by
+<span class="math inline">\(scale = \text{mix}(0.1, 1.0, (i /
+N)^2)\)</span>, and passed to the shader via an array uniform.</li>
+<li><strong>Random Rotation Texture (CPU/GPU):</strong> To disguise
+banding artifacts without requiring hundreds of samples, a small tiled
+texture (e.g., 4x4 pixels) filled with random vectors oriented around
+the Z-axis is used to rotate the kernel randomly per pixel.</li>
+</ul>
+<h2 id="3-constructing-the-tangent-to-view-space-matrix-tbn">3.
+Constructing the Tangent-to-View-Space Matrix (TBN)</h2>
+<p>In the fragment shader, use the normal vector and the random rotation
+vector to construct a Tangent-Bitangent-Normal (TBN) basis. This rotates
+the Z-up sample hemisphere so that its base aligns with the surface
+normal:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> noiseScale <span class="op">=</span> screenResolution <span class="op">/</span> <span class="fl">4.0</span><span class="op">;</span> <span class="co">// Tiling factor for 4x4 noise</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> randomVec <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>noiseTexture<span class="op">,</span> TexCoords <span class="op">*</span> noiseScale<span class="op">).</span><span class="fu">xyz</span><span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> tangent <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>randomVec <span class="op">-</span> normal <span class="op">*</span> <span class="bu">dot</span><span class="op">(</span>randomVec<span class="op">,</span> normal<span class="op">));</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> bitangent <span class="op">=</span> <span class="bu">cross</span><span class="op">(</span>normal<span class="op">,</span> tangent<span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">mat3</span> TBN <span class="op">=</span> <span class="dt">mat3</span><span class="op">(</span>tangent<span class="op">,</span> bitangent<span class="op">,</span> normal<span class="op">);</span></span></code></pre></div>
+<h2 id="4-sampling-and-depth-comparison">4. Sampling and Depth
+Comparison</h2>
+<p>For each sample in the kernel:</p>
+<ol type="1">
+<li>Rotate the sample vector using the TBN matrix and offset it by the
+sample radius.</li>
+<li>Add this offset to the current fragment position to calculate the
+view-space sample point.</li>
+<li>Project this sample point back to screen space using the projection
+matrix and perspective divide.</li>
+<li>Sample the scene depth buffer at this new UV coordinate.</li>
+<li>Apply a range check to prevent far-away geometry from creating false
+occlusion (halo artifacts).</li>
+</ol>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> samples<span class="op">[</span><span class="dv">64</span><span class="op">];</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> projection<span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> radius <span class="op">=</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> bias <span class="op">=</span> <span class="fl">0.025</span><span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> occlusion <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="kw">for</span><span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">64</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 1. Transform sample from tangent to view space</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> samplePos <span class="op">=</span> TBN <span class="op">*</span> samples<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    samplePos <span class="op">=</span> fragPos <span class="op">+</span> samplePos <span class="op">*</span> radius<span class="op">;</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 2. Project sample to screen space</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> <span class="dt">offset</span> <span class="op">=</span> projection <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>samplePos<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">offset</span><span class="op">.</span><span class="fu">xyz</span> <span class="op">/=</span> <span class="dt">offset</span><span class="op">.</span><span class="fu">w</span><span class="op">;</span>               <span class="co">// Perspective divide</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">offset</span><span class="op">.</span><span class="fu">xyz</span> <span class="op">=</span> <span class="dt">offset</span><span class="op">.</span><span class="fu">xyz</span> <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span>   <span class="co">// Map to [0, 1] range</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 3. Get reconstructed depth at projected sample point</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sampleDepth <span class="op">=</span> <span class="fu">getViewPos</span><span class="op">(</span><span class="dt">offset</span><span class="op">.</span><span class="fu">xy</span><span class="op">,</span> invProjection<span class="op">).</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 4. Range check to prevent bleeding across large distance gaps</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> rangeCheck <span class="op">=</span> <span class="bu">smoothstep</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> radius <span class="op">/</span> <span class="bu">abs</span><span class="op">(</span>fragPos<span class="op">.</span><span class="fu">z</span> <span class="op">-</span> sampleDepth<span class="op">));</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 5. Accumulate occlusion if sample is behind geometry</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    occlusion <span class="op">+=</span> <span class="op">(</span>sampleDepth <span class="op">&gt;=</span> samplePos<span class="op">.</span><span class="fu">z</span> <span class="op">+</span> bias <span class="op">?</span> <span class="fl">1.0</span> <span class="op">:</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">*</span> rangeCheck<span class="op">;</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>occlusion <span class="op">=</span> <span class="fl">1.0</span> <span class="op">-</span> <span class="op">(</span>occlusion <span class="op">/</span> <span class="fl">64.0</span><span class="op">);</span></span></code></pre></div>
+<h2 id="5-blurring-the-output">5. Blurring the Output</h2>
+<p>Because the kernel rotation creates high-frequency noise, the
+calculated occlusion factor must be passed through a bilateral blur
+pass. A bilateral filter uses depth and normal thresholds so that the
+blur does not cross surface edges, smoothing the noise while preserving
+hard contact shadow boundaries.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL 256-Bin Luminance Histogram Using Shared Atomics - glsl</title>
+    <meta name="description" content="Constructing a parallel 256-bin luminance histogram in GLSL is achieved using compute shaders to tally pixel intensity values into a shared memory array before writing the merged results to global memory. By utilizing a workgroup-level histogram stored i">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-256-bin-luminance-histogram-using-shared-atomics">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL 256-Bin Luminance Histogram Using Shared Atomics - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-256-bin-luminance-histogram-using-shared-atomics" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Constructing a parallel 256-bin luminance histogram in GLSL is achieved using compute shaders to tally pixel intensity values into a shared memory array before writing the merged results to global memory. By utilizing a workgroup-level histogram stored i" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-256-bin-luminance-histogram-using-shared-atomics">GLSL
+256-Bin Luminance Histogram Using Shared Atomics</h1>
+<p>Constructing a parallel 256-bin luminance histogram in GLSL is
+achieved using compute shaders to tally pixel intensity values into a
+shared memory array before writing the merged results to global memory.
+By utilizing a workgroup-level histogram stored in <code>shared</code>
+memory, individual threads process image pixels concurrently and use
+fast, local <code>atomicAdd</code> operations to update bins. This
+approach minimizes high-latency contention on global memory by reducing
+global atomic writes to a single merge pass per workgroup.</p>
+<h3 id="1-workgroup-initialization-and-shared-memory-allocation">1.
+Workgroup Initialization and Shared Memory Allocation</h3>
+<p>The compute shader allocates an array of 256 unsigned integers in
+shared memory. A common workgroup layout uses 256 threads (such as a
+16x16 tile) so that each thread corresponds directly to one bin index
+during the initialization and merge phases.</p>
+<p>Before processing image pixels, the shared histogram must be zeroed
+out. A workgroup barrier ensures all threads wait until the memory is
+completely cleared.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">16</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">16</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">shared</span> <span class="dt">uint</span> localHistogram<span class="op">[</span><span class="dv">256</span><span class="op">];</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> rgba8<span class="op">)</span> <span class="kw">uniform</span> <span class="dt">readonly</span> <span class="dt">image2D</span> inputImage<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">buffer</span> HistogramBuffer <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> globalHistogram<span class="op">[</span><span class="dv">256</span><span class="op">];</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>Within the <code>main</code> function, initialization is handled by
+clearing the memory using the linear invocation index:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> localIndex <span class="op">=</span> <span class="bu">gl_LocalInvocationIndex</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>localHistogram<span class="op">[</span>localIndex<span class="op">]</span> <span class="op">=</span> <span class="dv">0</span>u<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="bu">barrier</span><span class="op">();</span></span></code></pre></div>
+<h3 id="2-luminance-calculation-and-local-accumulation">2. Luminance
+Calculation and Local Accumulation</h3>
+<p>Each thread computes its assigned global pixel coordinates. If the
+coordinates fall within the image boundaries, the thread samples the RGB
+color and converts it to a standard perceptual scalar luminance value
+using the Rec. 709 coefficients:</p>
+<p><span class="math display">\[\text{Luminance} = 0.2126R + 0.7152G +
+0.0722B\]</span></p>
+<p>The calculated float value (ranging from <span
+class="math inline">\(0.0\)</span> to <span
+class="math inline">\(1.0\)</span>) is scaled and clamped to an integer
+between <span class="math inline">\(0\)</span> and <span
+class="math inline">\(255\)</span>. The thread then executes
+<code>atomicAdd</code> on the shared memory array at that calculated bin
+index:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">ivec2</span> pixelCoord <span class="op">=</span> <span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">xy</span><span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">ivec2</span> imgSize <span class="op">=</span> <span class="bu">imageSize</span><span class="op">(</span>inputImage<span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>pixelCoord<span class="op">.</span><span class="fu">x</span> <span class="op">&lt;</span> imgSize<span class="op">.</span><span class="fu">x</span> <span class="op">&amp;&amp;</span> pixelCoord<span class="op">.</span><span class="fu">y</span> <span class="op">&lt;</span> imgSize<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> color <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>inputImage<span class="op">,</span> pixelCoord<span class="op">);</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> luma <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>color<span class="op">.</span><span class="fu">rgb</span><span class="op">,</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.2126</span><span class="op">,</span> <span class="fl">0.7152</span><span class="op">,</span> <span class="fl">0.0722</span><span class="op">));</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> bin <span class="op">=</span> <span class="dt">uint</span><span class="op">(</span><span class="bu">clamp</span><span class="op">(</span>luma <span class="op">*</span> <span class="fl">255.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">255.0</span><span class="op">));</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">atomicAdd</span><span class="op">(</span>localHistogram<span class="op">[</span>bin<span class="op">],</span> <span class="dv">1</span>u<span class="op">);</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Because <code>localHistogram</code> resides in on-chip shared memory,
+these atomic operations complete with significantly lower latency and
+bandwidth overhead than global memory operations.</p>
+<h3 id="3-synchronization-and-global-histogram-merge">3. Synchronization
+and Global Histogram Merge</h3>
+<p>Once all threads in the workgroup have finished processing their
+respective pixels, a second execution and memory barrier ensures all
+local atomic writes have settled:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="bu">barrier</span><span class="op">();</span></span></code></pre></div>
+<p>Finally, each thread reads its corresponding bin count from
+<code>localHistogram</code> and transfers that count to the global
+storage buffer using a global <code>atomicAdd</code>. Only threads that
+hold a non-zero local bin count execute the atomic operation, which
+optimizes global memory traffic:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> binValue <span class="op">=</span> localHistogram<span class="op">[</span>localIndex<span class="op">];</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>binValue <span class="op">&gt;</span> <span class="dv">0</span>u<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">atomicAdd</span><span class="op">(</span>globalHistogram<span class="op">[</span>localIndex<span class="op">],</span> binValue<span class="op">);</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This two-tier reduction strategy ensures high parallel throughput
+across the GPU, effectively transforming thousands of potential global
+atomic conflicts into localized, fast on-chip operations.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

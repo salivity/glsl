@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thin-Film Interference in GLSL Using Optical Path Difference - glsl</title>
+    <meta name="description" content="Thin-film optical interference creates dynamic, iridescence-driven color shifts on surfaces such as soap bubbles, oil slicks, and coated optics. In real-time computer graphics, shaders implement this wave-optics phenomenon by computing the Optical Path D">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/thin-film-interference-in-glsl-using-optical-path-difference">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Thin-Film Interference in GLSL Using Optical Path Difference - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/thin-film-interference-in-glsl-using-optical-path-difference" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Thin-film optical interference creates dynamic, iridescence-driven color shifts on surfaces such as soap bubbles, oil slicks, and coated optics. In real-time computer graphics, shaders implement this wave-optics phenomenon by computing the Optical Path D" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="thin-film-interference-in-glsl-using-optical-path-difference">Thin-Film
+Interference in GLSL Using Optical Path Difference</h1>
+<p>Thin-film optical interference creates dynamic, iridescence-driven
+color shifts on surfaces such as soap bubbles, oil slicks, and coated
+optics. In real-time computer graphics, shaders implement this
+wave-optics phenomenon by computing the Optical Path Difference (OPD)
+between light rays reflecting off the upper and lower boundaries of a
+thin layer. By determining the phase displacement across visible
+wavelengths and converting spectral intensity variations into RGB color
+values, OpenGL Shading Language (GLSL) shaders can render physically
+plausible thin-film iridescence efficiently.</p>
+<h3 id="physical-principles-and-optical-path-difference-opd">Physical
+Principles and Optical Path Difference (OPD)</h3>
+<p>When light encounters a thin dielectric film of thickness <span
+class="math inline">\(d\)</span> and refractive index <span
+class="math inline">\(n_2\)</span> surrounded by a medium of refractive
+index <span class="math inline">\(n_1\)</span>, a portion reflects off
+the outer boundary while the rest refracts into the film, reflects off
+the inner boundary, and emerges back out.</p>
+<p>The geometric difference in travel distance between these two paths
+defines the Optical Path Difference. Using Snell's law (<span
+class="math inline">\(n_1 \sin\theta_i = n_2 \sin\theta_t\)</span>),
+where <span class="math inline">\(\theta_i\)</span> is the angle of
+incidence and <span class="math inline">\(\theta_t\)</span> is the angle
+of refraction inside the film, the OPD is defined as:</p>
+<p><span class="math display">\[\text{OPD} = 2 \cdot n_2 \cdot d \cdot
+\cos(\theta_t)\]</span></p>
+<p>Using the trigonometric identity <span
+class="math inline">\(\cos(\theta_t) = \sqrt{1 -
+\sin^2(\theta_t)}\)</span>, the term <span
+class="math inline">\(\cos(\theta_t)\)</span> can be derived directly
+from the surface normal <span class="math inline">\(\mathbf{N}\)</span>
+and incident view vector <span
+class="math inline">\(\mathbf{V}\)</span>:</p>
+<p><span class="math display">\[\cos(\theta_t) = \sqrt{1.0 -
+\left(\frac{n_1}{n_2}\right)^2 (1.0 - (\mathbf{N} \cdot
+\mathbf{V})^2)}\]</span></p>
+<h3 id="phase-shifts-and-interference-conditions">Phase Shifts and
+Interference Conditions</h3>
+<p>When light reflects from a medium with a lower refractive index to
+one with a higher refractive index, it undergoes a half-wave (<span
+class="math inline">\(\pi\)</span>) phase shift. If the film sits on a
+substrate with refractive index <span
+class="math inline">\(n_3\)</span>, the boundary conditions determine
+net phase changes:</p>
+<ul>
+<li>If <span class="math inline">\(n_1 &lt; n_2 &gt; n_3\)</span> or
+<span class="math inline">\(n_1 &gt; n_2 &lt; n_3\)</span>: Only one
+boundary undergoes a <span class="math inline">\(\pi\)</span> phase
+shift, adding <span class="math inline">\(\frac{\lambda}{2}\)</span> to
+the path difference.</li>
+<li>If <span class="math inline">\(n_1 &lt; n_2 &lt; n_3\)</span> or
+<span class="math inline">\(n_1 &gt; n_2 &gt; n_3\)</span>: Both or
+neither boundary undergoes a <span class="math inline">\(\pi\)</span>
+phase shift, resulting in zero net shift.</li>
+</ul>
+<p>The total phase difference <span
+class="math inline">\(\delta\)</span> for a specific wavelength <span
+class="math inline">\(\lambda\)</span> is:</p>
+<p><span class="math display">\[\delta(\lambda) = \frac{2\pi}{\lambda}
+\cdot \text{OPD} + \Delta\phi\]</span></p>
+<p>Constructive interference occurs when waves align in phase (<span
+class="math inline">\(\delta = 2\pi m\)</span>), amplifying that
+wavelength. Destructive interference occurs when waves are out of phase
+(<span class="math inline">\(\delta = (2m + 1)\pi\)</span>), canceling
+the wavelength.</p>
+<h3
+id="approximating-spectral-interference-to-rgb-in-glsl">Approximating
+Spectral Interference to RGB in GLSL</h3>
+<p>Full spectral rendering evaluates continuous wavelengths across the
+visible spectrum (380 nm to 780 nm) and integrates them with CIE color
+matching functions. In real-time GLSL, a fast and visually convincing
+approach samples representative wavelengths for the primary color
+channels:</p>
+<ul>
+<li>Red: <span class="math inline">\(\lambda_R \approx 650\text{
+nm}\)</span></li>
+<li>Green: <span class="math inline">\(\lambda_G \approx 510\text{
+nm}\)</span></li>
+<li>Blue: <span class="math inline">\(\lambda_B \approx 475\text{
+nm}\)</span></li>
+</ul>
+<p>Using the two-beam interference equation, the reflected intensity
+<span class="math inline">\(I\)</span> for each wavelength is:</p>
+<p><span class="math display">\[I(\lambda) = \cos^2\left(\frac{\pi \cdot
+\text{OPD}}{\lambda} + \frac{\Delta\phi}{2}\right)\]</span></p>
+<h3 id="complete-glsl-implementation">Complete GLSL Implementation</h3>
+<p>The following GLSL fragment shader function computes interference
+color based on incident angle, film thickness, and refractive
+indices:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Computes RGB interference reflection based on thin-film OPD</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">calculateThinFilmInterference</span><span class="op">(</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> normal<span class="op">,</span> </span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> viewDir<span class="op">,</span> </span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> thicknessNm<span class="op">,</span> </span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> n1<span class="op">,</span> <span class="co">// Surrounding medium (e.g., Air = 1.0)</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> n2<span class="op">,</span> <span class="co">// Thin film (e.g., Soap = 1.33, Oil = 1.5)</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> n3  <span class="co">// Substrate (e.g., Water = 1.33)</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosThetaI <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>normal<span class="op">,</span> viewDir<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Snell&#39;s Law: compute cos(theta_t) inside the film</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sinThetaISq <span class="op">=</span> <span class="fl">1.0</span> <span class="op">-</span> cosThetaI <span class="op">*</span> cosThetaI<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> eta <span class="op">=</span> n1 <span class="op">/</span> n2<span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sinThetaTSq <span class="op">=</span> eta <span class="op">*</span> eta <span class="op">*</span> sinThetaISq<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Total internal reflection check</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>sinThetaTSq <span class="op">&gt;</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosThetaT <span class="op">=</span> <span class="bu">sqrt</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> sinThetaTSq<span class="op">);</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute Optical Path Difference (OPD) in nanometers</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> opd <span class="op">=</span> <span class="fl">2.0</span> <span class="op">*</span> n2 <span class="op">*</span> thicknessNm <span class="op">*</span> cosThetaT<span class="op">;</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Determine boundary phase shift (Delta Phi)</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Shift by pi adds a half-cycle (0.5) to the wave ratio</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> phaseShift <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> shift1 <span class="op">=</span> <span class="op">(</span>n1 <span class="op">&lt;</span> n2<span class="op">);</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> shift2 <span class="op">=</span> <span class="op">(</span>n2 <span class="op">&lt;</span> n3<span class="op">);</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>shift1 <span class="op">!=</span> shift2<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>        phaseShift <span class="op">=</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Target wavelengths in nanometers (R, G, B)</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> wavelengths <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">650.0</span><span class="op">,</span> <span class="fl">510.0</span><span class="op">,</span> <span class="fl">475.0</span><span class="op">);</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate phase cycle and resultant intensity</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> phase <span class="op">=</span> <span class="op">(</span>opd <span class="op">/</span> wavelengths<span class="op">)</span> <span class="op">+</span> phaseShift<span class="op">;</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Interference intensity equation: cos^2(pi * phase)</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> PI <span class="op">=</span> <span class="fl">3.14159265359</span><span class="op">;</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> intensity <span class="op">=</span> <span class="bu">cos</span><span class="op">(</span>PI <span class="op">*</span> phase<span class="op">);</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    intensity <span class="op">=</span> intensity <span class="op">*</span> intensity<span class="op">;</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> intensity<span class="op">;</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="integration-into-lighting-models">Integration into Lighting
+Models</h3>
+<p>To blend the result with standard physically based rendering
+(PBR):</p>
+<ol type="1">
+<li><strong>Fresnel Modulation:</strong> Multiply the computed
+interference intensity by the angle-dependent Fresnel reflectance to
+ensure edge reflections transition smoothly toward pure reflection.</li>
+<li><strong>Thickness Variation:</strong> Supply
+<code>thicknessNm</code> using a procedural noise function or a texture
+map to model uneven layers, reproducing the swirling color bands seen on
+physical films.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

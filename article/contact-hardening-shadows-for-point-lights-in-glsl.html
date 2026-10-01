@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact-Hardening Shadows for Point Lights in GLSL - glsl</title>
+    <meta name="description" content="This article details how to implement contact-hardening soft shadows for omnidirectional point lights in GLSL using Percentage-Closer Soft Shadows (PCSS) adapted for cubemaps. It covers the mathematical principles of penumbra estimation using radial dist">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/contact-hardening-shadows-for-point-lights-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Contact-Hardening Shadows for Point Lights in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/contact-hardening-shadows-for-point-lights-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article details how to implement contact-hardening soft shadows for omnidirectional point lights in GLSL using Percentage-Closer Soft Shadows (PCSS) adapted for cubemaps. It covers the mathematical principles of penumbra estimation using radial dist" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="contact-hardening-shadows-for-point-lights-in-glsl">Contact-Hardening
+Shadows for Point Lights in GLSL</h1>
+<p>This article details how to implement contact-hardening soft shadows
+for omnidirectional point lights in GLSL using Percentage-Closer Soft
+Shadows (PCSS) adapted for cubemaps. It covers the mathematical
+principles of penumbra estimation using radial distance, the generation
+of 3D sample directions around a cubemap ray, the blocker search phase,
+and the adaptive percentage-closer filtering (PCF) pass to produce
+realistic, distance-dependent shadow softening.</p>
+<h2 id="fundamentals-of-point-light-pcss">Fundamentals of Point Light
+PCSS</h2>
+<p>Traditional PCSS assumes a 2D planar projection from a directional or
+spot light. Point lights emit light radially in all directions,
+requiring omnidirectional shadow mapping typically backed by an OpenGL
+or Vulkan <code>samplerCube</code>.</p>
+<p>Standard depth buffers store non-linear projected <span
+class="math inline">\(z\)</span>-values, but point light shadow
+algorithms rely on linear Euclidean distance:</p>
+<p><span class="math display">\[\text{distance} = \|
+\mathbf{p}_{\text{fragment}} - \mathbf{p}_{\text{light}} \|\]</span></p>
+<p>The cubemap stores either this distance normalized by the light's
+maximum range <span class="math inline">\([0, 1]\)</span> or raw
+floating-point distances in a texture format such as
+<code>GL_R32F</code>.</p>
+<p>Contact hardening scales the penumbra width (<span
+class="math inline">\(w_{\text{penumbra}}\)</span>) using similar
+triangles:</p>
+<p><span class="math display">\[w_{\text{penumbra}} =
+\frac{d_{\text{receiver}} - d_{\text{blocker}}}{d_{\text{blocker}}}
+\cdot w_{\text{light}}\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(d_{\text{receiver}}\)</span> is the
+linear distance from the point light to the current fragment.</li>
+<li><span class="math inline">\(d_{\text{blocker}}\)</span> is the
+average linear distance of occluding surfaces between the light and the
+fragment.</li>
+<li><span class="math inline">\(w_{\text{light}}\)</span> is the
+physical or simulated radius of the spherical light source.</li>
+</ul>
+<h2 id="constructing-the-sampling-basis">Constructing the Sampling
+Basis</h2>
+<p>Sampling a cubemap requires a 3D direction vector. Offsetting this
+direction across a virtual disk requires building an orthonormal tangent
+basis around the normalized direction vector <span
+class="math inline">\(\mathbf{L} = \frac{\mathbf{p}_{\text{fragment}} -
+\mathbf{p}_{\text{light}}}{\| \mathbf{p}_{\text{fragment}} -
+\mathbf{p}_{\text{light}} \|}\)</span>.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">createOrthonormalBasis</span><span class="op">(</span><span class="dt">in</span> <span class="dt">vec3</span> dir<span class="op">,</span> <span class="dt">out</span> <span class="dt">vec3</span> tangent<span class="op">,</span> <span class="dt">out</span> <span class="dt">vec3</span> bitangent<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> up <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span>dir<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">&lt;</span> <span class="fl">0.999</span> <span class="op">?</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">:</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    tangent <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="bu">cross</span><span class="op">(</span>up<span class="op">,</span> dir<span class="op">));</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    bitangent <span class="op">=</span> <span class="bu">cross</span><span class="op">(</span>dir<span class="op">,</span> tangent<span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Predefined 2D sampling patterns, such as Poisson disks or Vogel
+disks, map onto this local frame to yield perturbed 3D sample
+directions:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">getSampleDirection</span><span class="op">(</span><span class="dt">vec3</span> dir<span class="op">,</span> <span class="dt">vec3</span> tangent<span class="op">,</span> <span class="dt">vec3</span> bitangent<span class="op">,</span> <span class="dt">vec2</span> diskSample<span class="op">,</span> <span class="dt">float</span> radius<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">normalize</span><span class="op">(</span>dir <span class="op">+</span> <span class="op">(</span>tangent <span class="op">*</span> diskSample<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> bitangent <span class="op">*</span> diskSample<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">*</span> radius<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="step-1-cubemap-blocker-search">Step 1: Cubemap Blocker
+Search</h2>
+<p>The blocker search samples the cubemap within a search cone
+proportional to the light size and receiver distance. The search radius
+is determined by:</p>
+<p><span class="math display">\[R_{\text{search}} =
+\frac{w_{\text{light}}}{d_{\text{receiver}}}\]</span></p>
+<p>During this pass, samples where the stored depth is less than <span
+class="math inline">\(d_{\text{receiver}} - \text{bias}\)</span>
+represent blockers.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> BLOCKER_SAMPLES <span class="op">=</span> <span class="dv">16</span><span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">vec2</span> POISSON_DISK<span class="op">[</span><span class="dv">16</span><span class="op">]</span> <span class="op">=</span> <span class="dt">vec2</span><span class="op">[](</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.94201624</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.39906216</span><span class="op">),</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.94558609</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.76890725</span><span class="op">),</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.094184101</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.92938870</span><span class="op">),</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.34495938</span><span class="op">,</span> <span class="fl">0.29387760</span><span class="op">),</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.91588581</span><span class="op">,</span> <span class="fl">0.45771432</span><span class="op">),</span> <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.81544232</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.87912464</span><span class="op">),</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.38277543</span><span class="op">,</span> <span class="fl">0.27676845</span><span class="op">),</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.97484398</span><span class="op">,</span> <span class="fl">0.75648379</span><span class="op">),</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.44323325</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.97511554</span><span class="op">),</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.53742981</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.47373420</span><span class="op">),</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.26496911</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.41893023</span><span class="op">),</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.79197514</span><span class="op">,</span> <span class="fl">0.19090188</span><span class="op">),</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.24188840</span><span class="op">,</span> <span class="fl">0.99706507</span><span class="op">),</span> <span class="dt">vec2</span><span class="op">(-</span><span class="fl">0.81409955</span><span class="op">,</span> <span class="fl">0.91437590</span><span class="op">),</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.19984126</span><span class="op">,</span> <span class="fl">0.78641367</span><span class="op">),</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.14383161</span><span class="op">,</span> <span class="op">-</span><span class="fl">0.14100790</span><span class="op">)</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> <span class="fu">findBlocker</span><span class="op">(</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">samplerCube</span> shadowMap<span class="op">,</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> lightToFrag<span class="op">,</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> receiverDist<span class="op">,</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lightSize<span class="op">,</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> bias<span class="op">,</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">out</span> <span class="dt">float</span> avgBlockerDepth</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dir <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>lightToFrag<span class="op">);</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> tangent<span class="op">,</span> bitangent<span class="op">;</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    <span class="fu">createOrthonormalBasis</span><span class="op">(</span>dir<span class="op">,</span> tangent<span class="op">,</span> bitangent<span class="op">);</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> searchRadius <span class="op">=</span> <span class="op">(</span>lightSize <span class="op">/</span> receiverDist<span class="op">);</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> blockerSum <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> numBlockers <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> BLOCKER_SAMPLES<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> sampleDir <span class="op">=</span> <span class="fu">getSampleDirection</span><span class="op">(</span>dir<span class="op">,</span> tangent<span class="op">,</span> bitangent<span class="op">,</span> POISSON_DISK<span class="op">[</span>i<span class="op">],</span> searchRadius<span class="op">);</span></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> sampledDist <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>shadowMap<span class="op">,</span> sampleDir<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>sampledDist <span class="op">&lt;</span> receiverDist <span class="op">-</span> bias<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>            blockerSum <span class="op">+=</span> sampledDist<span class="op">;</span></span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>            numBlockers<span class="op">++;</span></span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>numBlockers <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>        avgBlockerDepth <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>    avgBlockerDepth <span class="op">=</span> blockerSum <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>numBlockers<span class="op">);</span></span>
+<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="step-2-penumbra-estimation">Step 2: Penumbra Estimation</h2>
+<p>If no blockers are detected, the fragment is completely unoccluded
+(shadow factor equals 1.0). If blockers exist, the ratio between the
+receiver distance and the average blocker distance determines the
+dynamic filter kernel size.</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">calculatePenumbraRadius</span><span class="op">(</span><span class="dt">float</span> receiverDist<span class="op">,</span> <span class="dt">float</span> avgBlockerDist<span class="op">,</span> <span class="dt">float</span> lightSize<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">((</span>receiverDist <span class="op">-</span> avgBlockerDist<span class="op">)</span> <span class="op">/</span> avgBlockerDist<span class="op">)</span> <span class="op">*</span> <span class="op">(</span>lightSize <span class="op">/</span> receiverDist<span class="op">);</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Dividing by <code>receiverDist</code> adjusts the angular spread of
+the filter radius to maintain consistent screen-space sizing regardless
+of the distance between the light source and the geometry.</p>
+<h2 id="step-3-adaptive-filtering-pcf-pass">Step 3: Adaptive Filtering
+(PCF Pass)</h2>
+<p>Using the derived penumbra radius, the cubemap is sampled again using
+a larger sample count. A depth comparison is performed per sample,
+accumulating the final occlusion factor.</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> PCF_SAMPLES <span class="op">=</span> <span class="dv">32</span><span class="op">;</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">filterShadowPCF</span><span class="op">(</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">samplerCube</span> shadowMap<span class="op">,</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> lightToFrag<span class="op">,</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> receiverDist<span class="op">,</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> filterRadius<span class="op">,</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> bias</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dir <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>lightToFrag<span class="op">);</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> tangent<span class="op">,</span> bitangent<span class="op">;</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">createOrthonormalBasis</span><span class="op">(</span>dir<span class="op">,</span> tangent<span class="op">,</span> bitangent<span class="op">);</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> shadow <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> PCF_SAMPLES<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Vogel disk or larger Poisson disk sample</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> angle <span class="op">=</span> <span class="dt">float</span><span class="op">(</span>i<span class="op">)</span> <span class="op">*</span> <span class="fl">2.3999632</span><span class="op">;</span> <span class="co">// Golden angle in radians</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> r <span class="op">=</span> <span class="bu">sqrt</span><span class="op">(</span><span class="dt">float</span><span class="op">(</span>i<span class="op">)</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">)</span> <span class="op">/</span> <span class="bu">sqrt</span><span class="op">(</span><span class="dt">float</span><span class="op">(</span>PCF_SAMPLES<span class="op">));</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span> diskSample <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="bu">cos</span><span class="op">(</span>angle<span class="op">),</span> <span class="bu">sin</span><span class="op">(</span>angle<span class="op">))</span> <span class="op">*</span> r<span class="op">;</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> sampleDir <span class="op">=</span> <span class="fu">getSampleDirection</span><span class="op">(</span>dir<span class="op">,</span> tangent<span class="op">,</span> bitangent<span class="op">,</span> diskSample<span class="op">,</span> filterRadius<span class="op">);</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> sampledDist <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>shadowMap<span class="op">,</span> sampleDir<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>        shadow <span class="op">+=</span> <span class="op">(</span>sampledDist <span class="op">&lt;</span> receiverDist <span class="op">-</span> bias<span class="op">)</span> <span class="op">?</span> <span class="fl">0.0</span> <span class="op">:</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> shadow <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>PCF_SAMPLES<span class="op">);</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="complete-fragment-integration">Complete Fragment
+Integration</h2>
+<p>Combining these steps produces the complete GLSL execution sequence
+for contact-hardening point light shadows:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">computePointPCSS</span><span class="op">(</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">samplerCube</span> shadowMap<span class="op">,</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> fragPos<span class="op">,</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> lightPos<span class="op">,</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lightSize<span class="op">,</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> normalBias</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> lightToFrag <span class="op">=</span> fragPos <span class="op">-</span> lightPos<span class="op">;</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> receiverDist <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>lightToFrag<span class="op">);</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> avgBlockerDist<span class="op">;</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> hasBlocker <span class="op">=</span> <span class="fu">findBlocker</span><span class="op">(</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>        shadowMap<span class="op">,</span> </span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>        lightToFrag<span class="op">,</span> </span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>        receiverDist<span class="op">,</span> </span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>        lightSize<span class="op">,</span> </span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>        normalBias<span class="op">,</span> </span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>        avgBlockerDist</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(!</span>hasBlocker<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="fl">1.0</span><span class="op">;</span> <span class="co">// Fully lit</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> penumbraRadius <span class="op">=</span> <span class="fu">calculatePenumbraRadius</span><span class="op">(</span>receiverDist<span class="op">,</span> avgBlockerDist<span class="op">,</span> lightSize<span class="op">);</span></span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Clamp to prevent sub-pixel undersampling or excessive blur</span></span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>    penumbraRadius <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>penumbraRadius<span class="op">,</span> <span class="fl">0.001</span><span class="op">,</span> <span class="fl">0.1</span><span class="op">);</span></span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="fu">filterShadowPCF</span><span class="op">(</span></span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>        shadowMap<span class="op">,</span> </span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>        lightToFrag<span class="op">,</span> </span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>        receiverDist<span class="op">,</span> </span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>        penumbraRadius<span class="op">,</span> </span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>        normalBias</span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="performance-and-artifact-mitigation">Performance and Artifact
+Mitigation</h2>
+<ol type="1">
+<li><strong>Self-Shadowing and Dynamic Bias:</strong> Point lights
+suffer from divergence artifacts at the corners of cubemap faces. The
+shadow bias must scale proportionally with the surface normal and the
+light vector angle:
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> bias <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>maxBias <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> <span class="bu">dot</span><span class="op">(</span>surfaceNormal<span class="op">,</span> <span class="op">-</span>dir<span class="op">)),</span> minBias<span class="op">);</span></span></code></pre></div></li>
+<li><strong>Cubemap Seams:</strong> Filtering across cubemap edges can
+cause texture coordinate discontinuity. GLSL handles hardware cubemap
+seamless filtering via
+<code>glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS)</code>.</li>
+<li><strong>Early Exits:</strong> If the average blocker distance is
+extremely close to the receiver distance or if all samples in the
+blocker search report occlusion, the PCF pass can early-exit with a
+value of <code>0.0</code> to minimize divergent texture fetches.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

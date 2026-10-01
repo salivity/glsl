@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mitigate GLSL Atomic Contention with Workgroup Reduction - glsl</title>
+    <meta name="description" content="In GPU computing with GLSL, executing global atomic operations from thousands of concurrent threads creates severe memory contention, drastically reducing performance due to hardware serialization. Hierarchical workgroup reduction mitigates this bottlene">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/mitigate-glsl-atomic-contention-with-workgroup-reduction">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Mitigate GLSL Atomic Contention with Workgroup Reduction - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/mitigate-glsl-atomic-contention-with-workgroup-reduction" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GPU computing with GLSL, executing global atomic operations from thousands of concurrent threads creates severe memory contention, drastically reducing performance due to hardware serialization. Hierarchical workgroup reduction mitigates this bottlene" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="mitigate-glsl-atomic-contention-with-workgroup-reduction">Mitigate
+GLSL Atomic Contention with Workgroup Reduction</h1>
+<p>In GPU computing with GLSL, executing global atomic operations from
+thousands of concurrent threads creates severe memory contention,
+drastically reducing performance due to hardware serialization.
+Hierarchical workgroup reduction mitigates this bottleneck by
+restructuring the reduction process into two distinct phases: threads
+first cooperatively combine their data locally inside fast, on-chip
+shared memory, and then only a single designated thread per workgroup
+writes the aggregated result to global memory. This approach drastically
+cuts the volume of global memory transactions, amortizes memory latency,
+and scales performance linearly across modern compute architectures.</p>
+<h3 id="the-problem-global-memory-atomic-contention">The Problem: Global
+Memory Atomic Contention</h3>
+<p>When executing compute shaders in GLSL, algorithms that calculate
+global sums, histograms, or bounds often rely on atomic operations (such
+as <code>atomicAdd</code> or <code>atomicMin</code>) targeting a shared
+Storage Buffer Object (SSBO). Under high concurrency, thousands of
+invocations across multiple compute units simultaneously attempt to
+read, modify, and write back to the exact same memory address.</p>
+<p>Because atomic operations guarantee memory consistency, the GPU's
+memory controllers must serialize these conflicting updates. This causes
+immediate hardware stalls, high cache thrashing at the L2 level, and
+pipeline bubbles throughout the execution units. The computational power
+of the GPU is effectively bottlenecked by the queue depth of the memory
+subsystem.</p>
+<h3 id="the-mechanism-of-hierarchical-workgroup-reduction">The Mechanism
+of Hierarchical Workgroup Reduction</h3>
+<p>Hierarchical reduction replaces brute-force global synchronization
+with a multi-tiered tree reduction strategy that mirrors the physical
+hierarchy of the GPU hardware.</p>
+<h4 id="1-local-accumulation-in-workgroup-shared-memory">1. Local
+Accumulation in Workgroup Shared Memory</h4>
+<p>Instead of immediately accessing global VRAM, threads store their
+localized data in workgroup-shared variables, declared using the
+<code>shared</code> storage qualifier in GLSL. Shared memory resides
+on-chip within the compute unit, offering significantly lower latency
+and substantially higher bandwidth compared to global device memory.</p>
+<h4 id="2-parallel-intra-workgroup-tree-reduction">2. Parallel
+Intra-Workgroup Tree Reduction</h4>
+<p>Once the data is resident in shared memory, invocations within the
+workgroup cooperatively reduce the elements using a parallel tree
+algorithm. In each step of this phase:</p>
+<ul>
+<li>Half of the active threads add the value of a peer thread to their
+own.</li>
+<li>Synchronizations are enforced using <code>barrier()</code> or
+<code>memoryBarrierShared()</code> to prevent race conditions.</li>
+<li>The step count decreases by half each iteration, achieving reduction
+across the workgroup in <span class="math inline">\(O(\log_2 N)\)</span>
+time, where <span class="math inline">\(N\)</span> is the workgroup size
+(typically 128 to 1024 invocations).</li>
+</ul>
+<p>Sub-groups or SIMD lanes can also utilize subgroup operations (such
+as <code>subgroupAdd</code> via the
+<code>GL_KHR_shader_subgroup_arithmetic</code> extension) to complete
+portions of this reduction implicitly in hardware without shared memory
+barriers, accelerating the local phase even further.</p>
+<h4 id="3-single-global-atomic-commitment">3. Single Global Atomic
+Commitment</h4>
+<p>When the tree reduction finishes, the accumulated result for the
+entire workgroup sits in a single shared memory index (usually index
+zero). At this point, branch divergence is utilized to filter execution:
+only the root invocation (typically
+<code>gl_LocalInvocationIndex == 0</code>) executes the final global
+atomic operation, such as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span><span class="bu">gl_LocalInvocationIndex</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">atomicAdd</span><span class="op">(</span>globalOutputBuffer<span class="op">.</span><span class="fu">totalSum</span><span class="op">,</span> sharedData<span class="op">[</span><span class="dv">0</span><span class="op">]);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="quantitative-mitigation-of-contention">Quantitative Mitigation
+of Contention</h3>
+<p>The effectiveness of hierarchical workgroup reduction stems directly
+from the dramatic reduction in transactions competing for the global
+memory controller:</p>
+<ul>
+<li><strong>Transaction Reduction Factor:</strong> If a compute dispatch
+uses a workgroup size of 256 threads, direct global atomics generate
+<span class="math inline">\(N\)</span> contention points for <span
+class="math inline">\(N\)</span> total invocations. With hierarchical
+reduction, the number of global atomic transactions drops by a factor of
+256 (<span class="math inline">\(\frac{N}{256}\)</span>).</li>
+<li><strong>Latency Hiding:</strong> Stalls are shifted from the
+off-chip memory bus to on-chip shared memory, where latency is measured
+in single-digit clock cycles rather than hundreds of cycles.</li>
+<li><strong>Elimination of Pipeline Freezes:</strong> By collapsing
+thousands of atomic updates down to a fraction of that number, the
+memory controllers can quickly clear atomic write queues, enabling the
+GPU to maintain high warp/wavefront occupancy and sustain maximum memory
+bandwidth utilization.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

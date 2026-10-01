@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How subgroupQuadSwapDiagonal Works in GLSL - glsl</title>
+    <meta name="description" content="The GLSL intrinsic subgroupQuadSwapDiagonal() exchanges data between diagonally opposing invocations inside a four-invocation subgroup quad. In modern GPU architectures, invocations are often grouped into 2x2 execution quads to compute derivatives and ma">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-subgroup-quad-swap-diagonal-works-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How subgroupQuadSwapDiagonal Works in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-subgroup-quad-swap-diagonal-works-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The GLSL intrinsic subgroupQuadSwapDiagonal() exchanges data between diagonally opposing invocations inside a four-invocation subgroup quad. In modern GPU architectures, invocations are often grouped into 2x2 execution quads to compute derivatives and ma" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-subgroupquadswapdiagonal-works-in-glsl">How
+subgroupQuadSwapDiagonal Works in GLSL</h1>
+<p>The GLSL intrinsic <code>subgroupQuadSwapDiagonal()</code> exchanges
+data between diagonally opposing invocations inside a four-invocation
+subgroup quad. In modern GPU architectures, invocations are often
+grouped into 2x2 execution quads to compute derivatives and manage
+texture sampling. This function allows a thread to read a variable
+evaluated by its diagonal neighbor within the same quad without
+requiring shared memory or explicit barrier synchronization,
+significantly speeding up cross-lane data exchange.</p>
+<h3 id="quad-organization-and-lane-mapping">Quad Organization and Lane
+Mapping</h3>
+<p>A subgroup quad consists of four invocations arranged in a 2x2
+matrix, defined by local quad indices <code>0</code>, <code>1</code>,
+<code>2</code>, and <code>3</code>. In standard row-major arrangement,
+the quad is laid out as follows:</p>
+<ul>
+<li><strong>Lane 0:</strong> Top-left coordinate
+<code>(x, y)</code></li>
+<li><strong>Lane 1:</strong> Top-right coordinate
+<code>(x + 1, y)</code></li>
+<li><strong>Lane 2:</strong> Bottom-left coordinate
+<code>(x, y + 1)</code></li>
+<li><strong>Lane 3:</strong> Bottom-right coordinate
+<code>(x + 1, y + 1)</code></li>
+</ul>
+<h3 id="the-diagonal-swap-mechanism">The Diagonal Swap Mechanism</h3>
+<p><code>subgroupQuadSwapDiagonal()</code> performs an exchange across
+the diagonal axes. When called, the target lane index for invocation
+<span class="math inline">\(i\)</span> is calculated using a bitwise XOR
+operation with <code>3</code> (<code>0b11</code>):</p>
+<ul>
+<li><strong>Lane 0</strong> reads the value from <strong>Lane 3</strong>
+(<span class="math inline">\(0 \oplus 3 = 3\)</span>)</li>
+<li><strong>Lane 3</strong> reads the value from <strong>Lane 0</strong>
+(<span class="math inline">\(3 \oplus 3 = 0\)</span>)</li>
+<li><strong>Lane 1</strong> reads the value from <strong>Lane 2</strong>
+(<span class="math inline">\(1 \oplus 3 = 2\)</span>)</li>
+<li><strong>Lane 2</strong> reads the value from <strong>Lane 1</strong>
+(<span class="math inline">\(2 \oplus 3 = 1\)</span>)</li>
+</ul>
+<p>Because both the horizontal bit (bit 0) and the vertical bit (bit 1)
+are inverted simultaneously, the operation acts as a composite of
+<code>subgroupQuadSwapHorizontal()</code> and
+<code>subgroupQuadSwapVertical()</code>.</p>
+<h3 id="hardware-execution-and-requirements">Hardware Execution and
+Requirements</h3>
+<p>Under the hood, GPU hardware uses shuffle registers to transfer data
+across execution lanes within the SIMD warp or wavefront. Because quads
+execute concurrently in lockstep,
+<code>subgroupQuadSwapDiagonal()</code> does not require memory
+barriers, write flushes, or cache access.</p>
+<p>To use this function, the extension
+<code>GL_KHR_shader_subgroup_quad</code> must be enabled in the shader.
+In compute or mesh shaders, developers must ensure that the thread
+dispatch dimensions map to coherent 2x2 invocation clusters. In fragment
+shaders, threads are naturally dispatched in 2x2 quads corresponding to
+screen-space pixel coordinates.</p>
+<h3 id="use-cases">Use Cases</h3>
+<p>This operation is primarily used in screen-space processing
+algorithms, including:</p>
+<ul>
+<li><strong>Custom Derivatives:</strong> Computing diagonal finite
+differences <span class="math inline">\(\frac{\partial^2 f}{\partial x
+\partial y}\)</span> to approximate surface curvature.</li>
+<li><strong>Anti-Aliasing and Filtering:</strong> Performing 2x2 tent
+filters, edge-detecting bilateral filters, or normal comparisons with
+minimal register overhead.</li>
+<li><strong>Quad-Level Reductions:</strong> Gathering maximum, minimum,
+or average values across all four quad members in fewer shuffle cycles
+than standard linear reductions.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

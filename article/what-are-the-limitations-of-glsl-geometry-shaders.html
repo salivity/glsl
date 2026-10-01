@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Are the Limitations of GLSL Geometry Shaders? - glsl</title>
+    <meta name="description" content="GLSL geometry shaders offer the unique ability to dynamically generate, modify, and discard primitives directly on the GPU pipeline, yet they are among the most notorious performance bottlenecks in graphics programming. Modern graphics pipelines often di">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-are-the-limitations-of-glsl-geometry-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Are the Limitations of GLSL Geometry Shaders? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-are-the-limitations-of-glsl-geometry-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="GLSL geometry shaders offer the unique ability to dynamically generate, modify, and discard primitives directly on the GPU pipeline, yet they are among the most notorious performance bottlenecks in graphics programming. Modern graphics pipelines often di" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-are-the-limitations-of-glsl-geometry-shaders">What Are the
+Limitations of GLSL Geometry Shaders?</h1>
+<p>GLSL geometry shaders offer the unique ability to dynamically
+generate, modify, and discard primitives directly on the GPU pipeline,
+yet they are among the most notorious performance bottlenecks in
+graphics programming. Modern graphics pipelines often discourage
+geometry shader usage because hardware architectures struggle to manage
+variable primitive amplification efficiently. Understanding the inherent
+architectural constraints, throughput limitations, and performance costs
+of geometry shaders is essential for deciding when to use them or when
+to migrate to alternatives like compute shaders, instancing, or mesh
+shaders.</p>
+<h3
+id="architectural-bottlenecks-and-parallelism-penalties">Architectural
+Bottlenecks and Parallelism Penalties</h3>
+<p>The core limitation of the geometry shader lies in how modern GPU
+compute architectures schedule work. Unlike vertex or fragment shaders,
+which follow predictable one-to-one or single-element throughput, a
+geometry shader introduces variable-rate input/output behavior.</p>
+<ul>
+<li><strong>Output Buffering and Serialization:</strong> GPUs must
+allocate on-chip buffer space assuming the maximum possible output
+specified by the shader layout (<code>max_vertices</code>). If a shader
+allocates capacity for 64 vertices but only emits two, GPU registers and
+on-chip memory remain reserved and underutilized. This allocation limit
+restricts the number of threads (warps or wavefronts) that can run
+concurrently.</li>
+<li><strong>Loss of the Post-Transform Cache:</strong> In a standard
+vertex shading pipeline, shared vertices across adjacent primitives are
+transformed once and reused from the Post-Transform Cache. Because
+geometry shaders execute per-primitive rather than per-vertex, shared
+vertex calculations cannot be reused across neighboring invocations,
+multiplying mathematical work across complex meshes.</li>
+<li><strong>Primitive Ordering Overhead:</strong> Graphics APIs require
+primitives to leave the pipeline in the deterministic order specified by
+vertex and index buffers. Because each geometry shader invocation can
+emit anywhere from zero to dozens of vertices at variable execution
+speeds, hardware must maintain reordering buffers, causing pipeline
+stalls and memory traffic spikes.</li>
+</ul>
+<h3 id="geometry-shader-limitations">Geometry Shader Limitations</h3>
+<p>Beyond throughput degradation, geometry shaders carry rigid
+functional constraints in GLSL:</p>
+<ul>
+<li><strong>Restricted Output Topologies:</strong> A single geometry
+shader can only emit three primitive types: <code>points</code>,
+<code>line_strip</code>, or <code>triangle_strip</code>. Emitting
+arbitrary triangle lists or disconnected geometry requires frequent
+manual calls to <code>EndPrimitive()</code>, adding pipeline
+overhead.</li>
+<li><strong>Hard Component Limits:</strong> Hardware implementations
+enforce strict limits on both input attributes
+(<code>gl_MaxGeometryInputComponents</code>) and total output scalars.
+Large output structures reduce the total vertex output count available
+within a single invocation.</li>
+<li><strong>Tiled GPU Architecture Incompatibility:</strong> Mobile and
+integrated tiled GPUs (such as ARM Mali, Qualcomm Adreno, and Apple
+silicon) bin primitives into tile memory during a preliminary pass.
+Geometry shaders force these architectures to either stream dynamic
+vertices out to main system RAM or re-execute the shader during the
+rasterization pass, drastically inflating memory bandwidth and power
+usage.</li>
+</ul>
+<h3 id="performance-costs-in-practice">Performance Costs in
+Practice</h3>
+<p>Using a geometry shader purely as a pass-through stage can reduce
+rendering frame rates compared to a direct vertex-to-fragment pipeline
+on desktop GPUs. When geometry shaders are used for large amplification
+tasks—such as hair, grass generation, or fine tessellation—the
+performance penalty compounds quickly.</p>
+<table>
+<thead>
+<tr>
+<th>Use Case</th>
+<th>Performance Profile with Geometry Shaders</th>
+<th>Recommended Modern Alternative</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Billboard &amp; Particle Quads</strong></td>
+<td>Poor: Quad expansion starves thread registers.</td>
+<td>Vertex Shader Instancing or Point Sprites</td>
+</tr>
+<tr>
+<td><strong>Mesh Subdivision / Tessellation</strong></td>
+<td>Extremely Poor: High primitive output stalls pipeline queues.</td>
+<td>Hardware Tessellation Shaders (TCS/TES)</td>
+</tr>
+<tr>
+<td><strong>Dynamic Geometry Generation</strong></td>
+<td>Poor: High VRAM bandwidth and serialization.</td>
+<td>Compute Shaders with Indirect Draw Buffers</td>
+</tr>
+<tr>
+<td><strong>Layered Rendering (Cubemaps / Cascades)</strong></td>
+<td>Acceptable: Saves draw calls across multiple render targets.</td>
+<td>Multi-View Extensions (<code>GL_OVR_multiview</code>)</td>
+</tr>
+<tr>
+<td><strong>Modern Geometry Processing</strong></td>
+<td>Deprecated on modern hardware pipelines.</td>
+<td>Task and Mesh Shaders (NV/EXT mesh shading)</td>
+</tr>
+</tbody>
+</table>
+<p>Geometry shaders remain viable for niche tasks like rendering
+directly into layered render targets (e.g., single-pass cubemap shadow
+generation) or debugging wireframe overlays where primitive counts are
+minimal. For high-density procedural rendering, modern graphics
+development prioritizes compute shaders, hardware instancing, and mesh
+shaders over GLSL geometry shaders to maximize GPU occupancy and memory
+efficiency.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Retrieve Texels Using GLSL imageLoad - glsl</title>
+    <meta name="description" content="The imageLoad function in GLSL allows shaders to read raw, unformatted texel data directly from specific coordinates within an image object without hardware filtering. This article explains the mechanics of how imageLoad operates, how it translates integ">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-to-retrieve-texels-using-glsl-image-load">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How to Retrieve Texels Using GLSL imageLoad - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-to-retrieve-texels-using-glsl-image-load" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The imageLoad function in GLSL allows shaders to read raw, unformatted texel data directly from specific coordinates within an image object without hardware filtering. This article explains the mechanics of how imageLoad operates, how it translates integ" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-to-retrieve-texels-using-glsl-imageload">How to Retrieve
+Texels Using GLSL imageLoad</h1>
+<p>The <code>imageLoad</code> function in GLSL allows shaders to read
+raw, unformatted texel data directly from specific coordinates within an
+image object without hardware filtering. This article explains the
+mechanics of how <code>imageLoad</code> operates, how it translates
+integer coordinates into memory addresses, handles data format
+conversions, and how its operation fundamentally differs from
+conventional texture sampling.</p>
+<h3 id="the-mechanics-of-imageload">The Mechanics of
+<code>imageLoad</code></h3>
+<p>Unlike the standard <code>texture()</code> family of functions, which
+rely on texture samplers, normalized floating-point coordinates
+<code>[0.0, 1.0]</code>, and fixed-function filtering hardware (such as
+bilinear or trilinear interpolation), <code>imageLoad</code> interacts
+directly with image units bound to OpenGL textures or texture
+buffers.</p>
+<p>The function operates through several distinct steps:</p>
+<ol type="1">
+<li><p><strong>Discrete Coordinate Addressing:</strong><br />
+<code>imageLoad</code> takes an image variable (e.g.,
+<code>image2D</code>, <code>iimage3D</code>, <code>uimage2DArray</code>)
+and an integer coordinate vector (<code>ivec2</code>,
+<code>ivec3</code>, etc.). Because the coordinates are discrete
+integers, they correspond directly to texel indices rather than
+continuous spatial positions. The coordinate <code>ivec2(0, 0)</code>
+points explicitly to the first texel at the base of the specified mipmap
+level of the bound texture.</p></li>
+<li><p><strong>Memory Address Calculation:</strong><br />
+The GPU calculates the exact memory offset for the target texel based on
+the bound texture's internal layout, stride, dimensions, and the
+supplied coordinates: <span class="math display">\[\text{Offset} = (y
+\times \text{Stride}) + (x \times \text{BytesPerTexel})\]</span> Because
+this bypasses traditional sampler state pipelines, no derivative
+calculations, mipmap level selections, or neighbor blending
+occurs.</p></li>
+<li><p><strong>Format Unpacking and Conversion:</strong><br />
+Images in GLSL require an explicit format qualifier in the shader layout
+(for example, <code>layout(rgba32f)</code> or
+<code>layout(r32ui)</code>). When <code>imageLoad</code> reads the raw
+bytes from memory, the hardware unpacks the data into a four-component
+vector matching the image prefix:</p>
+<ul>
+<li>Floating-point images (<code>image*</code>) return
+<code>vec4</code>.</li>
+<li>Signed integer images (<code>iimage*</code>) return
+<code>ivec4</code>.</li>
+<li>Unsigned integer images (<code>uimage*</code>) return
+<code>uvec4</code>.</li>
+</ul>
+<p>If the internal texture format has fewer than four channels (such as
+<code>r32f</code>), the missing channels are filled with default values:
+<span class="math inline">\((0, 0, 1)\)</span> for RGB and alpha
+respectively, resulting in <code>vec4(R, 0.0, 0.0, 1.0)</code>.</p></li>
+<li><p><strong>Out-of-Bounds Handling:</strong><br />
+If the integer coordinates provided to <code>imageLoad</code> fall
+outside the dimensions of the image, the operation is safe from
+application crashes, but the returned value depends on driver
+implementation and context flags. If robustness extensions are active,
+out-of-bounds reads safely return a vector of zeros
+(<code>vec4(0.0)</code>). Otherwise, the return value is
+undefined.</p></li>
+</ol>
+<h3 id="example-syntax">Example Syntax</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Binding the image with an explicit format layout</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> rgba32f<span class="op">)</span> <span class="dt">readonly</span> <span class="kw">uniform</span> <span class="dt">image2D</span> uInputImage<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Define the exact texel coordinate to read</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span> texelCoord <span class="op">=</span> <span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">xy</span><span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Retrieve the unfilitered texel directly from memory</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> texel <span class="op">=</span> <span class="bu">imageLoad</span><span class="op">(</span>uInputImage<span class="op">,</span> texelCoord<span class="op">);</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// texel now contains the exact data stored at (texelCoord.x, texelCoord.y)</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="key-differences-from-standard-sampling">Key Differences from
+Standard Sampling</h3>
+<ul>
+<li><strong>No Filtering:</strong> <code>imageLoad</code> performs a
+direct memory fetch; it cannot perform linear or anisotropic
+filtering.</li>
+<li><strong>No Normalized Coordinates:</strong> Coordinates must
+strictly match the texel grid dimensions.</li>
+<li><strong>Coherency and Synchronization:</strong> Unlike read-only
+samplers, <code>imageLoad</code> can read data that has been modified
+within the same pass by <code>imageStore</code>, provided memory
+barriers (such as <code>memoryBarrierImage()</code>) are properly
+deployed.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

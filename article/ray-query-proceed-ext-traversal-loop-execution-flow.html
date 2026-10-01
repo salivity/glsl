@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rayQueryProceedEXT Traversal Loop Execution Flow - glsl</title>
+    <meta name="description" content="This article provides an overview of the execution flow of the rayQueryProceedEXT traversal loop used for inline ray tracing in GLSL compute shaders. It details how the state machine advances through bounding volume hierarchies, how the loop yields execu">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/ray-query-proceed-ext-traversal-loop-execution-flow">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="rayQueryProceedEXT Traversal Loop Execution Flow - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/ray-query-proceed-ext-traversal-loop-execution-flow" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of the execution flow of the rayQueryProceedEXT traversal loop used for inline ray tracing in GLSL compute shaders. It details how the state machine advances through bounding volume hierarchies, how the loop yields execu" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="rayqueryproceedext-traversal-loop-execution-flow">rayQueryProceedEXT
+Traversal Loop Execution Flow</h1>
+<p>This article provides an overview of the execution flow of the
+<code>rayQueryProceedEXT</code> traversal loop used for inline ray
+tracing in GLSL compute shaders. It details how the state machine
+advances through bounding volume hierarchies, how the loop yields
+execution back to the shader for candidate evaluation, and how final
+committed intersections are resolved once traversal concludes.</p>
+<h3 id="1-initialization-phase">1. Initialization Phase</h3>
+<p>Before executing the traversal loop, the ray query object must be
+defined and configured. The shader invokes
+<code>rayQueryInitializeEXT</code>, passing:</p>
+<ul>
+<li>The acceleration structure
+(<code>accelerationStructureEXT</code>).</li>
+<li>Ray flags (e.g., <code>gl_RayFlagsOpaqueEXT</code>,
+<code>gl_RayFlagsTerminateOnFirstHitEXT</code>).</li>
+<li>Cull mask to filter geometry.</li>
+<li>Ray parameters: origin, minimum distance (<span
+class="math inline">\(t_{\text{min}}\)</span>), direction vector, and
+maximum distance (<span
+class="math inline">\(t_{\text{max}}\)</span>).</li>
+</ul>
+<p>At this stage, the internal traversal state machine is initialized at
+the root of the acceleration structure, but traversal has not yet
+started.</p>
+<h3 id="2-the-traversal-state-loop">2. The Traversal State Loop</h3>
+<p>The traversal occurs inside a <code>while</code> loop driven by
+<code>rayQueryProceedEXT</code>:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">while</span> <span class="op">(</span><span class="fu">rayQueryProceedEXT</span><span class="op">(</span>rayQuery<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Candidate processing</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Every time <code>rayQueryProceedEXT</code> is called, the GPU
+traversal hardware/software resumes walking down the acceleration
+structure:</p>
+<ol type="1">
+<li><strong>Internal Traversal:</strong> The engine tests ray
+intersections against internal nodes (BVH bounding boxes) and leaves
+(geometry primitives).</li>
+<li><strong>Opaque Primitives:</strong> If a primitive is marked opaque
+(either via geometry flags or ray flags), the traversal engine records
+the intersection automatically, updates <span
+class="math inline">\(t_{\text{max}}\)</span> (if looking for the
+closest hit), and continues traversal without interrupting shader
+execution.</li>
+<li><strong>Candidate Yielding (<code>return true</code>):</strong>
+Traversal pauses and <code>rayQueryProceedEXT</code> returns
+<code>true</code> only when an intersection requires custom shader
+intervention. This happens in two scenarios:
+<ul>
+<li><strong>Non-Opaque Triangles:</strong> An intersection with a
+non-opaque triangle occurred, requiring shader logic (such as an alpha
+test) to accept or discard the hit.</li>
+<li><strong>Procedural Primitives (AABBs):</strong> The ray intersected
+an Axis-Aligned Bounding Box representing a custom procedural shape that
+the shader must test analytically.</li>
+</ul></li>
+<li><strong>Traversal Complete (<code>return false</code>):</strong>
+When all possible nodes and primitives have been evaluated, or when an
+early termination condition is met (such as
+<code>gl_RayFlagsTerminateOnFirstHitEXT</code>),
+<code>rayQueryProceedEXT</code> returns <code>false</code>, exiting the
+loop.</li>
+</ol>
+<h3 id="3-candidate-processing-inside-the-loop">3. Candidate Processing
+Inside the Loop</h3>
+<p>When the loop body executes, the shader queries the candidate type
+using:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> candidateType <span class="op">=</span> <span class="fu">rayQueryGetIntersectionTypeEXT</span><span class="op">(</span>rayQuery<span class="op">,</span> <span class="kw">false</span><span class="op">);</span></span></code></pre></div>
+<p>Passing <code>false</code> specifies querying candidate (temporary)
+intersections rather than committed ones. The shader handles the
+candidate based on its type:</p>
+<ul>
+<li><strong><code>gl_RayQueryCandidateIntersectionTriangleEXT</code>:</strong>
+The shader reads candidate attributes (e.g., UV coordinates, primitive
+ID) to determine opacity. If the intersection is valid, it calls:
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">rayQueryConfirmIntersectionEXT</span><span class="op">(</span>rayQuery<span class="op">);</span></span></code></pre></div>
+If not confirmed, the traversal engine treats the triangle as
+transparent and proceeds without reducing the search distance.</li>
+<li><strong><code>gl_RayQueryCandidateIntersectionAABBEXT</code>:</strong>
+The shader evaluates intersection math against the procedural geometry
+within the box. If a hit occurs, the shader submits it to the traversal
+engine by calling:
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">rayQueryGenerateIntersectionEXT</span><span class="op">(</span>rayQuery<span class="op">,</span> hitT<span class="op">);</span></span></code></pre></div></li>
+</ul>
+<p>Once the loop body completes, control returns to the loop header,
+invoking <code>rayQueryProceedEXT</code> again to resume hardware
+traversal.</p>
+<h3 id="4-committed-intersection-handling">4. Committed Intersection
+Handling</h3>
+<p>After the loop exits, traversal is complete. The ray query contains
+either the closest confirmed intersection or no intersection at all (a
+miss).</p>
+<p>The result is retrieved by inspecting the committed hit state:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> committedType <span class="op">=</span> <span class="fu">rayQueryGetIntersectionTypeEXT</span><span class="op">(</span>rayQuery<span class="op">,</span> <span class="kw">true</span><span class="op">);</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>committedType <span class="op">==</span> gl_RayQueryCommittedIntersectionNoneEXT<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Ray missed all geometry</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Ray hit geometry (gl_RayQueryCommittedIntersectionTriangleEXT or procedural)</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> t <span class="op">=</span> <span class="fu">rayQueryGetIntersectionTEXT</span><span class="op">(</span>rayQuery<span class="op">,</span> <span class="kw">true</span><span class="op">);</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Retrieve other hit properties to shade the point</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Passing <code>true</code> to the query accessor functions fetches the
+finalized data from the committed hit record.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

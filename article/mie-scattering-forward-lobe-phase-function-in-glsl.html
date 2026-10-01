@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mie Scattering Forward-Lobe Phase Function in GLSL - glsl</title>
+    <meta name="description" content="This article details the mathematical formulation and GLSL implementation used to calculate the forward-lobe intensity of Mie scattering in real-time atmospheric shaders. In atmospheric rendering, large particulate matter such as aerosols, dust, and wate">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/mie-scattering-forward-lobe-phase-function-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Mie Scattering Forward-Lobe Phase Function in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/mie-scattering-forward-lobe-phase-function-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article details the mathematical formulation and GLSL implementation used to calculate the forward-lobe intensity of Mie scattering in real-time atmospheric shaders. In atmospheric rendering, large particulate matter such as aerosols, dust, and wate" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="mie-scattering-forward-lobe-phase-function-in-glsl">Mie
+Scattering Forward-Lobe Phase Function in GLSL</h1>
+<p>This article details the mathematical formulation and GLSL
+implementation used to calculate the forward-lobe intensity of Mie
+scattering in real-time atmospheric shaders. In atmospheric rendering,
+large particulate matter such as aerosols, dust, and water droplets
+causes Mie scattering, which directs light strongly along the incoming
+path of illumination. You will learn the exact formulas used to
+approximate this effect—primarily the Henyey-Greenstein phase function
+and the Cornette-Shanks variation—and how to implement them efficiently
+in GLSL.</p>
+<h2 id="the-henyey-greenstein-phase-function">The Henyey-Greenstein
+Phase Function</h2>
+<p>Because true Mie scattering involves complex infinite series
+solutions via Maxwell's equations (Lorentz-Mie theory), real-time
+graphics rely on empirical phase functions. The standard formula used to
+evaluate the forward-lobe intensity in GLSL atmospheric simulation is
+the <strong>Henyey-Greenstein phase function</strong>:</p>
+<p><span class="math display">\[P_{HG}(\theta, g) = \frac{1}{4\pi}
+\frac{1 - g^2}{(1 + g^2 - 2g \cos\theta)^{3/2}}\]</span></p>
+<h3 id="variables-defined">Variables Defined:</h3>
+<ul>
+<li><strong><span class="math inline">\(\theta\)</span>
+(Theta):</strong> The scattering angle between the incoming light
+direction vector (<span class="math inline">\(\vec{L}\)</span>) and the
+view direction vector (<span
+class="math inline">\(\vec{V}\)</span>).</li>
+<li><strong><span class="math inline">\(\cos\theta\)</span>:</strong>
+The dot product of the normalized light direction and view direction
+(<span class="math inline">\(\cos\theta = \vec{L} \cdot
+\vec{V}\)</span>).</li>
+<li><strong><span class="math inline">\(g\)</span> (Asymmetry
+Parameter):</strong> A coefficient strictly in the range <span
+class="math inline">\([-1, 1]\)</span> defining the scattering
+directionality:
+<ul>
+<li><span class="math inline">\(g &gt; 0\)</span>: Forward scattering
+(characteristic of Mie scattering; typically set between <span
+class="math inline">\(0.75\)</span> and <span
+class="math inline">\(0.99\)</span> for hazes and sun halos).</li>
+<li><span class="math inline">\(g = 0\)</span>: Isotropic scattering
+(equal in all directions).</li>
+<li><span class="math inline">\(g &lt; 0\)</span>: Back-scattering.</li>
+</ul></li>
+</ul>
+<h2 id="the-cornette-shanks-variation">The Cornette-Shanks
+Variation</h2>
+<p>For higher physical accuracy without significant performance cost,
+atmospheric renderers often replace the standard Henyey-Greenstein
+equation with the <strong>Cornette-Shanks phase function</strong>. It
+provides a physically plausible approximation of Mie scattering by
+factoring in the polarization-dependent <span class="math inline">\((1 +
+\cos^2\theta)\)</span> term:</p>
+<p><span class="math display">\[P_{CS}(\theta, g) = \frac{3}{8\pi}
+\frac{(1 - g^2)(1 + \cos^2\theta)}{(2 + g^2)(1 + g^2 - 2g
+\cos\theta)^{3/2}}\]</span></p>
+<p>This function retains the pronounced forward peak of the
+Henyey-Greenstein equation while correctly blending into Rayleigh-like
+behaviors at wider angles.</p>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>Below are optimized implementations of both phase functions for
+fragment and compute shaders.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define PI 3.14159265359</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Standard Henyey-Greenstein phase function</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">henyeyGreenstein</span><span class="op">(</span><span class="dt">float</span> cosTheta<span class="op">,</span> <span class="dt">float</span> g<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> g2 <span class="op">=</span> g <span class="op">*</span> g<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denom <span class="op">=</span> <span class="fl">1.0</span> <span class="op">+</span> g2 <span class="op">-</span> <span class="fl">2.0</span> <span class="op">*</span> g <span class="op">*</span> cosTheta<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">/</span> <span class="op">(</span><span class="fl">4.0</span> <span class="op">*</span> PI<span class="op">))</span> <span class="op">*</span> <span class="op">((</span><span class="fl">1.0</span> <span class="op">-</span> g2<span class="op">)</span> <span class="op">/</span> <span class="bu">pow</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>denom<span class="op">,</span> <span class="fl">0.0001</span><span class="op">),</span> <span class="fl">1.5</span><span class="op">));</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co">// Cornette-Shanks variation for improved atmospheric realism</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">cornetteShanks</span><span class="op">(</span><span class="dt">float</span> cosTheta<span class="op">,</span> <span class="dt">float</span> g<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> g2 <span class="op">=</span> g <span class="op">*</span> g<span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denom <span class="op">=</span> <span class="fl">1.0</span> <span class="op">+</span> g2 <span class="op">-</span> <span class="fl">2.0</span> <span class="op">*</span> g <span class="op">*</span> cosTheta<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> numerator <span class="op">=</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> g2<span class="op">)</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">+</span> cosTheta <span class="op">*</span> cosTheta<span class="op">);</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span><span class="fl">3.0</span> <span class="op">/</span> <span class="op">(</span><span class="fl">8.0</span> <span class="op">*</span> PI<span class="op">))</span> <span class="op">*</span> <span class="op">(</span>numerator <span class="op">/</span> <span class="op">((</span><span class="fl">2.0</span> <span class="op">+</span> g2<span class="op">)</span> <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>denom<span class="op">,</span> <span class="fl">0.0001</span><span class="op">),</span> <span class="fl">1.5</span><span class="op">)));</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="integration-in-the-raymarching-loop">Integration in the
+Raymarching Loop</h3>
+<p>In an atmospheric raymarcher, evaluate the scattering angle at every
+sample point using:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> lightDir <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>sunPosition <span class="op">-</span> samplePosition<span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> viewDir  <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>rayDirection<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Compute cosine of the scattering angle</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> cosTheta <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>viewDir<span class="op">,</span> lightDir<span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Evaluate Mie phase intensity using an asymmetry factor (e.g., g = 0.8)</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> miePhase <span class="op">=</span> <span class="fu">cornetteShanks</span><span class="op">(</span>cosTheta<span class="op">,</span> <span class="fl">0.8</span><span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co">// Combine with the Mie scattering coefficient and in-scattered light</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> inScatteredMie <span class="op">=</span> incomingLight <span class="op">*</span> mieExtinctionCoefficient <span class="op">*</span> miePhase<span class="op">;</span></span></code></pre></div>
+<p>A clamping threshold (such as <code>max(denom, 0.0001)</code>)
+prevents division by zero when looking directly into the sun (<span
+class="math inline">\(\cos\theta \to 1\)</span>) when <span
+class="math inline">\(g \to 1\)</span>.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

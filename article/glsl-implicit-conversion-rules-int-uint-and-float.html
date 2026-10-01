@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Implicit Conversion Rules: Int, Uint, and Float - glsl</title>
+    <meta name="description" content="Modern OpenGL Shading Language (GLSL) version 4.00 and above—or systems supporting the GLARBshaderimplicitconversions extension—allows automatic type promotion between basic numeric types. These implicit conversions eliminate the need for verbose exp">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-implicit-conversion-rules-int-uint-and-float">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Implicit Conversion Rules: Int, Uint, and Float - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-implicit-conversion-rules-int-uint-and-float" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Modern OpenGL Shading Language (GLSL) version 4.00 and above—or systems supporting the GLARBshaderimplicitconversions extension—allows automatic type promotion between basic numeric types. These implicit conversions eliminate the need for verbose exp" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-implicit-conversion-rules-int-uint-and-float">GLSL Implicit
+Conversion Rules: Int, Uint, and Float</h1>
+<p>Modern OpenGL Shading Language (GLSL) version 4.00 and above—or
+systems supporting the <code>GL_ARB_shader_implicit_conversions</code>
+extension—allows automatic type promotion between basic numeric types.
+These implicit conversions eliminate the need for verbose explicit
+casting when mixing signed integers (<code>int</code>), unsigned
+integers (<code>uint</code>), and single-precision floating-point
+numbers (<code>float</code>). This article covers the hierarchy of
+implicit type conversions, the rules governing mixed-type expressions
+and assignments, and the limitations designed to prevent unintended
+precision loss.</p>
+<h2 id="the-type-hierarchy-and-promotion-direction">The Type Hierarchy
+and Promotion Direction</h2>
+<p>Implicit conversion in GLSL follows a strict unidirectional hierarchy
+based on data representation and value preservation. Conversions are
+allowed only in the direction of increasing capacity or flexibility,
+moving strictly from left to right:</p>
+<p><span class="math display">\[\text{int} \longrightarrow \text{uint}
+\longrightarrow \text{float}\]</span></p>
+<ul>
+<li><strong><code>int</code> to <code>uint</code></strong>: A signed
+integer can be implicitly promoted to an unsigned integer.</li>
+<li><strong><code>int</code> to <code>float</code></strong>: A signed
+integer can be implicitly promoted to a single-precision float.</li>
+<li><strong><code>uint</code> to <code>float</code></strong>: An
+unsigned integer can be implicitly promoted to a single-precision
+float.</li>
+</ul>
+<p>GLSL strictly prohibits reverse conversions (narrowing). A
+<code>float</code> will never implicitly convert to an <code>int</code>
+or <code>uint</code>, and a <code>uint</code> will never implicitly
+convert to an <code>int</code>. Any attempt to assign a higher-ranked
+type to a lower-ranked variable without explicit casting (such as
+<code>int(myFloat)</code>) results in a compilation error.</p>
+<h2 id="binary-operations-and-arithmetic">Binary Operations and
+Arithmetic</h2>
+<p>When arithmetic, relational, or bitwise binary operators encounter
+operands of differing types, GLSL applies the type hierarchy to
+determine a common type before executing the operation:</p>
+<ol type="1">
+<li><strong>Mixed <code>float</code> and Integer (<code>int</code> or
+<code>uint</code>)</strong>: The integer operand is promoted to
+<code>float</code>, and the operation evaluates to a
+<code>float</code>.</li>
+<li><strong>Mixed <code>int</code> and <code>uint</code></strong>: The
+<code>int</code> operand is promoted to <code>uint</code>, and the
+operation evaluates to a <code>uint</code>.</li>
+</ol>
+<h3 id="examples">Examples:</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span>   i <span class="op">=</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span>  u <span class="op">=</span> <span class="dv">4</span>u<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> f <span class="op">=</span> <span class="fl">1.5</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>auto a <span class="op">=</span> i <span class="op">+</span> f<span class="op">;</span> <span class="co">// &#39;i&#39; becomes float(2.0); result is float (3.5)</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>auto b <span class="op">=</span> u <span class="op">*</span> f<span class="op">;</span> <span class="co">// &#39;u&#39; becomes float(4.0); result is float (6.0)</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>auto c <span class="op">=</span> i <span class="op">+</span> u<span class="op">;</span> <span class="co">// &#39;i&#39; becomes uint(2u);   result is uint (6u)</span></span></code></pre></div>
+<p>Care must be taken when mixing signed negative integers with unsigned
+integers; an <code>int</code> with a negative value will be
+reinterpreted via standard two's complement when implicitly promoted to
+<code>uint</code>, yielding a very large positive number.</p>
+<h2 id="assignment-and-initialization">Assignment and
+Initialization</h2>
+<p>Implicit conversions apply automatically during variable declaration,
+initialization, and assignment, provided the value on the right-hand
+side can be safely promoted to match the type of the left-hand side.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> f1 <span class="op">=</span> <span class="dv">10</span><span class="op">;</span>   <span class="co">// Valid: &#39;int&#39; literal 10 promoted to &#39;float&#39; (10.0)</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> f2 <span class="op">=</span> <span class="dv">10</span>u<span class="op">;</span>  <span class="co">// Valid: &#39;uint&#39; literal 10u promoted to &#39;float&#39; (10.0)</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span>  u1 <span class="op">=</span> <span class="dv">10</span><span class="op">;</span>   <span class="co">// Valid: &#39;int&#39; literal 10 promoted to &#39;uint&#39; (10u)</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span>   i1 <span class="op">=</span> <span class="dv">10</span>u<span class="op">;</span>  <span class="co">// Error: Cannot implicitly demote &#39;uint&#39; to &#39;int&#39;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span>   i2 <span class="op">=</span> <span class="fl">10.0</span><span class="op">;</span> <span class="co">// Error: Cannot implicitly demote &#39;float&#39; to &#39;int&#39;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span>  u2 <span class="op">=</span> <span class="fl">10.0</span><span class="op">;</span> <span class="co">// Error: Cannot implicitly demote &#39;float&#39; to &#39;uint&#39;</span></span></code></pre></div>
+<h2 id="function-overload-resolution">Function Overload Resolution</h2>
+<p>When calling overloaded functions, the GLSL compiler selects the
+function whose signature most closely matches the supplied argument
+types:</p>
+<ol type="1">
+<li><strong>Exact Match</strong>: If an exact signature matches the
+parameter types without conversion, that overload is selected.</li>
+<li><strong>Promotion Match</strong>: If no exact match exists, the
+compiler searches for overloads that can be satisfied using implicit
+conversions based on the promotion chain.</li>
+<li><strong>Ambiguity</strong>: If an invocation matches multiple
+overloads equally well via conversions, the compiler raises a
+compilation error due to ambiguity.</li>
+</ol>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">compute</span><span class="op">(</span><span class="dt">float</span> x<span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">compute</span><span class="op">(</span><span class="dt">uint</span> x<span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="fu">compute</span><span class="op">(</span><span class="dv">5</span><span class="op">);</span> <span class="co">// Ambiguous: &#39;int&#39; can implicitly convert to both &#39;uint&#39; and &#39;float&#39;</span></span></code></pre></div>
+<p>In such ambiguous cases, the call must be disambiguated using an
+explicit cast, such as <code>compute(float(5))</code> or
+<code>compute(uint(5))</code>.</p>
+<h2 id="vector-and-matrix-conversions">Vector and Matrix
+Conversions</h2>
+<p>Implicit conversion rules extend component-wise to vectors containing
+these scalar types:</p>
+<ul>
+<li><code>ivec</code> implicitly converts to <code>uvec</code> or
+<code>vec</code> of matching dimensions (e.g., <code>ivec3</code> to
+<code>vec3</code>).</li>
+<li><code>uvec</code> implicitly converts to <code>vec</code> of
+matching dimensions (e.g., <code>uvec2</code> to
+<code>vec2</code>).</li>
+</ul>
+<p>Vector conversions require strict dimension equality. An
+<code>int</code> cannot implicitly expand to a <code>vec2</code>, nor
+can an <code>ivec2</code> implicitly convert to a <code>vec3</code>. All
+scalar-to-vector promotions or dimensional changes must be handled
+through explicit constructors.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

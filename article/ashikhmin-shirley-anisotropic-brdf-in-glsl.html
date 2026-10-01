@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ashikhmin-Shirley Anisotropic BRDF in GLSL - glsl</title>
+    <meta name="description" content="This article details the mathematical formulation of the Ashikhmin-Shirley anisotropic specular Bidirectional Reflectance Distribution Function (BRDF) and demonstrates how to implement it directly in OpenGL Shading Language (GLSL). Designed to simulate a">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/ashikhmin-shirley-anisotropic-brdf-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Ashikhmin-Shirley Anisotropic BRDF in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/ashikhmin-shirley-anisotropic-brdf-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article details the mathematical formulation of the Ashikhmin-Shirley anisotropic specular Bidirectional Reflectance Distribution Function (BRDF) and demonstrates how to implement it directly in OpenGL Shading Language (GLSL). Designed to simulate a" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="ashikhmin-shirley-anisotropic-brdf-in-glsl">Ashikhmin-Shirley
+Anisotropic BRDF in GLSL</h1>
+<p>This article details the mathematical formulation of the
+Ashikhmin-Shirley anisotropic specular Bidirectional Reflectance
+Distribution Function (BRDF) and demonstrates how to implement it
+directly in OpenGL Shading Language (GLSL). Designed to simulate
+anisotropic surfaces such as brushed metal, woven fabrics, and hair,
+this microfacet-based model provides realistic specular highlights
+shaped by distinct directional roughness parameters.</p>
+<h2 id="mathematical-formulation">Mathematical Formulation</h2>
+<p>The Ashikhmin-Shirley model defines the specular component of a BRDF
+using surface normal <span class="math inline">\(\mathbf{n}\)</span>,
+tangent <span class="math inline">\(\mathbf{u}\)</span>, bitangent <span
+class="math inline">\(\mathbf{v}\)</span>, incoming light direction
+<span class="math inline">\(\mathbf{l}\)</span>, and outgoing view
+direction <span class="math inline">\(\mathbf{v}_o\)</span>.</p>
+<p>Given the half-vector <span class="math inline">\(\mathbf{h} =
+\frac{\mathbf{l} + \mathbf{v}_o}{\|\mathbf{l} +
+\mathbf{v}_o\|}\)</span>, the specular BRDF term <span
+class="math inline">\(\rho_s(\mathbf{l}, \mathbf{v}_o)\)</span> is
+defined as:</p>
+<p><span class="math display">\[\rho_s(\mathbf{l}, \mathbf{v}_o) =
+\frac{\sqrt{(n_u + 1)(n_v + 1)}}{8\pi} \cdot \frac{(\mathbf{n} \cdot
+\mathbf{h})^{\frac{n_u (\mathbf{h} \cdot \mathbf{u})^2 + n_v (\mathbf{h}
+\cdot \mathbf{v})^2}{1 - (\mathbf{h} \cdot \mathbf{n})^2}}}{(\mathbf{h}
+\cdot \mathbf{l}) \max(\mathbf{n} \cdot \mathbf{l}, \mathbf{n} \cdot
+\mathbf{v}_o)} \cdot F(\mathbf{h} \cdot \mathbf{l})\]</span></p>
+<h3 id="components">Components:</h3>
+<ul>
+<li><strong>Specular Exponents (<span class="math inline">\(n_u,
+n_v\)</span>):</strong> Control surface roughness along the tangent
+<span class="math inline">\(\mathbf{u}\)</span> and bitangent <span
+class="math inline">\(\mathbf{v}\)</span> directions.</li>
+<li><strong>Normalization Factor:</strong> <span
+class="math inline">\(\frac{\sqrt{(n_u + 1)(n_v + 1)}}{8\pi}\)</span>
+ensures the BRDF conserves energy.</li>
+<li><strong>Anisotropic Exponent:</strong> <span
+class="math inline">\(\frac{n_u (\mathbf{h} \cdot \mathbf{u})^2 + n_v
+(\mathbf{h} \cdot \mathbf{v})^2}{1 - (\mathbf{h} \cdot
+\mathbf{n})^2}\)</span> stretches the highlight along the tangent axes.
+When <span class="math inline">\(\mathbf{h} = \mathbf{n}\)</span>, <span
+class="math inline">\(1 - (\mathbf{h} \cdot \mathbf{n})^2 = 0\)</span>;
+taking the limit resolves this singularity to zero.</li>
+<li><strong>Denominator:</strong> Attenuates the reflection based on the
+geometric interaction of view and light angles, avoiding standard
+microfacet shadowing approximations.</li>
+<li><strong>Fresnel Term <span class="math inline">\(F(\mathbf{h} \cdot
+\mathbf{l})\)</span>:</strong> Evaluated using Schlick's approximation:
+<span class="math display">\[F(\mathbf{h} \cdot \mathbf{l}) = R_0 + (1 -
+R_0)(1 - (\mathbf{h} \cdot \mathbf{l}))^5\]</span> where <span
+class="math inline">\(R_0\)</span> is the specular reflectance at normal
+incidence.</li>
+</ul>
+<hr />
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>The following GLSL function computes the anisotropic specular
+reflection. It assumes input vectors are normalized and incorporates
+numerical safeguards against division by zero.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define PI 3.14159265359</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">ashikhminShirleySpecular</span><span class="op">(</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> N<span class="op">,</span>            <span class="co">// Surface normal</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> T<span class="op">,</span>            <span class="co">// Tangent</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> B<span class="op">,</span>            <span class="co">// Bitangent</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> V<span class="op">,</span>            <span class="co">// View direction (pointing toward camera)</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> L<span class="op">,</span>            <span class="co">// Light direction (pointing toward light)</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> nu<span class="op">,</span>          <span class="co">// Specular exponent along tangent T</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> nv<span class="op">,</span>          <span class="co">// Specular exponent along bitangent B</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> R0            <span class="co">// Specular reflectance at normal incidence</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> H <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>L <span class="op">+</span> V<span class="op">);</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotL <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> L<span class="op">),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotV <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> V<span class="op">),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> NdotH <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>N<span class="op">,</span> H<span class="op">),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> HdotL <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>H<span class="op">,</span> L<span class="op">),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> HdotT <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>H<span class="op">,</span> T<span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> HdotB <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>H<span class="op">,</span> B<span class="op">);</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Prevent evaluation below horizon</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>NdotL <span class="op">&lt;=</span> <span class="fl">0.0</span> <span class="op">||</span> NdotV <span class="op">&lt;=</span> <span class="fl">0.0</span> <span class="op">||</span> HdotL <span class="op">&lt;=</span> <span class="fl">0.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Normalization constant</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> normalization <span class="op">=</span> <span class="bu">sqrt</span><span class="op">((</span>nu <span class="op">+</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">*</span> <span class="op">(</span>nv <span class="op">+</span> <span class="fl">1.0</span><span class="op">))</span> <span class="op">/</span> <span class="op">(</span><span class="fl">8.0</span> <span class="op">*</span> PI<span class="op">);</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Anisotropic exponent computation</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denominatorExp <span class="op">=</span> <span class="fl">1.0</span> <span class="op">-</span> <span class="op">(</span>NdotH <span class="op">*</span> NdotH<span class="op">);</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> exponent <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>denominatorExp <span class="op">&gt;</span> <span class="fl">1e-5</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>        exponent <span class="op">=</span> <span class="op">(</span>nu <span class="op">*</span> HdotT <span class="op">*</span> HdotT <span class="op">+</span> nv <span class="op">*</span> HdotB <span class="op">*</span> HdotB<span class="op">)</span> <span class="op">/</span> denominatorExp<span class="op">;</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Specular distribution term</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> specularDist <span class="op">=</span> <span class="bu">pow</span><span class="op">(</span>NdotH<span class="op">,</span> exponent<span class="op">);</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Denominator with geometric attenuation factor</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denom <span class="op">=</span> HdotL <span class="op">*</span> <span class="bu">max</span><span class="op">(</span>NdotL<span class="op">,</span> NdotV<span class="op">);</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Schlick&#39;s Fresnel approximation</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> F <span class="op">=</span> R0 <span class="op">+</span> <span class="op">(</span><span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">)</span> <span class="op">-</span> R0<span class="op">)</span> <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> HdotL<span class="op">,</span> <span class="fl">5.0</span><span class="op">);</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Final specular BRDF</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> normalization <span class="op">*</span> <span class="op">(</span>specularDist <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>denom<span class="op">,</span> <span class="fl">1e-5</span><span class="op">))</span> <span class="op">*</span> F<span class="op">;</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="integration-into-the-rendering-equation">Integration into the
+Rendering Equation</h3>
+<p>To evaluate the reflected radiance <span
+class="math inline">\(L_o\)</span>, multiply the resulting BRDF by the
+incoming light intensity <span class="math inline">\(L_i\)</span> and
+the cosine attenuation factor <span class="math inline">\((\mathbf{n}
+\cdot \mathbf{l})\)</span>:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> specularLight <span class="op">=</span> <span class="fu">ashikhminShirleySpecular</span><span class="op">(</span>N<span class="op">,</span> T<span class="op">,</span> B<span class="op">,</span> V<span class="op">,</span> L<span class="op">,</span> nu<span class="op">,</span> nv<span class="op">,</span> R0<span class="op">)</span> <span class="op">*</span> lightColor <span class="op">*</span> NdotL<span class="op">;</span></span></code></pre></div></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

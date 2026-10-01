@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Implementing Clustered Forward Shading in GLSL - glsl</title>
+    <meta name="description" content="This article details the implementation of clustered forward shading using GLSL compute shaders, focusing on how a 3D spatial grid (clusters or "froxels") is allocated, culled, and sampled. Clustered forward shading solves the $O(Lights \times Geometry)$">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/implementing-clustered-forward-shading-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Implementing Clustered Forward Shading in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/implementing-clustered-forward-shading-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article details the implementation of clustered forward shading using GLSL compute shaders, focusing on how a 3D spatial grid (clusters or "froxels") is allocated, culled, and sampled. Clustered forward shading solves the $O(Lights \times Geometry)$" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="implementing-clustered-forward-shading-in-glsl">Implementing
+Clustered Forward Shading in GLSL</h1>
+<p>This article details the implementation of clustered forward shading
+using GLSL compute shaders, focusing on how a 3D spatial grid (clusters
+or "froxels") is allocated, culled, and sampled. Clustered forward
+shading solves the <span class="math inline">\(O(Lights \times
+Geometry)\)</span> bottleneck of traditional forward rendering by
+discretizing the view frustum into a 3D grid along screen-space
+coordinates and view depth. By leveraging compute shaders to generate
+spatial bounding volumes and evaluate light-cluster intersections, the
+renderer allows fragment shaders to evaluate only the active lights
+intersecting a specific fragment's spatial cluster, retaining standard
+forward rendering benefits such as hardware multisampling (MSAA) and
+custom material models.</p>
+<h3 id="1-view-frustum-discretization">1. View Frustum
+Discretization</h3>
+<p>The camera view frustum is divided into a three-dimensional grid with
+dimensions <span class="math inline">\(S_x \times S_y \times
+S_z\)</span> (e.g., <span class="math inline">\(16 \times 9 \times
+24\)</span>). While the <span class="math inline">\(X\)</span> and <span
+class="math inline">\(Y\)</span> coordinates represent uniform divisions
+of screen-space tiles, the <span class="math inline">\(Z\)</span>
+coordinate is distributed exponentially across depth to ensure that
+clusters maintain an approximately cubic volume as frustum bounds expand
+with distance.</p>
+<p>To map view-space depth <span class="math inline">\(z\)</span> to a
+cluster slice index <span class="math inline">\(k\)</span>, the depth
+distribution is calculated as follows:</p>
+<p><span class="math display">\[k = \left\lfloor \frac{\log(-z /
+z_{near})}{\log(z_{far} / z_{near})} \times S_z
+\right\rfloor\]</span></p>
+<p>This exponential mapping accounts for perspective distortion,
+allocating higher spatial resolution near the camera and lower
+resolution further away.</p>
+<h3 id="2-cluster-aabb-generation-compute-pass">2. Cluster AABB
+Generation Compute Pass</h3>
+<p>The first compute stage calculates an Axis-Aligned Bounding Box
+(AABB) in view space for each cluster <span class="math inline">\((i, j,
+k)\)</span>. This pass only needs to re-execute when the camera's
+projection matrix or field of view changes.</p>
+<p>In the compute shader, each thread corresponds to a unique cluster
+coordinate <span class="math inline">\((i, j, k)\)</span>:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> VolumeAABB <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> minPoint<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> maxPoint<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> ClusterAABBBuffer <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    VolumeAABB clusters<span class="op">[];</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> inverseProjection<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">uvec3</span> clusterGridDim<span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec2</span> screenDimensions<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> zNear<span class="op">;</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> zFar<span class="op">;</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> <span class="fu">screenToView</span><span class="op">(</span><span class="dt">vec4</span> screenCoord<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> ndc <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>        <span class="op">(</span>screenCoord<span class="op">.</span><span class="fu">x</span> <span class="op">/</span> screenDimensions<span class="op">.</span><span class="fu">x</span><span class="op">)</span> <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">,</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>        <span class="op">(</span>screenCoord<span class="op">.</span><span class="fu">y</span> <span class="op">/</span> screenDimensions<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">,</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>        screenCoord<span class="op">.</span><span class="fu">z</span><span class="op">,</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>        <span class="fl">1.0</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> view <span class="op">=</span> inverseProjection <span class="op">*</span> ndc<span class="op">;</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> view <span class="op">/</span> view<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uvec3</span> clusterID <span class="op">=</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">;</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>clusterID<span class="op">.</span><span class="fu">x</span> <span class="op">&gt;=</span> clusterGridDim<span class="op">.</span><span class="fu">x</span> <span class="op">||</span> clusterID<span class="op">.</span><span class="fu">y</span> <span class="op">&gt;=</span> clusterGridDim<span class="op">.</span><span class="fu">y</span> <span class="op">||</span> clusterID<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;=</span> clusterGridDim<span class="op">.</span><span class="fu">z</span><span class="op">)</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> <span class="dt">index</span> <span class="op">=</span> clusterID<span class="op">.</span><span class="fu">x</span> <span class="op">+</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>                 clusterID<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> clusterGridDim<span class="op">.</span><span class="fu">x</span> <span class="op">+</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>                 clusterID<span class="op">.</span><span class="fu">z</span> <span class="op">*</span> clusterGridDim<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> clusterGridDim<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> tileSize <span class="op">=</span> screenDimensions <span class="op">/</span> <span class="dt">vec2</span><span class="op">(</span>clusterGridDim<span class="op">.</span><span class="fu">xy</span><span class="op">);</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate cluster min and max in screen coordinates</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> minScreen <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span>clusterID<span class="op">.</span><span class="fu">xy</span><span class="op">)</span> <span class="op">*</span> tileSize<span class="op">;</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> maxScreen <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span>clusterID<span class="op">.</span><span class="fu">xy</span> <span class="op">+</span> <span class="dt">uvec2</span><span class="op">(</span><span class="dv">1</span><span class="op">))</span> <span class="op">*</span> tileSize<span class="op">;</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Exponential depth slicing</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> tileNear <span class="op">=</span> <span class="op">-</span>zNear <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span>zFar <span class="op">/</span> zNear<span class="op">,</span> <span class="dt">float</span><span class="op">(</span>clusterID<span class="op">.</span><span class="fu">z</span><span class="op">)</span> <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>clusterGridDim<span class="op">.</span><span class="fu">z</span><span class="op">));</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> tileFar  <span class="op">=</span> <span class="op">-</span>zNear <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span>zFar <span class="op">/</span> zNear<span class="op">,</span> <span class="dt">float</span><span class="op">(</span>clusterID<span class="op">.</span><span class="fu">z</span> <span class="op">+</span> <span class="dv">1</span><span class="op">)</span> <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>clusterGridDim<span class="op">.</span><span class="fu">z</span><span class="op">));</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Convert corners to view space using the near plane depth projection</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> minViewNear <span class="op">=</span> <span class="fu">screenToView</span><span class="op">(</span><span class="dt">vec4</span><span class="op">(</span>minScreen<span class="op">,</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)).</span><span class="fu">xyz</span> <span class="op">*</span> <span class="op">(</span>tileNear <span class="op">/</span> <span class="op">-</span>zNear<span class="op">);</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> maxViewNear <span class="op">=</span> <span class="fu">screenToView</span><span class="op">(</span><span class="dt">vec4</span><span class="op">(</span>maxScreen<span class="op">,</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)).</span><span class="fu">xyz</span> <span class="op">*</span> <span class="op">(</span>tileNear <span class="op">/</span> <span class="op">-</span>zNear<span class="op">);</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> minViewFar  <span class="op">=</span> <span class="fu">screenToView</span><span class="op">(</span><span class="dt">vec4</span><span class="op">(</span>minScreen<span class="op">,</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)).</span><span class="fu">xyz</span> <span class="op">*</span> <span class="op">(</span>tileFar <span class="op">/</span> <span class="op">-</span>zNear<span class="op">);</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> maxViewFar  <span class="op">=</span> <span class="fu">screenToView</span><span class="op">(</span><span class="dt">vec4</span><span class="op">(</span>maxScreen<span class="op">,</span> <span class="op">-</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)).</span><span class="fu">xyz</span> <span class="op">*</span> <span class="op">(</span>tileFar <span class="op">/</span> <span class="op">-</span>zNear<span class="op">);</span></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> minPoint <span class="op">=</span> <span class="bu">min</span><span class="op">(</span><span class="bu">min</span><span class="op">(</span>minViewNear<span class="op">,</span> maxViewNear<span class="op">),</span> <span class="bu">min</span><span class="op">(</span>minViewFar<span class="op">,</span> maxViewFar<span class="op">));</span></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> maxPoint <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>minViewNear<span class="op">,</span> maxViewNear<span class="op">),</span> <span class="bu">max</span><span class="op">(</span>minViewFar<span class="op">,</span> maxViewFar<span class="op">));</span></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>    clusters<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">minPoint</span> <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>minPoint<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>    clusters<span class="op">[</span><span class="dt">index</span><span class="op">].</span><span class="fu">maxPoint</span> <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>maxPoint<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="3-light-culling-and-allocation-compute-pass">3. Light Culling
+and Allocation Compute Pass</h3>
+<p>The light culling compute shader executes every frame. It checks
+which lights intersect each cluster's AABB and builds an indirection
+grid. The data is stored in three Shader Storage Buffer Objects
+(SSBOs):</p>
+<ol type="1">
+<li><strong>Cluster Grid Buffer:</strong> Stores an offset and a count
+per cluster.</li>
+<li><strong>Global Light Index List:</strong> A flattened dynamic array
+of light indices.</li>
+<li><strong>Global Index Counter:</strong> An atomic counter keeping
+track of the current write index in the global light index list.</li>
+</ol>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">16</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">9</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> PointLight <span class="op">{</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> positionView<span class="op">;</span> <span class="co">// xyz: position in view space, w: radius</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> color<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> LightGrid <span class="op">{</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> <span class="dt">offset</span><span class="op">;</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> count<span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> ClusterAABBBuffer <span class="op">{</span> VolumeAABB clusters<span class="op">[];</span> <span class="op">};</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> LightDataBuffer    <span class="op">{</span> PointLight pointLights<span class="op">[];</span> <span class="op">};</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="dt">writeonly</span> <span class="kw">buffer</span> LightGridBuffer   <span class="op">{</span> LightGrid clusterGrid<span class="op">[];</span> <span class="op">};</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">3</span><span class="op">)</span> <span class="dt">writeonly</span> <span class="kw">buffer</span> GlobalIndexBuffer <span class="op">{</span> <span class="dt">uint</span> globalLightIndices<span class="op">[];</span> <span class="op">};</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">4</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">atomic_uint</span> globalIndexCounter<span class="op">;</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">uint</span> totalLights<span class="op">;</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">uvec3</span> clusterGridDim<span class="op">;</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> <span class="fu">testSphereAABB</span><span class="op">(</span><span class="dt">vec3</span> center<span class="op">,</span> <span class="dt">float</span> radius<span class="op">,</span> <span class="dt">vec3</span> aabbMin<span class="op">,</span> <span class="dt">vec3</span> aabbMax<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> closestPoint <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>center<span class="op">,</span> aabbMin<span class="op">,</span> aabbMax<span class="op">);</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> delta <span class="op">=</span> center <span class="op">-</span> closestPoint<span class="op">;</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">dot</span><span class="op">(</span>delta<span class="op">,</span> delta<span class="op">)</span> <span class="op">&lt;=</span> <span class="op">(</span>radius <span class="op">*</span> radius<span class="op">);</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> clusterIndex <span class="op">=</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span> <span class="op">+</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>                        <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">y</span> <span class="op">*</span> clusterGridDim<span class="op">.</span><span class="fu">x</span> <span class="op">+</span></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>                        <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">z</span> <span class="op">*</span> clusterGridDim<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> clusterGridDim<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>    VolumeAABB aabb <span class="op">=</span> clusters<span class="op">[</span>clusterIndex<span class="op">];</span></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> localLightIndices<span class="op">[</span><span class="dv">256</span><span class="op">];</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> localCount <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">uint</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> totalLights<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>        PointLight light <span class="op">=</span> pointLights<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span><span class="fu">testSphereAABB</span><span class="op">(</span>light<span class="op">.</span><span class="fu">positionView</span><span class="op">.</span><span class="fu">xyz</span><span class="op">,</span> light<span class="op">.</span><span class="fu">positionView</span><span class="op">.</span><span class="fu">w</span><span class="op">,</span> aabb<span class="op">.</span><span class="fu">minPoint</span><span class="op">.</span><span class="fu">xyz</span><span class="op">,</span> aabb<span class="op">.</span><span class="fu">maxPoint</span><span class="op">.</span><span class="fu">xyz</span><span class="op">))</span> <span class="op">{</span></span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>            <span class="kw">if</span> <span class="op">(</span>localCount <span class="op">&lt;</span> <span class="dv">256</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>                localLightIndices<span class="op">[</span>localCount<span class="op">]</span> <span class="op">=</span> i<span class="op">;</span></span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>                localCount<span class="op">++;</span></span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> globalOffset <span class="op">=</span> <span class="bu">atomicCounterAdd</span><span class="op">(</span>globalIndexCounter<span class="op">,</span> localCount<span class="op">);</span></span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">uint</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> localCount<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>        globalLightIndices<span class="op">[</span>globalOffset <span class="op">+</span> i<span class="op">]</span> <span class="op">=</span> localLightIndices<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a>    clusterGrid<span class="op">[</span>clusterIndex<span class="op">].</span><span class="fu">offset</span> <span class="op">=</span> globalOffset<span class="op">;</span></span>
+<span id="cb2-55"><a href="#cb2-55" aria-hidden="true" tabindex="-1"></a>    clusterGrid<span class="op">[</span>clusterIndex<span class="op">].</span><span class="fu">count</span> <span class="op">=</span> localCount<span class="op">;</span></span>
+<span id="cb2-56"><a href="#cb2-56" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="4-fragment-shading-pass-integration">4. Fragment Shading Pass
+Integration</h3>
+<p>In the final rendering pass, standard forward rendering shaders read
+from the spatial grid. Given a fragment's <code>gl_FragCoord</code> and
+view-space depth, the shader calculates the cluster index and iterates
+through the assigned light sublist.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Fragment Shader Integration</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> LightDataBuffer    <span class="op">{</span> PointLight pointLights<span class="op">[];</span> <span class="op">};</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> LightGridBuffer   <span class="op">{</span> LightGrid clusterGrid<span class="op">[];</span> <span class="op">};</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">3</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> GlobalIndexBuffer <span class="op">{</span> <span class="dt">uint</span> globalLightIndices<span class="op">[];</span> <span class="op">};</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">uvec3</span> clusterGridDim<span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec2</span> tileSize<span class="op">;</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> zNear<span class="op">;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> zFar<span class="op">;</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="fu">getClusterIndex</span><span class="op">(</span><span class="dt">vec4</span> fragCoord<span class="op">,</span> <span class="dt">float</span> viewZ<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> clusterX <span class="op">=</span> <span class="dt">uint</span><span class="op">(</span>fragCoord<span class="op">.</span><span class="fu">x</span> <span class="op">/</span> tileSize<span class="op">.</span><span class="fu">x</span><span class="op">);</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> clusterY <span class="op">=</span> <span class="dt">uint</span><span class="op">(</span>fragCoord<span class="op">.</span><span class="fu">y</span> <span class="op">/</span> tileSize<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> clusterZ <span class="op">=</span> <span class="dt">uint</span><span class="op">((</span><span class="bu">log</span><span class="op">(-</span>viewZ <span class="op">/</span> zNear<span class="op">)</span> <span class="op">/</span> <span class="bu">log</span><span class="op">(</span>zFar <span class="op">/</span> zNear<span class="op">))</span> <span class="op">*</span> <span class="dt">float</span><span class="op">(</span>clusterGridDim<span class="op">.</span><span class="fu">z</span><span class="op">));</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    clusterX <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>clusterX<span class="op">,</span> <span class="dv">0</span>u<span class="op">,</span> clusterGridDim<span class="op">.</span><span class="fu">x</span> <span class="op">-</span> <span class="dv">1</span>u<span class="op">);</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    clusterY <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>clusterY<span class="op">,</span> <span class="dv">0</span>u<span class="op">,</span> clusterGridDim<span class="op">.</span><span class="fu">y</span> <span class="op">-</span> <span class="dv">1</span>u<span class="op">);</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    clusterZ <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>clusterZ<span class="op">,</span> <span class="dv">0</span>u<span class="op">,</span> clusterGridDim<span class="op">.</span><span class="fu">z</span> <span class="op">-</span> <span class="dv">1</span>u<span class="op">);</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> clusterX <span class="op">+</span> clusterY <span class="op">*</span> clusterGridDim<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> clusterZ <span class="op">*</span> clusterGridDim<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> clusterGridDim<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">calculateLighting</span><span class="op">(</span><span class="dt">vec3</span> fragPosView<span class="op">,</span> <span class="dt">vec3</span> normalView<span class="op">,</span> <span class="dt">float</span> viewZ<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> clusterIndex <span class="op">=</span> <span class="fu">getClusterIndex</span><span class="op">(</span><span class="bu">gl_FragCoord</span><span class="op">,</span> viewZ<span class="op">);</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    LightGrid grid <span class="op">=</span> clusterGrid<span class="op">[</span>clusterIndex<span class="op">];</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> directLighting <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">uint</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> grid<span class="op">.</span><span class="fu">count</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>        <span class="dt">uint</span> lightIndex <span class="op">=</span> globalLightIndices<span class="op">[</span>grid<span class="op">.</span><span class="fu">offset</span> <span class="op">+</span> i<span class="op">];</span></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>        PointLight light <span class="op">=</span> pointLights<span class="op">[</span>lightIndex<span class="op">];</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> L <span class="op">=</span> light<span class="op">.</span><span class="fu">positionView</span><span class="op">.</span><span class="fu">xyz</span> <span class="op">-</span> fragPosView<span class="op">;</span></span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> dist <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>L<span class="op">);</span></span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>dist <span class="op">&lt;</span> light<span class="op">.</span><span class="fu">positionView</span><span class="op">.</span><span class="fu">w</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>            L <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>L<span class="op">);</span></span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>            <span class="dt">float</span> nDotL <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>normalView<span class="op">,</span> L<span class="op">),</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>            <span class="dt">float</span> attenuation <span class="op">=</span> <span class="fl">1.0</span> <span class="op">-</span> <span class="op">(</span>dist <span class="op">/</span> light<span class="op">.</span><span class="fu">positionView</span><span class="op">.</span><span class="fu">w</span><span class="op">);</span></span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>            directLighting <span class="op">+=</span> light<span class="op">.</span><span class="fu">color</span><span class="op">.</span><span class="fu">rgb</span> <span class="op">*</span> nDotL <span class="op">*</span> attenuation<span class="op">;</span></span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> directLighting<span class="op">;</span></span>
+<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This decoupled pipeline isolates geometry processing from scene
+lighting complexity, bounding compute complexity strictly to the number
+of light-cluster overlaps occurring within the active camera view
+volume.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

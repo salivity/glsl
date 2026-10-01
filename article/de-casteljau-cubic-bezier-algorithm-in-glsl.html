@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>De Casteljau Cubic Bezier Algorithm in GLSL - glsl</title>
+    <meta name="description" content="This article provides a concise guide to implementing De Casteljau's algorithm for evaluating cubic Bézier curves using the OpenGL Shading Language (GLSL). You will explore the mathematical foundation of recursive linear interpolation, examine an optimi">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/de-casteljau-cubic-bezier-algorithm-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="De Casteljau Cubic Bezier Algorithm in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/de-casteljau-cubic-bezier-algorithm-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a concise guide to implementing De Casteljau's algorithm for evaluating cubic Bézier curves using the OpenGL Shading Language (GLSL). You will explore the mathematical foundation of recursive linear interpolation, examine an optimi" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="de-casteljau-cubic-bezier-algorithm-in-glsl">De Casteljau Cubic
+Bezier Algorithm in GLSL</h1>
+<p>This article provides a concise guide to implementing De Casteljau's
+algorithm for evaluating cubic Bézier curves using the OpenGL Shading
+Language (GLSL). You will explore the mathematical foundation of
+recursive linear interpolation, examine an optimized GLSL function
+utilizing the native <code>mix</code> operation, and understand the
+practical benefits of this approach for GPU-based rendering and
+procedural geometry.</p>
+<h2 id="understanding-de-casteljaus-algorithm">Understanding De
+Casteljau's Algorithm</h2>
+<p>De Casteljau's algorithm evaluates a Bézier curve at parameter <span
+class="math inline">\(t \in [0, 1]\)</span> through repeated linear
+interpolation between control points. A cubic Bézier curve is defined by
+four control points: <span class="math inline">\(P_0, P_1, P_2,\)</span>
+and <span class="math inline">\(P_3\)</span>.</p>
+<p>The evaluation proceeds through three sequential reduction steps:</p>
+<ol type="1">
+<li><p><strong>First Reduction (Order 3 to 2):</strong> Interpolate
+between adjacent control points to produce three intermediate points.
+<span class="math display">\[Q_0 = (1 - t)P_0 + tP_1\]</span> <span
+class="math display">\[Q_1 = (1 - t)P_1 + tP_2\]</span> <span
+class="math display">\[Q_2 = (1 - t)P_2 + tP_3\]</span></p></li>
+<li><p><strong>Second Reduction (Order 2 to 1):</strong> Interpolate
+between the resulting three points to produce two intermediate points.
+<span class="math display">\[R_0 = (1 - t)Q_0 + tQ_1\]</span> <span
+class="math display">\[R_1 = (1 - t)Q_1 + tQ_2\]</span></p></li>
+<li><p><strong>Final Reduction (Order 1 to 0):</strong> Interpolate
+between the final two points to obtain the position on the curve. <span
+class="math display">\[C(t) = (1 - t)R_0 + tR_1\]</span></p></li>
+</ol>
+<h2 id="glsl-implementation">GLSL Implementation</h2>
+<p>In GLSL, linear interpolation is computed efficiently using the
+built-in <code>mix(a, b, t)</code> function, which maps directly to
+hardware-level Multiply-Add (MAD) or Fused Multiply-Add (FMA)
+instructions.</p>
+<p>Here is the complete implementation for 3D coordinates
+(<code>vec3</code>). This function can be adapted to <code>vec2</code>
+or <code>vec4</code> by changing the vector types:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Evaluates a cubic Bezier curve at parameter t using De Casteljau&#39;s algorithm</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">evaluateCubicBezier</span><span class="op">(</span><span class="dt">vec3</span> p0<span class="op">,</span> <span class="dt">vec3</span> p1<span class="op">,</span> <span class="dt">vec3</span> p2<span class="op">,</span> <span class="dt">vec3</span> p3<span class="op">,</span> <span class="dt">float</span> t<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// First stage of interpolation (4 points -&gt; 3 points)</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> q0 <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>p0<span class="op">,</span> p1<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> q1 <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>p1<span class="op">,</span> p2<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> q2 <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>p2<span class="op">,</span> p3<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Second stage of interpolation (3 points -&gt; 2 points)</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> r0 <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>q0<span class="op">,</span> q1<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> r1 <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>q1<span class="op">,</span> q2<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Final interpolation (2 points -&gt; 1 point)</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">mix</span><span class="op">(</span>r0<span class="op">,</span> r1<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="first-derivative-tangent-calculation">First Derivative (Tangent
+Calculation)</h2>
+<p>To compute the tangent vector along the curve for normal calculations
+or mesh extrusion, evaluate the difference between the two points from
+the second-to-last reduction step (<span
+class="math inline">\(R_0\)</span> and <span
+class="math inline">\(R_1\)</span>):</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Computes the position and tangent vector at parameter t</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">evaluateCubicBezierWithTangent</span><span class="op">(</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> p0<span class="op">,</span> <span class="dt">vec3</span> p1<span class="op">,</span> <span class="dt">vec3</span> p2<span class="op">,</span> <span class="dt">vec3</span> p3<span class="op">,</span> <span class="dt">float</span> t<span class="op">,</span> </span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">out</span> <span class="dt">vec3</span> position<span class="op">,</span> <span class="dt">out</span> <span class="dt">vec3</span> tangent</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> q0 <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>p0<span class="op">,</span> p1<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> q1 <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>p1<span class="op">,</span> p2<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> q2 <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>p2<span class="op">,</span> p3<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> r0 <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>q0<span class="op">,</span> q1<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> r1 <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>q1<span class="op">,</span> q2<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    position <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>r0<span class="op">,</span> r1<span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    tangent <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="fl">3.0</span> <span class="op">*</span> <span class="op">(</span>r1 <span class="op">-</span> r0<span class="op">));</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="numerical-stability-vs-direct-polynomial-form">Numerical
+Stability vs. Direct Polynomial Form</h2>
+<p>Cubic Bézier curves can also be calculated via the standard Bernstein
+polynomial formula:</p>
+<p><span class="math display">\[B(t) = (1-t)^3 P_0 + 3(1-t)^2 t P_1 +
+3(1-t) t^2 P_2 + t^3 P_3\]</span></p>
+<p>While the direct polynomial method requires fewer operations overall,
+De Casteljau's algorithm offers distinct advantages in shader
+environments:</p>
+<ul>
+<li><strong>Numerical Precision:</strong> Repeated interpolation keeps
+intermediate values strictly within the convex hull of the control
+points, minimizing floating-point precision loss when <span
+class="math inline">\(t\)</span> approaches <span
+class="math inline">\(0.0\)</span> or <span
+class="math inline">\(1.0\)</span>.</li>
+<li><strong>Intermediate Subdivision:</strong> The intermediate
+variables (<code>q0</code>, <code>q1</code>, <code>q2</code>,
+<code>r0</code>, <code>r1</code>) represent the exact split points
+needed to subdivide the curve into two smaller Bézier segments directly
+in a geometry or compute shader.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

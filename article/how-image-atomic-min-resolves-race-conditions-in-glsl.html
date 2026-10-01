@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How imageAtomicMin Resolves Race Conditions in GLSL - glsl</title>
+    <meta name="description" content="In concurrent GPU programming, multiple threads often attempt to read and write to the same image texel simultaneously, leading to data corruption known as a race condition. This article explains how GLSL's built-in imageAtomicMin function resolves these">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-image-atomic-min-resolves-race-conditions-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How imageAtomicMin Resolves Race Conditions in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-image-atomic-min-resolves-race-conditions-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In concurrent GPU programming, multiple threads often attempt to read and write to the same image texel simultaneously, leading to data corruption known as a race condition. This article explains how GLSL's built-in imageAtomicMin function resolves these" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-imageatomicmin-resolves-race-conditions-in-glsl">How
+imageAtomicMin Resolves Race Conditions in GLSL</h1>
+<p>In concurrent GPU programming, multiple threads often attempt to read
+and write to the same image texel simultaneously, leading to data
+corruption known as a race condition. This article explains how GLSL's
+built-in <code>imageAtomicMin</code> function resolves these conflicts
+by executing read-modify-write operations as a single indivisible step
+at the hardware level, ensuring that only the true minimum value is
+preserved in memory.</p>
+<h3 id="the-race-condition-problem">The Race Condition Problem</h3>
+<p>In a standard GLSL workflow, updating an image texel with a minimum
+value requires three separate steps: reading the existing value using
+<code>imageLoad()</code>, comparing it with a local value using
+<code>min()</code>, and writing the smaller value back via
+<code>imageStore()</code>.</p>
+<p>When thousands of GPU shader invocations run concurrently, a race
+condition occurs. For example, if Thread A and Thread B both read a
+texel value of <code>10</code> at the exact same moment, and Thread A
+wants to write <code>5</code> while Thread B wants to write
+<code>3</code>, both threads perform their comparisons against the
+original <code>10</code>. If Thread A writes <code>5</code> slightly
+after Thread B writes <code>3</code>, Thread A overwrites the smaller
+value. The texel ends up with <code>5</code> instead of the correct
+minimum of <code>3</code>.</p>
+<h3 id="how-imageatomicmin-solves-the-issue">How imageAtomicMin Solves
+the Issue</h3>
+<p>The <code>imageAtomicMin</code> function eliminates this
+vulnerability by turning the read, comparison, and store cycle into an
+atomic—or indivisible—operation.</p>
+<p>When a thread calls <code>imageAtomicMin(image, coord, data)</code>,
+the underlying GPU memory controller locks access to that specific
+memory address for the duration of the instruction. No other thread can
+read or write to that specific texel until the operation completes:</p>
+<ol type="1">
+<li>The hardware reads the current value at the specified
+coordinate.</li>
+<li>It compares the current value with the provided <code>data</code>
+parameter.</li>
+<li>It immediately writes the lower of the two values back to
+memory.</li>
+<li>It returns the original value that was in memory before the
+operation occurred.</li>
+</ol>
+<p>Because this sequence cannot be interrupted, interleaved, or
+preempted by other threads, the data remains consistent regardless of
+the execution order of individual GPU warps or wavefronts.</p>
+<h3 id="technical-requirements-and-constraints">Technical Requirements
+and Constraints</h3>
+<p>To use <code>imageAtomicMin</code> in GLSL, specific constraints must
+be met:</p>
+<ul>
+<li><strong>Format Limitations:</strong> Atomic operations on images
+generally require 32-bit integer formats, such as <code>r32i</code>
+(signed) or <code>r32ui</code> (unsigned). They are not natively
+supported on standard floating-point formats like <code>rgba8</code> or
+<code>rgba32f</code> without specific extensions.</li>
+<li><strong>Layout Qualifiers:</strong> The target image variable in the
+shader must be declared with atomic-compatible qualifiers, typically
+without format qualifiers that imply cache optimizations that bypass
+memory coherency.</li>
+<li><strong>Memory Coherency:</strong> Variables bound to atomic
+operations must ensure proper coherency, often requiring the
+<code>coherent</code> memory qualifier so changes made by one shader
+invocation are immediately visible to others across different
+workgroups.</li>
+</ul>
+<h3 id="performance-considerations">Performance Considerations</h3>
+<p>While <code>imageAtomicMin</code> guarantees correctness, it does
+introduce serialization. When hundreds of threads target the exact same
+texel coordinate, the memory controller processes them sequentially
+rather than in parallel, causing memory contention and stall cycles.
+However, for use cases such as software depth testing, order-independent
+transparency, or bounding-box generation, this controlled serialization
+is vastly faster and more memory-efficient than CPU-side sorting or
+multi-pass synchronization barriers.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

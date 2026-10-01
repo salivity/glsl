@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How terminateRayEXT Works in GLSL Shadow Rays - glsl</title>
+    <meta name="description" content="In GLSL ray tracing pipelines using the GLEXTraytracing extension, the terminateRayEXT() function immediately halts the traversal of a ray once an intersection is confirmed. For shadow rays—which typically only need to determine binary visibility (whet">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-terminate-ray-ext-works-in-glsl-shadow-rays">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How terminateRayEXT Works in GLSL Shadow Rays - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-terminate-ray-ext-works-in-glsl-shadow-rays" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL ray tracing pipelines using the GLEXTraytracing extension, the terminateRayEXT() function immediately halts the traversal of a ray once an intersection is confirmed. For shadow rays—which typically only need to determine binary visibility (whet" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-terminaterayext-works-in-glsl-shadow-rays">How
+terminateRayEXT Works in GLSL Shadow Rays</h1>
+<p>In GLSL ray tracing pipelines using the
+<code>GL_EXT_ray_tracing</code> extension, the
+<code>terminateRayEXT()</code> function immediately halts the traversal
+of a ray once an intersection is confirmed. For shadow rays—which
+typically only need to determine binary visibility (whether a light
+source is occluded or not) rather than identifying the closest
+surface—calling <code>terminateRayEXT()</code> inside an Any-Hit shader
+stops the acceleration structure traversal instantly, skipping all
+remaining intersection tests to optimize rendering performance.</p>
+<h3 id="the-purpose-of-shadow-rays">The Purpose of Shadow Rays</h3>
+<p>Unlike primary or reflection rays that search for the closest
+geometric surface to evaluate shading attributes, shadow rays (often
+called occlusion rays) merely ask whether any opaque geometry exists
+between the shaded point and a light source. Because locating the
+nearest surface along the ray is unnecessary for a simple shadow test,
+traversing the entire bounding volume hierarchy (BVH) to sort hits from
+front to back introduces avoidable GPU overhead.</p>
+<h3 id="how-terminaterayext-executes">How <code>terminateRayEXT()</code>
+Executes</h3>
+<p>When an Any-Hit shader executes, the GPU has encountered a potential
+intersection candidate. If the shader logic confirms the surface is
+opaque (for example, passing an alpha-mask or punch-through texture
+evaluation), calling <code>terminateRayEXT()</code> does the
+following:</p>
+<ol type="1">
+<li><strong>Accepts the Current Intersection:</strong> The current
+candidate is finalized as an accepted hit along the ray path.</li>
+<li><strong>Aborts BVH Traversal:</strong> The hardware traversal unit
+ceases searching for any additional bounding boxes, primitives, or
+geometry instances along the ray.</li>
+<li><strong>Discards Remaining Candidates:</strong> Any other potential
+intersections that were queued or pending evaluation are immediately
+rejected and abandoned.</li>
+<li><strong>Returns Execution Flow:</strong> Traversal concludes,
+causing the pipeline to transition to the Closest-Hit shader (if bound)
+or directly back to the Ray Generation shader, returning an occluded
+state via the ray payload.</li>
+</ol>
+<h3 id="interaction-with-ray-flags">Interaction with Ray Flags</h3>
+<p>While Vulkan and GLSL offer the ray flag
+<code>gl_RayFlagsTerminateOnFirstHitEXT</code> to automatically
+terminate rays on opaque geometry, <code>terminateRayEXT()</code> is
+essential when handling non-opaque or alpha-tested materials. In these
+cases, geometry cannot be marked as fully opaque in the acceleration
+structure. The Any-Hit shader must first sample the material
+texture:</p>
+<ul>
+<li>If the sample is transparent, the shader calls
+<code>ignoreIntersectionEXT()</code> to continue searching.</li>
+<li>If the sample is opaque, the shader calls
+<code>terminateRayEXT()</code> to conclude traversal immediately on that
+custom-evaluated hit.</li>
+</ul>
+<h3 id="performance-impact">Performance Impact</h3>
+<p>By terminating the ray at the very first valid occluder, the GPU
+avoids dozens or hundreds of unnecessary ray-box and ray-triangle
+intersection tests. In scenes with heavy foliage, dense geometry, or
+multiple light sources, using <code>terminateRayEXT()</code>
+substantially reduces shader execution counts and memory bandwidth
+pressure across the ray tracing pipeline.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

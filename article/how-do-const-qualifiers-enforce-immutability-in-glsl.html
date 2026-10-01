@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Do const Qualifiers Enforce Immutability in GLSL? - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), the const qualifier enforces strict compile-time immutability by designating variables as read-only expressions that must be fully resolvable during shader compilation. This article examines the mechanics behind GLSL co">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-do-const-qualifiers-enforce-immutability-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Do const Qualifiers Enforce Immutability in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-do-const-qualifiers-enforce-immutability-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), the const qualifier enforces strict compile-time immutability by designating variables as read-only expressions that must be fully resolvable during shader compilation. This article examines the mechanics behind GLSL co" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-do-const-qualifiers-enforce-immutability-in-glsl">How Do
+const Qualifiers Enforce Immutability in GLSL?</h1>
+<p>In OpenGL Shading Language (GLSL), the <code>const</code> qualifier
+enforces strict compile-time immutability by designating variables as
+read-only expressions that must be fully resolvable during shader
+compilation. This article examines the mechanics behind GLSL constant
+expressions, how the shader compiler validates immutability, the
+constraints on constant initialization, and how GPU compilers leverage
+compile-time constants for aggressive bytecode optimization and hardware
+efficiency.</p>
+<h2 id="understanding-the-const-type-qualifier">Understanding the
+<code>const</code> Type Qualifier</h2>
+<p>The <code>const</code> qualifier in GLSL declares a variable whose
+value cannot change after initialization. Unlike uniform variables—which
+remain constant across primitives during a single draw call but are
+supplied at runtime by the host CPU—a <code>const</code> variable is
+statically determined before the shader program executes on the GPU.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// A valid compile-time constant</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> PI <span class="op">=</span> <span class="fl">3.14159265359</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">vec3</span> UP_VECTOR <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span></code></pre></div>
+<p>Once declared, any attempt to reassign or mutate a <code>const</code>
+variable triggers a compilation error. This mechanism guarantees
+deterministic behavior across all parallel GPU execution threads.</p>
+<h2 id="compile-time-expression-resolution">Compile-Time Expression
+Resolution</h2>
+<p>GLSL enforces immutability by requiring that every <code>const</code>
+variable be initialized with a valid constant expression. A constant
+expression consists strictly of:</p>
+<ul>
+<li>Literal values (such as integers, floating-point numbers, and
+booleans)</li>
+<li>Other previously declared <code>const</code> variables</li>
+<li>Constructors composed entirely of constant expressions (for example,
+<code>vec4(1.0, 0.0, 0.0, 1.0)</code>)</li>
+<li>Built-in math functions operating purely on constant expressions
+(such as <code>sin(PI / 4.0)</code>)</li>
+<li>Arithmetic, logical, and relational operators combining constant
+terms</li>
+</ul>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> BASE_COUNT <span class="op">=</span> <span class="dv">4</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> TOTAL_ELEMENTS <span class="op">=</span> BASE_COUNT <span class="op">*</span> <span class="dv">8</span><span class="op">;</span> <span class="co">// Evaluated at compile time</span></span></code></pre></div>
+<p>If an initializer references dynamic inputs—such as vertex attributes
+(<code>in</code>), uniforms, texture sampling results, or outputs from
+non-constant functions—the GLSL compiler rejects the declaration with a
+type error.</p>
+<h2 id="compiler-enforcement-and-error-trapping">Compiler Enforcement
+and Error Trapping</h2>
+<p>The GLSL compiler enforces immutability through abstract syntax tree
+(AST) validation during the semantic analysis phase.</p>
+<h3 id="assignment-prevention">Assignment Prevention</h3>
+<p>Assigning a new value to a <code>const</code> identifier generates an
+immediate compilation failure:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> BRIGHTNESS <span class="op">=</span> <span class="fl">1.5</span><span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>BRIGHTNESS <span class="op">=</span> <span class="fl">2.0</span><span class="op">;</span> <span class="co">// Compile error: assignment to read-only variable</span></span></code></pre></div>
+<h3 id="array-sizing-and-loop-unrolling">Array Sizing and Loop
+Unrolling</h3>
+<p>Because <code>const</code> expressions are evaluated ahead of
+execution, they provide reliable boundaries for array declarations and
+loop bounds. GPU hardware architectures benefit from fixed allocation
+sizes in registers and shared memory.</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> LIGHT_COUNT <span class="op">=</span> <span class="dv">4</span><span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> lightPositions<span class="op">[</span>LIGHT_COUNT<span class="op">];</span> <span class="co">// Valid: size is a compile-time constant</span></span></code></pre></div>
+<h3 id="function-signatures">Function Signatures</h3>
+<p>When passing parameters into functions, GLSL parameters default to
+<code>in</code> semantics (pass-by-value). Declaring a parameter as
+<code>const in</code> ensures that the function body cannot modify its
+local copy, preventing unintended side effects within shader
+routines.</p>
+<h2 id="performance-benefits-of-compile-time-immutability">Performance
+Benefits of Compile-Time Immutability</h2>
+<p>Enforcing immutability at compile time allows shader compilers to
+perform optimizations that directly improve GPU execution
+throughput:</p>
+<ol type="1">
+<li><strong>Constant Folding:</strong> The compiler computes
+mathematical operations involving <code>const</code> values during
+compilation rather than emitting arithmetic instructions into the GPU
+bytecode.</li>
+<li><strong>Immediate Operands:</strong> GPU instruction sets frequently
+allow literal constants to be encoded directly into assembly
+instructions, reducing register pressure.</li>
+<li><strong>Dead Code Elimination:</strong> Conditional branches
+evaluated against <code>const</code> expressions (such as
+<code>if (DEBUG_MODE)</code>) are resolved statically, entirely removing
+inactive execution branches and preventing branch divergence across
+warps or wavefronts.</li>
+<li><strong>Static Loop Unrolling:</strong> Fixed-count loops bounded by
+<code>const</code> integers can be fully unrolled, removing loop
+overhead and improving instruction pipelining on the execution
+units.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

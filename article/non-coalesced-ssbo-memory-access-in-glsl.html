@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Non-Coalesced SSBO Memory Access in GLSL - glsl</title>
+    <meta name="description" content="Non-coalesced memory access in OpenGL Shading Language (GLSL) occurs when threads within an execution group simultaneously read from or write to disparate, non-contiguous addresses in a Shader Storage Buffer Object (SSBO). Because modern GPUs execute wor">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/non-coalesced-ssbo-memory-access-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Non-Coalesced SSBO Memory Access in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/non-coalesced-ssbo-memory-access-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Non-coalesced memory access in OpenGL Shading Language (GLSL) occurs when threads within an execution group simultaneously read from or write to disparate, non-contiguous addresses in a Shader Storage Buffer Object (SSBO). Because modern GPUs execute wor" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="non-coalesced-ssbo-memory-access-in-glsl">Non-Coalesced SSBO
+Memory Access in GLSL</h1>
+<p>Non-coalesced memory access in OpenGL Shading Language (GLSL) occurs
+when threads within an execution group simultaneously read from or write
+to disparate, non-contiguous addresses in a Shader Storage Buffer Object
+(SSBO). Because modern GPUs execute work in lockstep groups called warps
+or wavefronts, memory hardware is optimized to merge adjacent memory
+operations into a single wide transaction. When indexing patterns
+scatter memory requests across different cache lines, the memory
+controller must serialize these requests into multiple distinct
+transactions. This latency multiplication degrades throughput, stalls
+the pipeline, and saturates the GPU memory bandwidth.</p>
+<h3 id="how-gpu-memory-coalescing-operates">How GPU Memory Coalescing
+Operates</h3>
+<p>Modern GPUs execute compute shader invocations in fixed-size
+batches—typically 32 threads (a warp on NVIDIA) or 32 to 64 threads (a
+wavefront on AMD). When every thread within a warp issues a read or
+write instruction to an SSBO, the memory controller evaluates the
+targeted memory addresses:</p>
+<ul>
+<li><strong>Coalesced Access:</strong> If thread <span
+class="math inline">\(0\)</span> reads byte <span
+class="math inline">\(0\)</span>, thread <span
+class="math inline">\(1\)</span> reads byte <span
+class="math inline">\(4\)</span>, and so on, the memory requests fall
+into a single, contiguous <span class="math inline">\(32\)</span>-,
+<span class="math inline">\(64\)</span>-, or <span
+class="math inline">\(128\)</span>-byte segment. The controller combines
+these reads into a single hardware transaction.</li>
+<li><strong>Non-Coalesced Access:</strong> If the addresses accessed
+across the warp fall into multiple disjoint memory lines, the controller
+cannot merge them. The warp stalls until each required cache line is
+fetched sequentially.</li>
+</ul>
+<h3 id="primary-causes-of-non-coalesced-ssbo-indexing">Primary Causes of
+Non-Coalesced SSBO Indexing</h3>
+<h4 id="1-array-of-structures-aos-layouts">1. Array-of-Structures (AoS)
+Layouts</h4>
+<p>The most common cause of non-coalesced access is using an Array of
+Structures instead of a Structure of Arrays (SoA). Consider this GLSL
+layout:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Particle <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> position<span class="op">;</span> <span class="co">// 16 bytes</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> velocity<span class="op">;</span> <span class="co">// 16 bytes</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> color<span class="op">;</span>    <span class="co">// 16 bytes</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> mass<span class="op">;</span>    <span class="co">// 4 bytes (+ 12 padding under std430)</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> ParticleBuffer <span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    Particle particles<span class="op">[];</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>If thread <span class="math inline">\(i\)</span> reads
+<code>particles[i].position</code>, thread <span
+class="math inline">\(0\)</span> reads byte <span
+class="math inline">\(0\)</span>, while thread <span
+class="math inline">\(1\)</span> reads byte <span
+class="math inline">\(64\)</span> (the size of one
+<code>Particle</code>). Because the requested elements are spaced <span
+class="math inline">\(64\)</span> bytes apart, a single <span
+class="math inline">\(128\)</span>-byte cache line can only satisfy two
+threads. A warp of 32 threads requires 16 separate memory transactions
+instead of just two, wasting up to <span
+class="math inline">\(87.5\%\)</span> of fetched data per
+transaction.</p>
+<h4 id="2-strided-indexing-and-dimension-inversion">2. Strided Indexing
+and Dimension Inversion</h4>
+<p>Non-coalesced access frequently stems from flattened
+multi-dimensional arrays where thread IDs traverse memory down columns
+rather than along rows:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Inefficient: Strided access down columns</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="dt">index</span> <span class="op">=</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span> <span class="op">*</span> height <span class="op">+</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> value <span class="op">=</span> data<span class="op">[</span><span class="dt">index</span><span class="op">];</span></span></code></pre></div>
+<p>Because adjacent invocations within the same warp vary along the
+<span class="math inline">\(X\)</span>-axis
+(<code>gl_GlobalInvocationID.x</code>), adjacent threads request
+addresses separated by <code>height * sizeof(float)</code>. Unless
+<code>height</code> is <span class="math inline">\(1\)</span>, this
+introduces large strides that scatter addresses across different cache
+lines.</p>
+<h4 id="3-indirect-and-data-dependent-indexing">3. Indirect and
+Data-Dependent Indexing</h4>
+<p>Gather and scatter algorithms rely on dynamic lookup tables:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> targetIndex <span class="op">=</span> indices<span class="op">[</span><span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">];</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> result <span class="op">=</span> values<span class="op">[</span>targetIndex<span class="op">];</span></span></code></pre></div>
+<p>If <code>targetIndex</code> values are unsorted or randomized,
+adjacent threads access unpredictable, non-contiguous regions of the
+SSBO. This forces the memory subsystem to issue up to 32 separate read
+requests for a single instruction, causing extreme memory pipeline
+serialization.</p>
+<h4 id="4-misalignment-with-std430-rules">4. Misalignment with std430
+Rules</h4>
+<p>The <code>std430</code> layout standard enforces alignment based on
+the base type:</p>
+<ul>
+<li>Scalars (<code>float</code>, <code>int</code>) align to 4
+bytes.</li>
+<li><code>vec2</code> aligns to 8 bytes.</li>
+<li><code>vec4</code> aligns to 16 bytes.</li>
+</ul>
+<p>If arrays or sub-struct members are misaligned relative to the
+hardware transaction boundary (commonly 32, 64, or 128 bytes), an access
+that should conceptually fit within a single transaction may straddle a
+boundary, forcing two transactions per fetch.</p>
+<h3 id="remediation-strategies">Remediation Strategies</h3>
+<ul>
+<li><strong>Transition to Structure-of-Arrays (SoA):</strong> Separate
+large structs into individual arrays (e.g.,
+<code>vec4 positions[]</code>, <code>vec4 velocities[]</code>). Adjacent
+threads will read contiguous elements, restoring optimal memory
+coalescing.</li>
+<li><strong>Map Invocations to Contiguous Memory:</strong> Ensure that
+<code>gl_GlobalInvocationID.x</code> directly maps to the fastest-moving
+index in a linearized array.</li>
+<li><strong>Stage Data in Shared Memory (<code>shared</code>):</strong>
+For indirect or transposed access patterns, load contiguous SSBO chunks
+into workgroup-local shared memory first, synchronize using
+<code>barrier()</code>, and subsequently perform non-coalesced or
+strided access within shared memory, which features significantly lower
+access penalties and higher banking throughput.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

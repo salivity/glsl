@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Is the Difference Between std140 and std430? - glsl</title>
+    <meta name="description" content="In GLSL (OpenGL Shading Language), std140 and std430 are standard memory layout qualifiers that define how data structures are aligned and padded in GPU memory buffers. While std140 enforces strict 16-byte alignment rules across arrays and structures for">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-is-the-difference-between-std-140-and-std-430">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Is the Difference Between std140 and std430? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-is-the-difference-between-std-140-and-std-430" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL (OpenGL Shading Language), std140 and std430 are standard memory layout qualifiers that define how data structures are aligned and padded in GPU memory buffers. While std140 enforces strict 16-byte alignment rules across arrays and structures for" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-is-the-difference-between-std140-and-std430">What Is the
+Difference Between std140 and std430?</h1>
+<p>In GLSL (OpenGL Shading Language), <code>std140</code> and
+<code>std430</code> are standard memory layout qualifiers that define
+how data structures are aligned and padded in GPU memory buffers. While
+<code>std140</code> enforces strict 16-byte alignment rules across
+arrays and structures for Uniform Buffer Objects (UBOs),
+<code>std430</code> provides a tighter, more cache-friendly layout
+designed specifically for Shader Storage Buffer Objects (SSBOs).
+Understanding the differences between these two layouts is essential for
+ensuring that host application memory (such as C++ structs) matches the
+layout expected by GPU shaders without corrupting data or introducing
+unnecessary padding.</p>
+<h2 id="buffer-compatibility">Buffer Compatibility</h2>
+<p>The primary functional difference between the two memory layouts lies
+in where they can be legally used:</p>
+<ul>
+<li><strong>std140:</strong> Introduced in OpenGL 3.1,
+<code>std140</code> is the standard layout for Uniform Buffer Objects
+(UBOs). It can also be applied to Shader Storage Buffer Objects (SSBOs),
+ensuring backward compatibility and cross-buffer layout
+consistency.</li>
+<li><strong>std430:</strong> Introduced in OpenGL 4.3 alongside SSBOs,
+<code>std430</code> is valid <strong>only for SSBOs</strong>. It cannot
+be used for standard Uniform Buffer Objects.</li>
+</ul>
+<h2 id="alignment-and-padding-rules">Alignment and Padding Rules</h2>
+<p>Both layouts align fundamental types like <code>float</code>,
+<code>int</code>, <code>vec2</code>, and <code>vec4</code> to multiples
+of their natural size (e.g., a <code>float</code> aligns to 4 bytes, a
+<code>vec2</code> to 8 bytes, and a <code>vec4</code> to 16 bytes). The
+major divergence occurs when handling arrays and nested structures.</p>
+<h3 id="arrays-and-array-elements">Arrays and Array Elements</h3>
+<ul>
+<li><strong>std140:</strong> Every element in an array is rounded up to
+the size of a <code>vec4</code> (16 bytes), regardless of the actual
+data type. For example, an array of scalars like
+<code>float values[4]</code> consumes 64 bytes in <code>std140</code>
+because each <code>float</code> is padded to 16 bytes (equivalent to a
+16-byte stride).</li>
+<li><strong>std430:</strong> Array elements retain their natural base
+alignment. A <code>float values[4]</code> array in <code>std430</code>
+occupies 16 contiguous bytes (4 bytes per element), and a
+<code>vec2 coords[4]</code> array occupies 32 bytes (8 bytes per
+element).</li>
+</ul>
+<h3 id="structures-and-nested-types">Structures and Nested Types</h3>
+<ul>
+<li><strong>std140:</strong> The base alignment of a struct is rounded
+up to a multiple of 16 bytes (<code>vec4</code> size). Any array of
+structs will also have its stride padded to a multiple of 16 bytes.</li>
+<li><strong>std430:</strong> A struct's alignment is determined solely
+by the largest base alignment of any of its member variables. If a
+struct contains only <code>float</code> and <code>vec2</code> members,
+its alignment remains 8 bytes rather than being forced to 16 bytes.</li>
+</ul>
+<h2 id="comparison-summary">Comparison Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>std140</th>
+<th>std430</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Supported Buffers</strong></td>
+<td>Uniform Buffer Objects (UBOs), SSBOs</td>
+<td>Shader Storage Buffer Objects (SSBOs) only</td>
+</tr>
+<tr>
+<td><strong>Scalar Array Stride</strong></td>
+<td>Padded to 16 bytes per element</td>
+<td>Natural alignment (4 bytes for
+<code>float</code>/<code>int</code>)</td>
+</tr>
+<tr>
+<td><strong>Vector Array Stride</strong></td>
+<td>Always rounded up to 16 bytes</td>
+<td>Matches vector size (<code>vec2</code> = 8 bytes, <code>vec4</code>
+= 16 bytes)</td>
+</tr>
+<tr>
+<td><strong>Struct Alignment</strong></td>
+<td>Always rounded up to a multiple of 16 bytes</td>
+<td>Largest member's natural alignment</td>
+</tr>
+<tr>
+<td><strong>Memory Efficiency</strong></td>
+<td>Lower (higher padding overhead)</td>
+<td>Higher (compact packing)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="practical-host-side-matching">Practical Host-Side Matching</h2>
+<p>When setting up data on the CPU in languages like C or C++, matching
+<code>std430</code> is generally simpler because standard C++ struct
+packing rules closely resemble <code>std430</code> natural alignment. In
+contrast, mapping data for a <code>std140</code> buffer often requires
+explicit manual padding or alignment attributes (such as
+<code>alignas(16)</code>) to account for forced 16-byte boundaries on
+array elements and nested structs.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

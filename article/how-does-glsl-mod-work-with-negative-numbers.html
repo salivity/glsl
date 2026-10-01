@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does GLSL Mod Work with Negative Numbers? - glsl</title>
+    <meta name="description" content="The built-in mod(x, y) function in the OpenGL Shading Language (GLSL) computes the remainder of division using floored division rather than truncated division. Unlike standard remainder operators in languages like C or C++, GLSL defines mod(x, y) as x -">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-glsl-mod-work-with-negative-numbers">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does GLSL Mod Work with Negative Numbers? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-glsl-mod-work-with-negative-numbers" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The built-in mod(x, y) function in the OpenGL Shading Language (GLSL) computes the remainder of division using floored division rather than truncated division. Unlike standard remainder operators in languages like C or C++, GLSL defines mod(x, y) as x -" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-glsl-mod-work-with-negative-numbers">How Does GLSL Mod
+Work with Negative Numbers?</h1>
+<p>The built-in <code>mod(x, y)</code> function in the OpenGL Shading
+Language (GLSL) computes the remainder of division using floored
+division rather than truncated division. Unlike standard remainder
+operators in languages like C or C++, GLSL defines
+<code>mod(x, y)</code> as <code>x - y * floor(x / y)</code>. This
+distinction causes negative input coordinates or values to wrap
+predictably into the positive range <span class="math inline">\([0,
+y)\)</span> whenever the divisor <span class="math inline">\(y\)</span>
+is positive, making it particularly useful for continuous texture
+mapping, cyclic procedural patterns, and grid generation.</p>
+<h2 id="the-mathematical-definition-in-glsl">The Mathematical Definition
+in GLSL</h2>
+<p>According to the official GLSL specification, the floating-point
+<code>mod</code> function computes:</p>
+<p><span class="math display">\[\text{mod}(x, y) = x - y \cdot
+\text{floor}\left(\frac{x}{y}\right)\]</span></p>
+<p>Because the equation relies on the <code>floor</code> function,
+division rounds down toward negative infinity rather than truncating
+toward zero. This mathematical approach is known as Knuth’s floored
+division.</p>
+<h3 id="step-by-step-calculation-examples">Step-by-Step Calculation
+Examples</h3>
+<p>To see how this formula behaves with negative values, consider the
+following concrete evaluations:</p>
+<p><strong>Case 1: Negative Dividend, Positive Divisor
+(<code>x = -0.25</code>, <code>y = 1.0</code>)</strong></p>
+<ol type="1">
+<li>Compute the division: <span class="math inline">\(-0.25 / 1.0 =
+-0.25\)</span></li>
+<li>Apply the floor function: <span
+class="math inline">\(\text{floor}(-0.25) = -1.0\)</span></li>
+<li>Multiply by <span class="math inline">\(y\)</span>: <span
+class="math inline">\(1.0 \cdot (-1.0) = -1.0\)</span></li>
+<li>Subtract from <span class="math inline">\(x\)</span>: <span
+class="math inline">\(-0.25 - (-1.0) = 0.75\)</span></li>
+</ol>
+<p>The result is <span class="math inline">\(0.75\)</span>, preserving a
+seamless repeating pattern across zero.</p>
+<p><strong>Case 2: Negative Integer-Like Float (<code>x = -3.0</code>,
+<code>y = 2.0</code>)</strong></p>
+<ol type="1">
+<li>Compute the division: <span class="math inline">\(-3.0 / 2.0 =
+-1.5\)</span></li>
+<li>Apply the floor function: <span
+class="math inline">\(\text{floor}(-1.5) = -2.0\)</span></li>
+<li>Multiply by <span class="math inline">\(y\)</span>: <span
+class="math inline">\(2.0 \cdot (-2.0) = -4.0\)</span></li>
+<li>Subtract from <span class="math inline">\(x\)</span>: <span
+class="math inline">\(-3.0 - (-4.0) = 1.0\)</span></li>
+</ol>
+<p><strong>Case 3: Positive Dividend, Negative Divisor
+(<code>x = 3.0</code>, <code>y = -2.0</code>)</strong></p>
+<ol type="1">
+<li>Compute the division: <span class="math inline">\(3.0 / -2.0 =
+-1.5\)</span></li>
+<li>Apply the floor function: <span
+class="math inline">\(\text{floor}(-1.5) = -2.0\)</span></li>
+<li>Multiply by <span class="math inline">\(y\)</span>: <span
+class="math inline">\(-2.0 \cdot (-2.0) = 4.0\)</span></li>
+<li>Subtract from <span class="math inline">\(x\)</span>: <span
+class="math inline">\(3.0 - 4.0 = -1.0\)</span></li>
+</ol>
+<p>When <span class="math inline">\(y\)</span> is negative, the result
+falls within the interval <span class="math inline">\((y,
+0]\)</span>.</p>
+<h2 id="glsl-mod-vs-c-style-remainder-">GLSL <code>mod</code> vs.
+C-Style Remainder <code>%</code></h2>
+<p>In many CPU programming languages such as C, C++, and Java, the
+integer modulo operator <code>%</code> and the standard
+<code>fmod()</code> function perform truncated division, where the
+quotient is rounded toward zero:</p>
+<p><span class="math display">\[\text{trunc\_mod}(x, y) = x - y \cdot
+\text{trunc}\left(\frac{x}{y}\right)\]</span></p>
+<p>Under truncated division, <code>-3.0 % 2.0</code> evaluates to
+<code>-1.0</code>. In contrast, GLSL's <code>mod(-3.0, 2.0)</code>
+evaluates to <code>1.0</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Expression</th>
+<th>C/C++ <code>fmod(x, y)</code></th>
+<th>GLSL <code>mod(x, y)</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>x = 1.25, y = 1.0</code></td>
+<td><code>0.25</code></td>
+<td><code>0.25</code></td>
+</tr>
+<tr>
+<td><code>x = -0.25, y = 1.0</code></td>
+<td><code>-0.25</code></td>
+<td><code>0.75</code></td>
+</tr>
+<tr>
+<td><code>x = -1.75, y = 1.0</code></td>
+<td><code>-0.75</code></td>
+<td><code>0.25</code></td>
+</tr>
+<tr>
+<td><code>x = -3.0, y = 2.0</code></td>
+<td><code>-1.0</code></td>
+<td><code>1.0</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="practical-implications-in-shader-programming">Practical
+Implications in Shader Programming</h2>
+<p>The floored division behavior is essential for graphics programming
+because UV coordinates and world positions frequently cross the
+coordinate origin into negative space.</p>
+<ul>
+<li><strong>Periodic Patterns and Grids:</strong> Using
+<code>mod(uv, 1.0)</code> ensures that fractional coordinates wrap
+smoothly from <code>0.99</code> down to <code>0.00</code> across the
+entire plane, preventing mirroring artifacts or discontinuities at
+<code>x = 0</code> and <code>y = 0</code>.</li>
+<li><strong>Integer Modulo in Modern GLSL:</strong> GLSL 1.30 and later
+introduced the integer remainder operator <code>%</code> for
+<code>int</code> and <code>uint</code> types. Unlike floating-point
+<code>mod()</code>, the <code>%</code> operator on signed integers
+follows standard C99 truncation semantics toward zero. Shaders requiring
+consistent floored wrapping on integer types must either convert values
+to <code>float</code> and use <code>mod()</code> or manually adjust
+negative outputs.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exponential Shadow Maps in GLSL - glsl</title>
+    <meta name="description" content="This article provides a concise guide to the mathematical formulation and GLSL implementation of Exponential Shadow Maps (ESM). ESM allows for hardware-accelerated filtering and pre-filtering of shadow maps by replacing the standard non-linear shadow tes">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/exponential-shadow-maps-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Exponential Shadow Maps in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/exponential-shadow-maps-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a concise guide to the mathematical formulation and GLSL implementation of Exponential Shadow Maps (ESM). ESM allows for hardware-accelerated filtering and pre-filtering of shadow maps by replacing the standard non-linear shadow tes" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="exponential-shadow-maps-in-glsl">Exponential Shadow Maps in
+GLSL</h1>
+<p>This article provides a concise guide to the mathematical formulation
+and GLSL implementation of Exponential Shadow Maps (ESM). ESM allows for
+hardware-accelerated filtering and pre-filtering of shadow maps by
+replacing the standard non-linear shadow test with a smooth exponential
+approximation. Below, you will find the theoretical foundation of this
+technique along with direct GLSL shader implementations for both the
+shadow map generation and lighting evaluation stages.</p>
+<hr />
+<h3 id="mathematical-foundation-of-esm">Mathematical Foundation of
+ESM</h3>
+<p>Standard shadow mapping evaluates visibility using the Heaviside step
+function <span class="math inline">\(H(d - z)\)</span>, where <span
+class="math inline">\(d\)</span> is the stored occluder depth from the
+light's point of view, and <span class="math inline">\(z\)</span> is the
+receiver depth:</p>
+<p><span class="math display">\[
+V(z, d) = \begin{cases} 1 &amp; \text{if } z \le d \\ 0 &amp; \text{if }
+z &gt; d \end{cases}
+\]</span></p>
+<p>Because the step function is non-linear, linear filtering (such as
+bilinear interpolation or Gaussian blur) cannot be applied directly to
+depth maps without causing visual artifacts. ESM approximates the step
+function using an exponential decay function parameterized by a scaling
+factor <span class="math inline">\(c &gt; 0\)</span>:</p>
+<p><span class="math display">\[
+V(z, d) \approx \min\left(1, e^{-c(z - d)}\right) = \min\left(1, e^{-cz}
+\cdot e^{cd}\right)
+\]</span></p>
+<p>The factor <span class="math inline">\(c\)</span> controls the
+steepness of the approximation. Higher values reduce light bleeding
+around edges but increase the risk of floating-point overflow.</p>
+<p>Because the exponential property splits the term into <span
+class="math inline">\(e^{cd}\)</span> and <span
+class="math inline">\(e^{-cz}\)</span>, spatial filtering can be
+distributed across occluder samples:</p>
+<p><span class="math display">\[
+\sum_i w_i V(z, d_i) \approx e^{-cz} \sum_i w_i e^{cd_i}
+\]</span></p>
+<p>This allows the shadow map to store <span
+class="math inline">\(e^{cd}\)</span> and be pre-filtered using standard
+linear blurring algorithms (e.g., Gaussian blur, MIP-mapping) prior to
+the lighting evaluation pass.</p>
+<hr />
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>ESM requires two rendering steps: generating the exponential depth
+map and sampling the filtered map during the lighting pass.</p>
+<h4 id="1-shadow-map-generation-pass">1. Shadow Map Generation Pass</h4>
+<p>In the fragment shader that writes to the shadow map, convert the
+fragment's depth to an exponential value. Linear depth in the range
+<span class="math inline">\([0, 1]\)</span> should be used rather than
+non-linear projection depth.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Shadow Map Fragment Shader</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec4</span> v_LightSpacePosition<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">float</span> FragColor<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> c<span class="op">;</span> <span class="co">// ESM constant (typically between 40.0 and 80.0)</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate normalized linear depth in [0, 1] range</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> depth <span class="op">=</span> v_LightSpacePosition<span class="op">.</span><span class="fu">z</span> <span class="op">/</span> v_LightSpacePosition<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    depth <span class="op">=</span> depth <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Store the exponential depth</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="bu">exp</span><span class="op">(</span>c <span class="op">*</span> depth<span class="op">);</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><em>Note: The target shadow texture should use a 32-bit
+floating-point format (<code>GL_R32F</code>) to prevent arithmetic
+overflow from the exponential operator.</em></p>
+<h4 id="2-lighting-pass-evaluation">2. Lighting Pass Evaluation</h4>
+<p>In the lighting fragment shader, sample the pre-filtered shadow map,
+compute the exponential decay using the receiver depth, and clamp the
+visibility factor to <span class="math inline">\([0, 1]\)</span>.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Lighting Fragment Shader</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec4</span> v_FragPosLightSpace<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FinalColor<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> shadowMap<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> c<span class="op">;</span> <span class="co">// Must match the constant used during the shadow pass</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">computeESMShadow</span><span class="op">(</span><span class="dt">vec4</span> fragPosLightSpace<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Perform perspective division</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> projCoords <span class="op">=</span> fragPosLightSpace<span class="op">.</span><span class="fu">xyz</span> <span class="op">/</span> fragPosLightSpace<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    projCoords <span class="op">=</span> projCoords <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Return fully lit if outside the light frustum</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>projCoords<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;</span> <span class="fl">1.0</span> <span class="op">||</span> projCoords<span class="op">.</span><span class="fu">x</span> <span class="op">&lt;</span> <span class="fl">0.0</span> <span class="op">||</span> projCoords<span class="op">.</span><span class="fu">x</span> <span class="op">&gt;</span> <span class="fl">1.0</span> <span class="op">||</span> </span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        projCoords<span class="op">.</span><span class="fu">y</span> <span class="op">&lt;</span> <span class="fl">0.0</span> <span class="op">||</span> projCoords<span class="op">.</span><span class="fu">y</span> <span class="op">&gt;</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> receiverDepth <span class="op">=</span> projCoords<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Sample the filtered exponential occluder depth (sum of w_i * exp(c * d_i))</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> filteredOccluderExp <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>shadowMap<span class="op">,</span> projCoords<span class="op">.</span><span class="fu">xy</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate visibility: exp(-c * z) * exp(c * d)</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> shadow <span class="op">=</span> filteredOccluderExp <span class="op">*</span> <span class="bu">exp</span><span class="op">(-</span>c <span class="op">*</span> receiverDepth<span class="op">);</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Clamp to [0, 1] to remove false darkening on fully lit areas</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">clamp</span><span class="op">(</span>shadow<span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> shadow <span class="op">=</span> <span class="fu">computeESMShadow</span><span class="op">(</span>v_FragPosLightSpace<span class="op">);</span></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> baseColor <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.8</span><span class="op">);</span> <span class="co">// Example surface color</span></span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> litColor <span class="op">=</span> baseColor <span class="op">*</span> shadow<span class="op">;</span></span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>    FinalColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>litColor<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<hr />
+<h3 id="avoiding-numerical-overflow-log-space-alternative">Avoiding
+Numerical Overflow (Log-Space Alternative)</h3>
+<p>When using lower precision targets (such as 16-bit floats) or very
+high <span class="math inline">\(c\)</span> values, <span
+class="math inline">\(e^{cd}\)</span> may exceed floating-point limits.
+In such cases, compute visibility using the equivalent natural logarithm
+representation:</p>
+<p><span class="math display">\[
+\ln(V) = \ln\left( \sum_i w_i e^{cd_i} \right) - cz
+\]</span></p>
+<p>This is implemented during sampling as:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> shadow <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">exp</span><span class="op">(</span><span class="bu">log</span><span class="op">(</span>filteredOccluderExp<span class="op">)</span> <span class="op">-</span> c <span class="op">*</span> receiverDepth<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span></code></pre></div></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

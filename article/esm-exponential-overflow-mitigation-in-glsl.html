@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESM Exponential Overflow Mitigation in GLSL - glsl</title>
+    <meta name="description" content="Exponential Shadow Maps (ESM) replace standard shadow map depth comparisons with an exponential test to allow linear filtering, but high exponential factors frequently trigger 32-bit floating-point overflow during depth evaluation. This article examines">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/esm-exponential-overflow-mitigation-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="ESM Exponential Overflow Mitigation in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/esm-exponential-overflow-mitigation-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Exponential Shadow Maps (ESM) replace standard shadow map depth comparisons with an exponential test to allow linear filtering, but high exponential factors frequently trigger 32-bit floating-point overflow during depth evaluation. This article examines" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="esm-exponential-overflow-mitigation-in-glsl">ESM Exponential
+Overflow Mitigation in GLSL</h1>
+<p>Exponential Shadow Maps (ESM) replace standard shadow map depth
+comparisons with an exponential test to allow linear filtering, but high
+exponential factors frequently trigger 32-bit floating-point overflow
+during depth evaluation. This article examines how ESM mitigates this
+numerical instability in GLSL by reordering operations to evaluate depth
+differences inside a single exponential function, leveraging negative
+exponents to prevent float truncation, and using log-space
+transformations to avoid precision limits in hardware filtering.</p>
+<h2 id="the-overflow-problem-in-standard-esm">The Overflow Problem in
+Standard ESM</h2>
+<p>The standard ESM approximation represents shadow testing using the
+function:</p>
+<p><span class="math display">\[f(d, z) = e^{-c(z - d)} = e^{cd} \cdot
+e^{-cz}\]</span></p>
+<p>where <span class="math inline">\(z\)</span> is the receiver depth,
+<span class="math inline">\(d\)</span> is the occluder depth stored in
+the shadow map, and <span class="math inline">\(c\)</span> is an
+exponential warp factor (commonly between 40 and 80).</p>
+<p>In GLSL, standard single-precision floats (<code>float</code>, FP32)
+have a maximum representable value of approximately <span
+class="math inline">\(3.4028 \times 10^{38}\)</span>. The standard
+library function <code>exp(x)</code> overflows into infinity
+(<code>+inf</code>) or generates <code>NaN</code> values when <span
+class="math inline">\(x &gt; 88.7228\)</span>. When <span
+class="math inline">\(c\)</span> is set to high values to prevent light
+bleeding on surfaces far from the occluder, computing <span
+class="math inline">\(e^{cd}\)</span> directly in the shadow pass or
+<span class="math inline">\(e^{cz}\)</span> in the fragment shader
+rapidly exceeds this threshold, corrupting the shadow output.</p>
+<h2 id="moving-depth-differences-inside-the-exponent">Moving Depth
+Differences Inside the Exponent</h2>
+<p>The primary mitigation in GLSL is to avoid evaluating individual
+exponentials for depth values. Instead of computing <span
+class="math inline">\(e^{cd}\)</span> and <span
+class="math inline">\(e^{-cz}\)</span> separately, the shader computes
+the difference between occluder and receiver depths before applying the
+exponential operation:</p>
+<p><span class="math display">\[\text{Shadow} = \text{clamp}(e^{-c(z -
+d)}, 0.0, 1.0)\]</span></p>
+<p>In GLSL fragment code, this is implemented as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> occluderDepth <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>shadowMap<span class="op">,</span> shadowCoord<span class="op">.</span><span class="fu">xy</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> receiverDepth <span class="op">=</span> shadowCoord<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Evaluate difference prior to exponentiation</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> depthDifference <span class="op">=</span> receiverDepth <span class="op">-</span> occluderDepth<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> shadowFactor <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">exp</span><span class="op">(-</span>c <span class="op">*</span> depthDifference<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span></code></pre></div>
+<p>When a surface is in shadow (<span class="math inline">\(z &gt;
+d\)</span>), the difference <span class="math inline">\((z - d)\)</span>
+is positive, making the exponent <span class="math inline">\(-c(z -
+d)\)</span> strictly negative. In IEEE 754 floating-point arithmetic,
+large negative exponents underflow gracefully to zero rather than
+overflowing to infinity.</p>
+<p>When a surface is fully lit (<span class="math inline">\(z \le
+d\)</span>), the exponent is positive or zero. While positive values can
+cause overflow if <span class="math inline">\(z \ll d\)</span> (such as
+depth bias mismatches or receiver geometry far in front of an occluder),
+applying <code>clamp</code> or bounding the depth difference prevents
+numerical instability:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> depthDifference <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>receiverDepth <span class="op">-</span> occluderDepth<span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> shadowFactor <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>c <span class="op">*</span> depthDifference<span class="op">);</span></span></code></pre></div>
+<h2 id="mitigating-texture-filter-overflow-with-log-esm">Mitigating
+Texture Filter Overflow with Log-ESM</h2>
+<p>While evaluating differences inside <code>exp()</code> protects the
+lighting pass, linear hardware filtering across shadow map texels
+requires storing pre-warped values. If <span
+class="math inline">\(e^{cd}\)</span> is stored directly in an FP32
+texture, texel values will overflow during texture generation.</p>
+<p>To resolve this, implementations use Log-ESM. In Log-ESM, depths are
+retained in linear space or converted into log-space textures. When
+generating the shadow map with custom blur passes (such as separable
+Gaussian blurs), the operations are performed using the log-sum-exp
+trick to avoid intermediate overflow:</p>
+<p><span class="math display">\[\ln\left(\sum w_i e^{c d_i}\right) = c
+d_{\max} + \ln\left(\sum w_i e^{c (d_i - d_{\max})}\right)\]</span></p>
+<p>In this equation, <span class="math inline">\(d_{\max}\)</span> is
+the maximum depth in the blur kernel, and <span
+class="math inline">\(w_i\)</span> represents the kernel weights.
+Because <span class="math inline">\(d_i - d_{\max} \le 0\)</span>, the
+values passed to <code>exp()</code> are guaranteed not to exceed <span
+class="math inline">\(1.0\)</span>, completely eliminating
+floating-point overflow during filtering.</p>
+<p>In the final GLSL lighting pass, if the texture stores the filtered
+occluder depth directly (<span class="math inline">\(d\)</span>), the
+final lookup remains:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> shadow <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">exp</span><span class="op">(-</span>c <span class="op">*</span> <span class="op">(</span>shadowCoord<span class="op">.</span><span class="fu">z</span> <span class="op">-</span> <span class="bu">texture</span><span class="op">(</span>shadowMap<span class="op">,</span> shadowCoord<span class="op">.</span><span class="fu">xy</span><span class="op">).</span><span class="fu">r</span><span class="op">)),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span></code></pre></div>
+<p>This formulation guarantees that the shader executes entirely within
+the stable range of FP32 hardware arithmetic.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

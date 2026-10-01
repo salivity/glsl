@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Do GLSL Memory Qualifiers Control Shader Access? - glsl</title>
+    <meta name="description" content="OpenGL Shading Language (GLSL) memory qualifiers define how shader invocations read and write shared data structures like Shader Storage Buffer Objects (SSBOs) and image variables. By using qualifiers such as coherent, volatile, and restrict, developers">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-do-glsl-memory-qualifiers-control-shader-access">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Do GLSL Memory Qualifiers Control Shader Access? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-do-glsl-memory-qualifiers-control-shader-access" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="OpenGL Shading Language (GLSL) memory qualifiers define how shader invocations read and write shared data structures like Shader Storage Buffer Objects (SSBOs) and image variables. By using qualifiers such as coherent, volatile, and restrict, developers" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-do-glsl-memory-qualifiers-control-shader-access">How Do GLSL
+Memory Qualifiers Control Shader Access?</h1>
+<p>OpenGL Shading Language (GLSL) memory qualifiers define how shader
+invocations read and write shared data structures like Shader Storage
+Buffer Objects (SSBOs) and image variables. By using qualifiers such as
+<code>coherent</code>, <code>volatile</code>, and <code>restrict</code>,
+developers override compiler optimizations and hardware caching
+assumptions to manage data visibility, prevent stale cache reads, and
+avoid synchronization hazards across parallel shader threads.</p>
+<h2 id="the-problem-of-asynchronous-shader-execution">The Problem of
+Asynchronous Shader Execution</h2>
+<p>Modern GPUs execute hundreds or thousands of shader invocations
+concurrently across multiple streaming multiprocessors or compute units.
+Because each unit maintains private caches (such as L1 or texture
+caches) in addition to shared L2 caches and global device memory, write
+operations are not automatically visible to other invocations.</p>
+<p>Without explicit qualifiers, the GLSL compiler assumes that variables
+are private to an invocation's immediate control flow or that standard
+pipeline barriers handle all necessary synchronization. When multiple
+invocations communicate via shared buffers, this assumption breaks down,
+leading to race conditions and stale reads.</p>
+<h2
+id="coherent-ensuring-cross-invocation-visibility"><code>coherent</code>:
+Ensuring Cross-Invocation Visibility</h2>
+<p>By default, data written to an image or buffer variable is only
+guaranteed to be visible to the invocation that issued the write. The
+<code>coherent</code> qualifier ensures that writes from one invocation
+eventually become visible to other invocations within the same shader
+stage or across different stages.</p>
+<p>Key characteristics of <code>coherent</code>:</p>
+<ul>
+<li>Forces memory transactions to bypass or flush thread-local caches,
+writing through to a memory level accessible by other shader invocations
+(typically L2 or global device memory).</li>
+<li>Guarantees that subsequent reads from other invocations retrieve
+updated data, provided that an appropriate barrier (such as
+<code>memoryBarrier()</code> or <code>groupMemoryBarrier()</code>)
+enforces execution order.</li>
+<li>Imposes performance overhead due to the disabling of local register
+and cache caching across operations.</li>
+</ul>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">coherent</span> <span class="kw">buffer</span> CounterBuffer <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> globalCounter<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<h2
+id="volatile-preventing-compiler-caching-and-reordering"><code>volatile</code>:
+Preventing Compiler Caching and Reordering</h2>
+<p>The <code>volatile</code> qualifier informs the compiler that a
+variable's value can change outside the local shader invocation's direct
+control—for instance, via hardware timers or concurrent modifications
+from other threads.</p>
+<p>Key characteristics of <code>volatile</code>:</p>
+<ul>
+<li>Prevents the GLSL compiler from optimizing reads and writes away,
+such as hoisting a read out of a loop or caching a buffer value in a
+register.</li>
+<li>Requires the GPU to re-fetch the value from the memory hierarchy on
+every read access and write it out on every assignment.</li>
+<li>Does not replace <code>coherent</code>; it governs compiler behavior
+rather than cache hierarchy synchronization. Often used alongside
+<code>coherent</code> in lock-free algorithms or polling loops.</li>
+</ul>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">volatile</span> <span class="kw">buffer</span> FlagBuffer <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> lockFlag<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<h2
+id="restrict-enabling-aggressive-compiler-optimization"><code>restrict</code>:
+Enabling Aggressive Compiler Optimization</h2>
+<p>While <code>coherent</code> and <code>volatile</code> constrain
+optimizations to ensure correctness in concurrent environments,
+<code>restrict</code> does the opposite. Borrowed from C99,
+<code>restrict</code> promises the compiler that the pointer or resource
+reference is the sole pathway used to access that specific block of
+memory within the shader scope.</p>
+<p>Key characteristics of <code>restrict</code>:</p>
+<ul>
+<li>Guarantees that reads and writes through this variable will not
+alias (overlap) with reads or writes through any other buffer or image
+variable.</li>
+<li>Allows the compiler to aggressively reorder instructions, vectorize
+loads/stores, and cache data in registers without worrying that another
+pointer might modify the underlying bytes.</li>
+<li>If memory aliasing actually occurs when <code>restrict</code> is
+declared, the resulting behavior is undefined.</li>
+</ul>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="dt">restrict</span> <span class="dt">readonly</span> <span class="kw">buffer</span> SourceData <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> srcElements<span class="op">[];</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">3</span><span class="op">)</span> <span class="dt">restrict</span> <span class="dt">writeonly</span> <span class="kw">buffer</span> TargetData <span class="op">{</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> dstElements<span class="op">[];</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<h2 id="supporting-qualifiers-readonly-and-writeonly">Supporting
+Qualifiers: <code>readonly</code> and <code>writeonly</code></h2>
+<p>GLSL also provides access-limiting qualifiers that work alongside
+memory management flags:</p>
+<ul>
+<li><code>readonly</code>: Enforces that the shader invocation may only
+load data from the resource.</li>
+<li><code>writeonly</code>: Restricts the resource exclusively to store
+operations. Reads cannot be performed, which enables hardware pipelines
+to discard unnecessary load paths.</li>
+</ul>
+<h2 id="summary-of-memory-qualifier-roles">Summary of Memory Qualifier
+Roles</h2>
+<table>
+<thead>
+<tr>
+<th>Qualifier</th>
+<th>Primary Function</th>
+<th>Primary Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>coherent</code></td>
+<td>Synchronizes cache visibility across invocations</td>
+<td>Inter-thread communication, atomics</td>
+</tr>
+<tr>
+<td><code>volatile</code></td>
+<td>Disables compiler register caching and instruction elimination</td>
+<td>Polling loops, flag monitoring</td>
+</tr>
+<tr>
+<td><code>restrict</code></td>
+<td>Asserts no memory aliasing exists for the resource</td>
+<td>Independent buffer streaming, performance optimization</td>
+</tr>
+<tr>
+<td><code>readonly</code> / <code>writeonly</code></td>
+<td>Restricts access direction (load vs. store)</td>
+<td>Pipeline protection, cache path optimization</td>
+</tr>
+</tbody>
+</table></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

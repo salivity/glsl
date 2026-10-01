@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Per-Pixel Linked Lists for OIT in GLSL - glsl</title>
+    <meta name="description" content="Order-independent transparency (OIT) using per-pixel linked lists solves the long-standing graphical challenge of rendering overlapping transparent surfaces without presorting geometry on the CPU. By leveraging OpenGL Shading Language (GLSL) atomic opera">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/per-pixel-linked-lists-for-oit-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Per-Pixel Linked Lists for OIT in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/per-pixel-linked-lists-for-oit-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Order-independent transparency (OIT) using per-pixel linked lists solves the long-standing graphical challenge of rendering overlapping transparent surfaces without presorting geometry on the CPU. By leveraging OpenGL Shading Language (GLSL) atomic opera" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="per-pixel-linked-lists-for-oit-in-glsl">Per-Pixel Linked Lists
+for OIT in GLSL</h1>
+<p>Order-independent transparency (OIT) using per-pixel linked lists
+solves the long-standing graphical challenge of rendering overlapping
+transparent surfaces without presorting geometry on the CPU. By
+leveraging OpenGL Shading Language (GLSL) atomic operations and Shader
+Storage Buffer Objects (SSBOs), this technique captures every
+transparent fragment generated during rasterization, stores its color
+and depth into a dynamically allocated per-pixel linked list, and sorts
+these fragments in a subsequent pass. This article explains the data
+structures, the list creation pass, and the final resolution pass
+required to implement per-pixel linked list OIT.</p>
+<h3 id="required-data-structures-and-buffers">Required Data Structures
+and Buffers</h3>
+<p>Implementing per-pixel linked lists requires three primary GPU memory
+resources:</p>
+<ol type="1">
+<li><strong>Head Pointer Texture (or Buffer):</strong> A 2D
+single-channel integer texture (<code>R32UI</code>) matching the screen
+resolution. Each texel represents a pixel on the screen and stores the
+index of the first node (head) in that pixel's linked list. It is
+initialized to an invalid index (such as <code>0xFFFFFFFF</code>) at the
+beginning of each frame.</li>
+<li><strong>Atomic Counter Buffer:</strong> An atomic counter or atomic
+unsigned integer used as a global memory allocator. It tracks the next
+available index in the node storage buffer.</li>
+<li><strong>Node Storage Buffer (SSBO):</strong> A large linear buffer
+of structs. Each struct represents a fragment node containing:
+<ul>
+<li><code>vec4 color</code>: The fragment's color and alpha.</li>
+<li><code>float depth</code>: The fragment's depth value.</li>
+<li><code>uint next</code>: The index of the next node in the linked
+list.</li>
+</ul></li>
+</ol>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Node <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> color<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> depth<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> next<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> NodeBuffer <span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    Node nodes<span class="op">[];</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> r32ui<span class="op">)</span> <span class="kw">uniform</span> <span class="dt">uimage2D</span> headPointerImage<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">atomic_uint</span> nodeCounter<span class="op">;</span></span></code></pre></div>
+<h3 id="pass-1-building-the-linked-lists">Pass 1: Building the Linked
+Lists</h3>
+<p>During the geometry pass, all transparent objects are drawn with
+depth writes disabled, while depth testing remains active against opaque
+geometry. The fragment shader captures incoming fragments without
+writing directly to the framebuffer.</p>
+<ol type="1">
+<li><strong>Allocate a Node:</strong> The fragment shader increments the
+global atomic counter using
+<code>atomicCounterIncrement(nodeCounter)</code>. This returns a unique
+index inside the SSBO. A bounds check ensures the index does not exceed
+the maximum capacity of the node buffer.</li>
+<li><strong>Link the Fragment:</strong> The shader inserts the new node
+at the beginning of the pixel's list using
+<code>imageAtomicExchange</code>. This atomic exchange replaces the
+current head pointer for coordinate <code>ivec2(gl_FragCoord.xy)</code>
+with the newly allocated node index and returns the old head
+pointer.</li>
+<li><strong>Store Fragment Data:</strong> The returned old head pointer
+becomes the <code>next</code> pointer of the new node. The shader then
+writes the fragment’s color, depth (<code>gl_FragCoord.z</code>), and
+<code>next</code> index into the node buffer at the allocated
+index.</li>
+</ol>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> nodeIndex <span class="op">=</span> <span class="bu">atomicCounterIncrement</span><span class="op">(</span>nodeCounter<span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>nodeIndex <span class="op">&lt;</span> MAX_NODES<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> prevHead <span class="op">=</span> <span class="bu">imageAtomicExchange</span><span class="op">(</span>headPointerImage<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">xy</span><span class="op">),</span> nodeIndex<span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    nodes<span class="op">[</span>nodeIndex<span class="op">].</span><span class="fu">color</span> <span class="op">=</span> fragmentColor<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    nodes<span class="op">[</span>nodeIndex<span class="op">].</span><span class="fu">depth</span> <span class="op">=</span> <span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    nodes<span class="op">[</span>nodeIndex<span class="op">].</span><span class="fu">next</span> <span class="op">=</span> prevHead<span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="memory-synchronization">Memory Synchronization</h3>
+<p>Between the building pass and the resolution pass, an execution and
+memory barrier must be dispatched on the host application side. In
+OpenGL, calling
+<code>glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)</code>
+guarantees that all writes to the atomic counter, the head pointer
+image, and the SSBO are completed and visible to subsequent shader
+invocations.</p>
+<h3 id="pass-2-sorting-and-blending-fragments">Pass 2: Sorting and
+Blending Fragments</h3>
+<p>The final phase runs a full-screen pass—via a full-screen triangle or
+a compute shader—to resolve the lists into the final color buffer:</p>
+<ol type="1">
+<li><strong>Traverse the List:</strong> For each pixel, the shader
+fetches the head index from the head pointer texture. It iteratively
+follows the <code>next</code> pointers through the node buffer, loading
+each node's color and depth into a local, fixed-size temporary
+array.</li>
+<li><strong>Sort by Depth:</strong> Once the nodes for the current pixel
+are collected, they are sorted by their depth values. Simple in-register
+sorting algorithms, such as insertion sort, are ideal because the number
+of overlapping transparent fragments per pixel is typically low.</li>
+<li><strong>Composite:</strong> The sorted fragments are blended in
+order (either back-to-front using standard over-blending, or
+front-to-back using premultiplied alpha) over the existing opaque scene
+color. The final blended color is written to the screen output.</li>
+</ol>
+<h3 id="performance-and-memory-considerations">Performance and Memory
+Considerations</h3>
+<p>Per-pixel linked list OIT guarantees pixel-perfect transparency
+regardless of geometric complexity or intersecting primitives. However,
+memory consumption scales with screen resolution and fragment density;
+if transparent overdraw is high, the node buffer can run out of space,
+resulting in dropped fragments. Developers typically cap the maximum
+nodes per pixel during traversal to limit register pressure and prevent
+divergence across warp threads during the sorting stage.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

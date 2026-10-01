@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does Smoothstep Work in GLSL? - glsl</title>
+    <meta name="description" content="The smoothstep function in GLSL performs smooth cubic Hermite interpolation between two boundary values, clamping inputs outside the range and eliminating sharp slope transitions. Unlike standard linear interpolation, smoothstep enforces a zero derivativ">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-smoothstep-work-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does Smoothstep Work in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-smoothstep-work-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The smoothstep function in GLSL performs smooth cubic Hermite interpolation between two boundary values, clamping inputs outside the range and eliminating sharp slope transitions. Unlike standard linear interpolation, smoothstep enforces a zero derivativ" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-smoothstep-work-in-glsl">How Does Smoothstep Work in
+GLSL?</h1>
+<p>The <code>smoothstep</code> function in GLSL performs smooth cubic
+Hermite interpolation between two boundary values, clamping inputs
+outside the range and eliminating sharp slope transitions. Unlike
+standard linear interpolation, <code>smoothstep</code> enforces a zero
+derivative at both endpoints, creating an ease-in, ease-out S-curve that
+transitions continuously in both value and first derivative. This
+mathematical property prevents visual creases in procedural textures,
+lighting models, and shader animations.</p>
+<h2 id="input-normalization-and-clamping">Input Normalization and
+Clamping</h2>
+<p>The standard signature of the function is
+<code>smoothstep(edge0, edge1, x)</code>. Before evaluating any
+polynomial curve, the function maps the input parameter <span
+class="math inline">\(x\)</span> from the arbitrary interval <span
+class="math inline">\([\text{edge0}, \text{edge1}]\)</span> into a
+normalized unit interval <span class="math inline">\([0.0,
+1.0]\)</span>.</p>
+<p>To prevent extrapolation beyond the target bounds, the normalized
+value is clamped:</p>
+<p><span class="math display">\[t = \text{clamp}\left(\frac{x -
+\text{edge0}}{\text{edge1} - \text{edge0}}, 0.0, 1.0\right)\]</span></p>
+<p>If <span class="math inline">\(x \le \text{edge0}\)</span>, <span
+class="math inline">\(t\)</span> resolves to <span
+class="math inline">\(0.0\)</span>. If <span class="math inline">\(x \ge
+\text{edge1}\)</span>, <span class="math inline">\(t\)</span> resolves
+to <span class="math inline">\(1.0\)</span>. For all values in between,
+<span class="math inline">\(t\)</span> represents the linear progress
+across the domain.</p>
+<h2 id="the-cubic-hermite-polynomial">The Cubic Hermite Polynomial</h2>
+<p>Once the value is normalized into the range <span
+class="math inline">\([0.0, 1.0]\)</span>, GLSL applies a specific
+third-order polynomial known as a cubic Hermite interpolator:</p>
+<p><span class="math display">\[S(t) = 3t^2 - 2t^3 = t^2(3 -
+2t)\]</span></p>
+<p>In GLSL source implementations, this is often computed directly as
+<code>t * t * (3.0 - 2.0 * t)</code>.</p>
+<p>Evaluating this function at the unit boundaries yields:</p>
+<ul>
+<li><span class="math inline">\(S(0) = 3(0)^2 - 2(0)^3 =
+0.0\)</span></li>
+<li><span class="math inline">\(S(1) = 3(1)^2 - 2(1)^3 =
+1.0\)</span></li>
+</ul>
+<h2 id="why-zero-derivatives-ensure-smoothness">Why Zero Derivatives
+Ensure Smoothness</h2>
+<p>The defining advantage of cubic Hermite interpolation over linear
+interpolation (<code>mix</code>) lies in its rate of change. Taking the
+first derivative of <span class="math inline">\(S(t)\)</span> with
+respect to <span class="math inline">\(t\)</span> gives:</p>
+<p><span class="math display">\[S&#39;(t) = \frac{d}{dt}(3t^2 - 2t^3) =
+6t - 6t^2 = 6t(1 - t)\]</span></p>
+<p>Evaluating the first derivative at the boundaries reveals why the
+transition is smooth:</p>
+<ul>
+<li><span class="math inline">\(S&#39;(0) = 6(0)(1 - 0) =
+0\)</span></li>
+<li><span class="math inline">\(S&#39;(1) = 6(1)(1 - 1) =
+0\)</span></li>
+</ul>
+<p>Because the derivative is zero at both <span class="math inline">\(t
+= 0.0\)</span> and <span class="math inline">\(t = 1.0\)</span>, the
+slope of the curve matches the flat slope of the clamped regions outside
+the interval. This guarantees <span class="math inline">\(C^1\)</span>
+continuity (a continuous first derivative) across the entire domain,
+preventing the visible Mach bands and angular seams that occur when
+linearly interpolating clamped data.</p>
+<h2 id="higher-order-continuity-smootherstep">Higher-Order Continuity:
+Smootherstep</h2>
+<p>While <code>smoothstep</code> provides <span
+class="math inline">\(C^1\)</span> continuity, its second derivative
+<span class="math inline">\(S&#39;&#39;(t) = 6 - 12t\)</span> evaluates
+to <span class="math inline">\(6\)</span> at <span
+class="math inline">\(t = 0\)</span> and <span
+class="math inline">\(-6\)</span> at <span class="math inline">\(t =
+1\)</span>, causing an instantaneous jump in acceleration at the
+boundaries.</p>
+<p>For scenarios requiring <span class="math inline">\(C^2\)</span>
+continuity (continuous second derivative), such as high-order surface
+normal generation and Perlin noise, Ken Perlin introduced the quintic
+polynomial known as <code>smootherstep</code>:</p>
+<p><span class="math display">\[Q(t) = 6t^5 - 15t^4 + 10t^3 = t^3(t(6t -
+15) + 10)\]</span></p>
+<p>The first and second derivatives of <span
+class="math inline">\(Q(t)\)</span> are zero at both <span
+class="math inline">\(t = 0.0\)</span> and <span class="math inline">\(t
+= 1.0\)</span>, providing an even gentler transition that eliminates
+subtle curvature artifacts in graphics rendering.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

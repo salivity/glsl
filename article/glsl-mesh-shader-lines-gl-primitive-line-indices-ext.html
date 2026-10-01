@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Mesh Shader Lines: gl_PrimitiveLineIndicesEXT - glsl</title>
+    <meta name="description" content="This article explains how to configure and generate line network primitives in GLSL using mesh shaders via the GLEXTmeshshader extension. It covers the required layout qualifiers, primitive count allocations, and how to populate the glPrimitiveLineIndice">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-mesh-shader-lines-gl-primitive-line-indices-ext">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Mesh Shader Lines: gl_PrimitiveLineIndicesEXT - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-mesh-shader-lines-gl-primitive-line-indices-ext" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to configure and generate line network primitives in GLSL using mesh shaders via the GLEXTmeshshader extension. It covers the required layout qualifiers, primitive count allocations, and how to populate the glPrimitiveLineIndice" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-mesh-shader-lines-gl_primitivelineindicesext">GLSL Mesh
+Shader Lines: gl_PrimitiveLineIndicesEXT</h1>
+<p>This article explains how to configure and generate line network
+primitives in GLSL using mesh shaders via the
+<code>GL_EXT_mesh_shader</code> extension. It covers the required layout
+qualifiers, primitive count allocations, and how to populate the
+<code>gl_PrimitiveLineIndicesEXT</code> index buffer to define custom
+line topologies, segments, and connected wireframes efficiently on the
+GPU.</p>
+<h3 id="pipeline-configuration-and-layout-qualifiers">Pipeline
+Configuration and Layout Qualifiers</h3>
+<p>To output lines instead of triangles, the mesh shader must declare
+the <code>lines</code> output primitive topology alongside the maximum
+bounds for vertices and primitives. This requires enabling the
+<code>GL_EXT_mesh_shader</code> extension.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_mesh_shader : require</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">32</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">lines</span><span class="op">,</span> <span class="dt">max_vertices</span> <span class="op">=</span> <span class="dv">64</span><span class="op">,</span> max_primitives <span class="op">=</span> <span class="dv">63</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span></code></pre></div>
+<ul>
+<li><code>lines</code>: Sets the primitive assembly mode to discrete
+line segments.</li>
+<li><code>max_vertices</code>: Defines the upper limit of vertices this
+workgroup can export.</li>
+<li><code>max_primitives</code>: Defines the maximum number of line
+segments generated by the workgroup.</li>
+</ul>
+<h3 id="setting-mesh-outputs">Setting Mesh Outputs</h3>
+<p>Before writing index data, the mesh shader workgroup must specify the
+exact number of active vertices and primitives for the current
+execution. This is done collectively using
+<code>SetMeshOutputsEXT</code>.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> numVertices <span class="op">=</span> <span class="dv">64</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> numLines <span class="op">=</span> <span class="dv">63</span><span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="fu">SetMeshOutputsEXT</span><span class="op">(</span>numVertices<span class="op">,</span> numLines<span class="op">);</span></span></code></pre></div>
+<p>Every active primitive index written beyond <code>numLines</code>
+will be discarded, and invocations must complete this call before the
+primitive stage assembles geometry.</p>
+<h3
+id="configuring-topology-with-gl_primitivelineindicesext">Configuring
+Topology with gl_PrimitiveLineIndicesEXT</h3>
+<p>In a mesh shader configured for lines, primitive connectivity is
+determined by the built-in array
+<code>gl_PrimitiveLineIndicesEXT[]</code>.</p>
+<p>Each element in this array is a two-component unsigned integer vector
+(<code>uvec2</code>), representing the start and end vertex indices of a
+single line segment:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">uvec2</span> gl_PrimitiveLineIndicesEXT<span class="op">[];</span></span></code></pre></div>
+<p>To form a continuous line network, polyline, or arbitrary graph,
+assign the corresponding vertex indices to each entry.</p>
+<h4 id="1-continuous-line-strips-polylines">1. Continuous Line Strips
+(Polylines)</h4>
+<p>For a connected sequence of lines where vertex <span
+class="math inline">\(i\)</span> connects to vertex <span
+class="math inline">\(i + 1\)</span>:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> threadId <span class="op">=</span> <span class="bu">gl_LocalInvocationIndex</span><span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>threadId <span class="op">&lt;</span> numLines<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    gl_PrimitiveLineIndicesEXT<span class="op">[</span>threadId<span class="op">]</span> <span class="op">=</span> <span class="dt">uvec2</span><span class="op">(</span>threadId<span class="op">,</span> threadId <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h4 id="2-disjoint-line-segments">2. Disjoint Line Segments</h4>
+<p>For disconnected pairs of vertices forming isolated segments:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> threadId <span class="op">=</span> <span class="bu">gl_LocalInvocationIndex</span><span class="op">;</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>threadId <span class="op">&lt;</span> numLines<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> baseIndex <span class="op">=</span> threadId <span class="op">*</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    gl_PrimitiveLineIndicesEXT<span class="op">[</span>threadId<span class="op">]</span> <span class="op">=</span> <span class="dt">uvec2</span><span class="op">(</span>baseIndex<span class="op">,</span> baseIndex <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h4 id="3-arbitrary-line-networks-grids-or-graphs">3. Arbitrary Line
+Networks (Grids or Graphs)</h4>
+<p>Because <code>gl_PrimitiveLineIndicesEXT</code> gives direct indexing
+control per primitive, complex graphs can be indexed arbitrarily without
+repeating shared vertices:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Example: Creating a closed loop of 4 vertices</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>threadId <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> gl_PrimitiveLineIndicesEXT<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dt">uvec2</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>threadId <span class="op">==</span> <span class="dv">1</span><span class="op">)</span> gl_PrimitiveLineIndicesEXT<span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">=</span> <span class="dt">uvec2</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">);</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>threadId <span class="op">==</span> <span class="dv">2</span><span class="op">)</span> gl_PrimitiveLineIndicesEXT<span class="op">[</span><span class="dv">2</span><span class="op">]</span> <span class="op">=</span> <span class="dt">uvec2</span><span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>threadId <span class="op">==</span> <span class="dv">3</span><span class="op">)</span> gl_PrimitiveLineIndicesEXT<span class="op">[</span><span class="dv">3</span><span class="op">]</span> <span class="op">=</span> <span class="dt">uvec2</span><span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">0</span><span class="op">);</span></span></code></pre></div>
+<h3 id="complete-implementation-example">Complete Implementation
+Example</h3>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_mesh_shader : require</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">32</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">lines</span><span class="op">,</span> <span class="dt">max_vertices</span> <span class="op">=</span> <span class="dv">33</span><span class="op">,</span> max_primitives <span class="op">=</span> <span class="dv">32</span><span class="op">)</span> <span class="dt">out</span><span class="op">;</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> threadId <span class="op">=</span> <span class="bu">gl_LocalInvocationIndex</span><span class="op">;</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> vertexCount <span class="op">=</span> <span class="dv">33</span><span class="op">;</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> lineCount <span class="op">=</span> <span class="dv">32</span><span class="op">;</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">SetMeshOutputsEXT</span><span class="op">(</span>vertexCount<span class="op">,</span> lineCount<span class="op">);</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute vertex positions</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>threadId <span class="op">&lt;</span> vertexCount<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> x <span class="op">=</span> <span class="dt">float</span><span class="op">(</span>threadId<span class="op">)</span> <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>vertexCount <span class="op">-</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>        gl_MeshVerticesEXT<span class="op">[</span>threadId<span class="op">].</span><span class="fu">gl_Position</span> <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>x <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">,</span> <span class="bu">sin</span><span class="op">(</span>x <span class="op">*</span> <span class="fl">6.28</span><span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Configure line topology</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>threadId <span class="op">&lt;</span> lineCount<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>        gl_PrimitiveLineIndicesEXT<span class="op">[</span>threadId<span class="op">]</span> <span class="op">=</span> <span class="dt">uvec2</span><span class="op">(</span>threadId<span class="op">,</span> threadId <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Unlike traditional geometry shaders, mesh shaders allow threads
+within the workgroup to write both vertex data
+(<code>gl_MeshVerticesEXT</code>) and line topological connections
+(<code>gl_PrimitiveLineIndicesEXT</code>) in parallel, eliminating
+redundant vertex processing across adjacent lines in the network.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

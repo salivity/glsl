@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Struct Uniform Layouts: Default vs UBO - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), structure uniforms behave fundamentally differently depending on whether they are declared as loose, default uniforms or placed within a Uniform Buffer Object (UBO). Default uniform layouts are managed entirely by the d">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-struct-uniform-layouts-default-vs-ubo">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Struct Uniform Layouts: Default vs UBO - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-struct-uniform-layouts-default-vs-ubo" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), structure uniforms behave fundamentally differently depending on whether they are declared as loose, default uniforms or placed within a Uniform Buffer Object (UBO). Default uniform layouts are managed entirely by the d" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-struct-uniform-layouts-default-vs-ubo">GLSL Struct Uniform
+Layouts: Default vs UBO</h1>
+<p>In OpenGL Shading Language (GLSL), structure uniforms behave
+fundamentally differently depending on whether they are declared as
+loose, default uniforms or placed within a Uniform Buffer Object (UBO).
+Default uniform layouts are managed entirely by the driver with opaque
+packing, requiring individual location queries for each struct member.
+In contrast, structures within UBOs follow rigid, standardized memory
+layout specifications—most notably <code>std140</code>—which enforce
+strict alignment and padding rules so that memory can be directly
+mirrored from host CPU memory to GPU buffers.</p>
+<h3 id="default-memory-layout-for-structure-uniforms">Default Memory
+Layout for Structure Uniforms</h3>
+<p>When a struct is declared outside of an interface block, it belongs
+to the default uniform block:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Material <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> ambient<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> shininess<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> Material u_material<span class="op">;</span></span></code></pre></div>
+<p>In this configuration, the OpenGL driver flattens the structure into
+discrete, independent uniform variables. The driver has full discretion
+over where and how these values are stored in GPU memory.
+Consequently:</p>
+<ul>
+<li><strong>No Fixed Memory Offset:</strong> There is no standardized
+byte offset or memory padding defined by the specification. The host
+application cannot write to the structure as a contiguous block of raw
+binary data.</li>
+<li><strong>Component-Wise Location Queries:</strong> Each field inside
+the struct receives its own independent uniform location. The CPU-side
+application must retrieve locations using individual member strings
+(such as
+<code>glGetUniformLocation(program, "u_material.ambient")</code> and
+<code>glGetUniformLocation(program, "u_material.shininess")</code>).</li>
+<li><strong>Sequential API Calls:</strong> Values must be uploaded
+individually using family functions like <code>glUniform3fv</code> and
+<code>glUniform1f</code>.</li>
+</ul>
+<h3 id="uniform-buffer-object-ubo-layouts">Uniform Buffer Object (UBO)
+Layouts</h3>
+<p>When a structure is placed inside a uniform block, it is backed by a
+GPU buffer object (<code>GL_UNIFORM_BUFFER</code>). This allows large
+sets of data to be shared across shader stages and uploaded via a single
+memory transfer (<code>glBufferSubData</code> or memory mapping).</p>
+<p>To ensure portability across different hardware vendors, GLSL
+provides explicit layout qualifiers, the most common being
+<code>std140</code>.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Material <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> ambient<span class="op">;</span>    <span class="co">// offset 0</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> shininess<span class="op">;</span> <span class="co">// offset 12</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std140</span><span class="op">)</span> <span class="kw">uniform</span> MaterialBlock <span class="op">{</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    Material u_material<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>Under the <code>std140</code> layout rules:</p>
+<ul>
+<li><strong>Base Alignment:</strong> Every type has a base alignment. A
+scalar float or int has a 4-byte alignment, a <code>vec2</code> requires
+8-byte alignment, and both <code>vec3</code> and <code>vec4</code>
+require 16-byte alignment.</li>
+<li><strong>Structure Alignment:</strong> A structure’s base alignment
+is equal to the alignment of its largest member, rounded up to the
+nearest multiple of 16 bytes (the size of a <code>vec4</code>).</li>
+<li><strong>Structure Padding:</strong> The total size of a structure is
+always rounded up to a multiple of 16 bytes. In the
+<code>Material</code> struct example above, even though
+<code>ambient</code> (12 bytes) and <code>shininess</code> (4 bytes)
+total 16 bytes, any following member or subsequent struct in an array
+will begin on the next 16-byte boundary.</li>
+<li><strong>Arrays of Structures:</strong> In an array of structs, each
+element is padded so that its start index matches the 16-byte alignment
+rule.</li>
+</ul>
+<h3 id="key-architectural-differences">Key Architectural
+Differences</h3>
+<ul>
+<li><strong>Memory Determinism:</strong> Default uniforms offer no
+layout predictability, making direct memory copying impossible. UBO
+layouts (<code>std140</code> or compute-oriented <code>std430</code>)
+guarantee deterministic byte offsets across all conforming
+hardware.</li>
+<li><strong>Upload Efficiency:</strong> Default structs require multiple
+API state changes and individual uniform setters. UBO structures are
+uploaded as a contiguous memory block via standard buffer update
+mechanisms.</li>
+<li><strong>Data Density:</strong> UBO structures frequently introduce
+explicit padding bytes due to 16-byte alignment rules, consuming more
+memory per struct than the driver’s potentially optimized internal
+representation for default uniforms.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

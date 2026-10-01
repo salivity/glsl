@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shadow Receiver Plane Depth Bias in GLSL - glsl</title>
+    <meta name="description" content="This article explains how to compute receiver plane depth bias for shadow mapping using screen-space partial derivatives in GLSL. By analyzing the rate of change of shadow coordinates relative to screen pixels, this technique computes an exact per-pixel">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/shadow-receiver-plane-depth-bias-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Shadow Receiver Plane Depth Bias in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/shadow-receiver-plane-depth-bias-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to compute receiver plane depth bias for shadow mapping using screen-space partial derivatives in GLSL. By analyzing the rate of change of shadow coordinates relative to screen pixels, this technique computes an exact per-pixel" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="shadow-receiver-plane-depth-bias-in-glsl">Shadow Receiver Plane
+Depth Bias in GLSL</h1>
+<p>This article explains how to compute receiver plane depth bias for
+shadow mapping using screen-space partial derivatives in GLSL. By
+analyzing the rate of change of shadow coordinates relative to screen
+pixels, this technique computes an exact per-pixel depth gradient across
+shadow map texels, substantially reducing shadow acne and peter-panning
+on surfaces angled steeply away from either the light or the camera.</p>
+<hr />
+<h3 id="the-underlying-problem">The Underlying Problem</h3>
+<p>Standard slope-scale depth bias relies on geometric surface normals
+to estimate slope relative to light direction. However, this
+approximation fails to capture the true projected footprint of shadow
+map texels when sampled across perspective projections or during
+Percentage-Closer Filtering (PCF).</p>
+<p>Receiver plane depth bias addresses this by calculating the partial
+derivatives of the light-space depth (<span
+class="math inline">\(z\)</span>) with respect to light-space UV texture
+coordinates (<span class="math inline">\(\frac{\partial z}{\partial
+u}\)</span> and <span class="math inline">\(\frac{\partial z}{\partial
+v}\)</span>).</p>
+<h3 id="mathematical-formulation">Mathematical Formulation</h3>
+<p>Given shadow-space coordinates <span class="math inline">\((u, v,
+z)\)</span> calculated per fragment, GLSL provides the built-in
+screen-space derivative functions <code>dFdx()</code> and
+<code>dFdy()</code>. The chain rule relates screen-space depth changes
+to UV-space depth changes:</p>
+<p><span class="math display">\[
+\begin{aligned}
+\frac{\partial z}{\partial x_{\text{screen}}} &amp;= \frac{\partial
+z}{\partial u} \frac{\partial u}{\partial x_{\text{screen}}} +
+\frac{\partial z}{\partial v} \frac{\partial v}{\partial
+x_{\text{screen}}} \\
+\frac{\partial z}{\partial y_{\text{screen}}} &amp;= \frac{\partial
+z}{\partial u} \frac{\partial u}{\partial y_{\text{screen}}} +
+\frac{\partial z}{\partial v} \frac{\partial v}{\partial
+y_{\text{screen}}}
+\end{aligned}
+\]</span></p>
+<p>In matrix form:</p>
+<h1
+id="-beginbmatrix-fracpartial-zpartial-x--fracpartial-zpartial-y-endbmatrix">$$
+\begin{bmatrix} \frac{\partial z}{\partial x} \ \frac{\partial
+z}{\partial y} \end{bmatrix}</h1>
+<p>\begin{bmatrix} \frac{\partial u}{\partial x} &amp; \frac{\partial
+v}{\partial x} \ \frac{\partial u}{\partial y} &amp; \frac{\partial
+v}{\partial y} \end{bmatrix} \begin{bmatrix} \frac{\partial z}{\partial
+u} \ \frac{\partial z}{\partial v} \end{bmatrix} $$</p>
+<p>Inverting the <span class="math inline">\(2 \times 2\)</span>
+Jacobian matrix yields the depth gradient in shadow-map texture
+space:</p>
+<h1
+id="-beginbmatrix-fracpartial-zpartial-u--fracpartial-zpartial-v-endbmatrix">$$
+\begin{bmatrix} \frac{\partial z}{\partial u} \ \frac{\partial
+z}{\partial v} \end{bmatrix}</h1>
+<p>\frac{1}{\frac{\partial u}{\partial x}\frac{\partial v}{\partial y} -
+\frac{\partial v}{\partial x}\frac{\partial u}{\partial y}}
+\begin{bmatrix} \frac{\partial v}{\partial y} &amp; -\frac{\partial
+v}{\partial x} \ -\frac{\partial u}{\partial y} &amp; \frac{\partial
+u}{\partial x} \end{bmatrix} \begin{bmatrix} \frac{\partial z}{\partial
+x} \ \frac{\partial z}{\partial y} \end{bmatrix} $$</p>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>The following function computes the depth gradient vector <span
+class="math inline">\(\left(\frac{\partial z}{\partial u},
+\frac{\partial z}{\partial v}\right)\)</span> from projective shadow
+coordinates:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">computeReceiverPlaneDepthBias</span><span class="op">(</span><span class="dt">vec3</span> shadowCoord<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Screen-space partial derivatives of the shadow coordinate</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dShadowX <span class="op">=</span> <span class="bu">dFdx</span><span class="op">(</span>shadowCoord<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> dShadowY <span class="op">=</span> <span class="bu">dFdy</span><span class="op">(</span>shadowCoord<span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute determinant of the Jacobian (du/dx * dv/dy - dv/dx * du/dy)</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> det <span class="op">=</span> dShadowX<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> dShadowY<span class="op">.</span><span class="fu">y</span> <span class="op">-</span> dShadowX<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> dShadowY<span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Handle degenerate cases to prevent division by zero</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">abs</span><span class="op">(</span>det<span class="op">)</span> <span class="op">&lt;</span> <span class="fl">1e-7</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> invDet <span class="op">=</span> <span class="fl">1.0</span> <span class="op">/</span> det<span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Solve the linear system for dz/du and dz/dv</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> dzdu <span class="op">=</span> invDet <span class="op">*</span> <span class="op">(</span> dShadowY<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> dShadowX<span class="op">.</span><span class="fu">z</span> <span class="op">-</span> dShadowX<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> dShadowY<span class="op">.</span><span class="fu">z</span><span class="op">);</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> dzdv <span class="op">=</span> invDet <span class="op">*</span> <span class="op">(-</span>dShadowY<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> dShadowX<span class="op">.</span><span class="fu">z</span> <span class="op">+</span> dShadowX<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> dShadowY<span class="op">.</span><span class="fu">z</span><span class="op">);</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec2</span><span class="op">(</span>dzdu<span class="op">,</span> dzdv<span class="op">);</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="applying-the-bias-during-filtering">Applying the Bias during
+Filtering</h3>
+<p>When sampling the shadow map—especially with PCF kernel offsets—the
+exact receiver plane bias for a given texel offset <span
+class="math inline">\((\Delta u, \Delta v)\)</span> is computed via a
+dot product:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> depthSlope <span class="op">=</span> <span class="fu">computeReceiverPlaneDepthBias</span><span class="op">(</span>projShadowCoord<span class="op">.</span><span class="fu">xyz</span><span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Compute depth offset for a specific PCF tap offset in UV space</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> texelOffset <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span>offsetU<span class="op">,</span> offsetV<span class="op">)</span> <span class="op">*</span> shadowMapTexelSize<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> receiverPlaneBias <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>depthSlope<span class="op">,</span> texelOffset<span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Total comparison depth for this tap</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> biasedDepth <span class="op">=</span> projShadowCoord<span class="op">.</span><span class="fu">z</span> <span class="op">+</span> receiverPlaneBias<span class="op">;</span></span></code></pre></div>
+<p>For single-tap hardware comparisons or conservative single-value
+biasing, a maximum slope magnitude across a single texel width can be
+applied:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> depthSlope <span class="op">=</span> <span class="fu">computeReceiverPlaneDepthBias</span><span class="op">(</span>projShadowCoord<span class="op">.</span><span class="fu">xyz</span><span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> maxTexelBias <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>depthSlope <span class="op">*</span> shadowMapTexelSize<span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Apply a constant base bias alongside the dynamic receiver bias</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> finalBias <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>maxTexelBias<span class="op">,</span> baseMinimumBias<span class="op">);</span></span></code></pre></div>
+<h3 id="key-considerations">Key Considerations</h3>
+<ol type="1">
+<li><strong>Hardware Derivatives &amp; Coarse Shading:</strong>
+Screen-space derivatives rely on <span class="math inline">\(2 \times
+2\)</span> pixel quads. Along silhouette edges or triangle boundaries,
+<code>dFdx</code> and <code>dFdy</code> can produce discontinuities,
+which may require clamping the resulting gradient to an upper
+bound.</li>
+<li><strong>Perspective Division:</strong> If perspective projection is
+used for the shadow caster (such as for spot lights), screen derivatives
+should be calculated on the post-perspective division coordinates
+<code>projCoords = lightSpacePos.xyz / lightSpacePos.w</code>.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

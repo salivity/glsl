@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does gl_FragDepth Affect Early Depth Testing? - glsl</title>
+    <meta name="description" content="Writing directly to glFragDepth in a fragment shader generally forces modern GPUs to disable early depth testing (Early-Z), degrading rendering performance by executing shader workloads on pixels that will ultimately be occluded. Because the GPU cannot p">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-gl-frag-depth-affect-early-depth-testing">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does gl_FragDepth Affect Early Depth Testing? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-gl-frag-depth-affect-early-depth-testing" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Writing directly to glFragDepth in a fragment shader generally forces modern GPUs to disable early depth testing (Early-Z), degrading rendering performance by executing shader workloads on pixels that will ultimately be occluded. Because the GPU cannot p" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-gl_fragdepth-affect-early-depth-testing">How Does
+gl_FragDepth Affect Early Depth Testing?</h1>
+<p>Writing directly to <code>gl_FragDepth</code> in a fragment shader
+generally forces modern GPUs to disable early depth testing (Early-Z),
+degrading rendering performance by executing shader workloads on pixels
+that will ultimately be occluded. Because the GPU cannot predict what
+value the shader will output, it must postpone depth testing until after
+the fragment shader finishes executing. However, features like
+conservative depth qualifiers and explicit early test layouts can
+mitigate these performance penalties under specific conditions.</p>
+<h2 id="the-role-of-early-fragment-tests">The Role of Early Fragment
+Tests</h2>
+<p>In standard graphics pipelines, the hardware attempts to perform
+depth and stencil tests before running the fragment shader. This
+mechanism, known as Early-Z, allows the GPU to immediately discard
+fragments that are occluded by previously rendered, closer geometry.</p>
+<p>Skipping fragment shading for hidden pixels saves significant GPU
+cycles, reduces bandwidth consumption, and prevents unnecessary texture
+lookups or complex arithmetic operations. To run Early-Z safely, the
+rasterizer derives the fragment depth directly from the interpolated
+vertex positions (<span class="math inline">\(z / w\)</span>) generated
+during primitive rasterization.</p>
+<h2 id="why-writing-to-gl_fragdepth-disables-early-z">Why Writing to
+gl_FragDepth Disables Early-Z</h2>
+<p>When a fragment shader contains an assignment to
+<code>gl_FragDepth</code>, it explicitly overrides the interpolated
+hardware depth value. The rasterizer no longer knows the final depth
+value of the fragment at the start of the pipeline.</p>
+<p>Because the depth test depends on the final depth value, the pipeline
+must fall back to late depth testing:</p>
+<ol type="1">
+<li><strong>Primitive Rasterization:</strong> Fragments are generated
+with interpolated depths.</li>
+<li><strong>Fragment Shader Execution:</strong> The shader runs
+unconditionally for every rasterized fragment to compute both color and
+the new <code>gl_FragDepth</code>.</li>
+<li><strong>Late Depth Test:</strong> The GPU compares the newly written
+<code>gl_FragDepth</code> against the depth buffer.</li>
+<li><strong>Framebuffer Write / Discard:</strong> If the test passes,
+the depth and color buffers update; if it fails, the fragment is
+discarded only after all shader computations have already finished.</li>
+</ol>
+<p>This late execution causes high overdraw penalties, especially in
+scenes with complex geometry, overlapping transparent or opaque layers,
+and heavy fragment shaders.</p>
+<h2 id="performance-repercussions">Performance Repercussions</h2>
+<p>Disabling Early-Z impacts rendering pipelines in several ways:</p>
+<ul>
+<li><strong>Increased Shading Cost:</strong> Shaders execute for pixels
+that end up completely hidden behind other objects.</li>
+<li><strong>Disrupted Hierarchical-Z (Hi-Z):</strong> Coarse-level
+culling mechanisms that discard entire pixel tiles at lower resolutions
+often become partially or completely disabled.</li>
+<li><strong>Bottlenecks in Deferred Rendering:</strong> Techniques
+relying on depth modification (such as raymarched impostors or custom
+depth biases) can bottleneck the geometry pass if applied broadly.</li>
+</ul>
+<h2 id="mitigations-and-modern-glsl-features">Mitigations and Modern
+GLSL Features</h2>
+<p>OpenGL and GLSL provide specific layout qualifiers to preserve or
+adapt early testing behavior when depth modification is required.</p>
+<h3 id="conservative-depth-layoutdepth_">Conservative Depth
+(<code>layout(depth_*)</code>)</h3>
+<p>Introduced in OpenGL 4.2 (via
+<code>GL_ARB_conservative_depth</code>), depth layout qualifiers allow
+developers to provide guarantees to the GPU driver about how
+<code>gl_FragDepth</code> will be modified relative to the default
+interpolated depth:</p>
+<ul>
+<li><code>layout(depth_any) out float gl_FragDepth;</code> — The default
+state; depth can be anything, disabling Early-Z optimizations.</li>
+<li><code>layout(depth_greater) out float gl_FragDepth;</code> —
+Guarantees the written depth will only be greater than or equal to the
+interpolated depth. The GPU can still safely cull fragments that fail
+the depth test using the original depth (assuming a standard
+<code>GL_LESS</code> depth comparison).</li>
+<li><code>layout(depth_less) out float gl_FragDepth;</code> — Guarantees
+the written depth will only be less than or equal to the interpolated
+depth.</li>
+<li><code>layout(depth_unchanged) out float gl_FragDepth;</code> —
+Guarantees <code>gl_FragDepth</code> matches the interpolated depth,
+re-enabling full depth optimizations while allowing the shader to
+declare or conditionally reference the variable.</li>
+</ul>
+<h3 id="explicit-early-fragment-tests">Explicit Early Fragment
+Tests</h3>
+<p>GLSL allows developers to force early depth tests explicitly using
+the <code>early_fragment_tests</code> layout qualifier:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">early_fragment_tests</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span></code></pre></div>
+<p>When this qualifier is active, the depth test occurs before shader
+execution using the standard interpolated depth. If a shader attempts to
+write to <code>gl_FragDepth</code> while
+<code>early_fragment_tests</code> is declared, the written value is
+ignored for the depth test, or the shader will trigger a compilation
+error depending on driver constraints.</p>
+<h2 id="best-practices">Best Practices</h2>
+<p>To maintain high frame rates and avoid disabling depth culling:</p>
+<ul>
+<li>Avoid modifying <code>gl_FragDepth</code> unless dynamic, per-pixel
+depth calculation is strictly necessary (e.g., depth-correct impostors,
+screen-space decals, or voxel rendering).</li>
+<li>Use polygon offset (<code>glPolygonOffset</code>) or vertex shader
+depth adjustments instead of per-fragment depth modifications when
+resolving z-fighting.</li>
+<li>Always specify conservative depth qualifiers
+(<code>depth_greater</code> or <code>depth_less</code>) if modifying
+depth in GLSL 4.2 or higher to allow the hardware to retain coarse Hi-Z
+culling.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

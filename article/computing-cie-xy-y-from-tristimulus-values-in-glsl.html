@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Computing CIE xyY from Tristimulus Values in GLSL - glsl</title>
+    <meta name="description" content="This article explains how to compute the CIE xyY color representation from CIE XYZ tristimulus values using the OpenGL Shading Language (GLSL). Converting XYZ to xyY separates the chromaticity coordinates ($x, y$) from the luminance component ($Y$), whic">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/computing-cie-xy-y-from-tristimulus-values-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Computing CIE xyY from Tristimulus Values in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/computing-cie-xy-y-from-tristimulus-values-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to compute the CIE xyY color representation from CIE XYZ tristimulus values using the OpenGL Shading Language (GLSL). Converting XYZ to xyY separates the chromaticity coordinates ($x, y$) from the luminance component ($Y$), whic" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="computing-cie-xyy-from-tristimulus-values-in-glsl">Computing CIE
+xyY from Tristimulus Values in GLSL</h1>
+<p>This article explains how to compute the CIE xyY color representation
+from CIE XYZ tristimulus values using the OpenGL Shading Language
+(GLSL). Converting XYZ to xyY separates the chromaticity coordinates
+(<span class="math inline">\(x, y\)</span>) from the luminance component
+(<span class="math inline">\(Y\)</span>), which is essential for gamut
+mapping, color analysis, and tone mapping in rendering pipelines. Below
+is the direct mathematical formulation and an optimized, robust GLSL
+implementation that handles potential edge cases such as division by
+zero.</p>
+<h3 id="mathematical-formulation">Mathematical Formulation</h3>
+<p>The CIE XYZ color space represents colors via three tristimulus
+values: <span class="math inline">\(X\)</span>, <span
+class="math inline">\(Y\)</span>, and <span
+class="math inline">\(Z\)</span>. The CIE xyY representation normalizes
+these values so that chromaticity is independent of luminance:</p>
+<ul>
+<li><span class="math inline">\(x = \frac{X}{X + Y + Z}\)</span></li>
+<li><span class="math inline">\(y = \frac{Y}{X + Y + Z}\)</span></li>
+<li><span class="math inline">\(Y = Y\)</span></li>
+</ul>
+<p>The third coordinate, <span class="math inline">\(z = \frac{Z}{X + Y
++ Z}\)</span>, is redundant because <span class="math inline">\(x + y +
+z = 1\)</span> (meaning <span class="math inline">\(z = 1 - x -
+y\)</span>). Therefore, only <span class="math inline">\(x\)</span>,
+<span class="math inline">\(y\)</span>, and the original luminance value
+<span class="math inline">\(Y\)</span> are stored.</p>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>When implementing the conversion in GLSL, total darkness (<span
+class="math inline">\(X = Y = Z = 0\)</span>) causes a division by zero.
+To prevent <code>NaN</code> artifacts, a small epsilon must guard the
+denominator, or a conditional check can substitute a fallback
+chromaticity (typically the reference white point, such as D65 where
+<span class="math inline">\(x \approx 0.3127, y \approx
+0.3290\)</span>).</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Converts CIE XYZ tristimulus values to CIE xyY</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">XYZ_to_xyY</span><span class="op">(</span><span class="dt">vec3</span> XYZ<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sum <span class="op">=</span> XYZ<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> XYZ<span class="op">.</span><span class="fu">y</span> <span class="op">+</span> XYZ<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Avoid division by zero for black pixels</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>sum <span class="op">&lt;</span> <span class="fl">1e-6</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Fallback to D65 white point chromaticity with 0 luminance</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.3127</span><span class="op">,</span> <span class="fl">0.3290</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> invSum <span class="op">=</span> <span class="fl">1.0</span> <span class="op">/</span> sum<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> x <span class="op">=</span> XYZ<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> invSum<span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> y <span class="op">=</span> XYZ<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> invSum<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> Y <span class="op">=</span> XYZ<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span>x<span class="op">,</span> y<span class="op">,</span> Y<span class="op">);</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="branchless-alternative">Branchless Alternative</h3>
+<p>In high-throughput fragment shaders where branching may impact
+performance, an epsilon clamp provides a branchless alternative:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">XYZ_to_xyY_branchless</span><span class="op">(</span><span class="dt">vec3</span> XYZ<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sum <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>XYZ<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> XYZ<span class="op">.</span><span class="fu">y</span> <span class="op">+</span> XYZ<span class="op">.</span><span class="fu">z</span><span class="op">,</span> <span class="fl">1e-6</span><span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span>XYZ<span class="op">.</span><span class="fu">x</span> <span class="op">/</span> sum<span class="op">,</span> XYZ<span class="op">.</span><span class="fu">y</span> <span class="op">/</span> sum<span class="op">,</span> XYZ<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="inverting-the-transformation">Inverting the Transformation</h3>
+<p>To return to tristimulus values for final screen rendering, the
+inverse transformation calculates <span class="math inline">\(X\)</span>
+and <span class="math inline">\(Z\)</span> from <span
+class="math inline">\(x\)</span>, <span
+class="math inline">\(y\)</span>, and <span
+class="math inline">\(Y\)</span>:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">xyY_to_XYZ</span><span class="op">(</span><span class="dt">vec3</span> xyY<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>xyY<span class="op">.</span><span class="fu">y</span> <span class="op">&lt;</span> <span class="fl">1e-6</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> X <span class="op">=</span> <span class="op">(</span>xyY<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> xyY<span class="op">.</span><span class="fu">z</span><span class="op">)</span> <span class="op">/</span> xyY<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> Y <span class="op">=</span> xyY<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> Z <span class="op">=</span> <span class="op">((</span><span class="fl">1.0</span> <span class="op">-</span> xyY<span class="op">.</span><span class="fu">x</span> <span class="op">-</span> xyY<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">*</span> xyY<span class="op">.</span><span class="fu">z</span><span class="op">)</span> <span class="op">/</span> xyY<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span>X<span class="op">,</span> Y<span class="op">,</span> Z<span class="op">);</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Ensure that input color values are linearized and converted to the
+CIE XYZ color space via the appropriate <span class="math inline">\(3
+\times 3\)</span> color matrix (such as sRGB-to-XYZ) before executing
+these functions.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

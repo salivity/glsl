@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GLSL textureGather Samples Four Texels - glsl</title>
+    <meta name="description" content="This article provides a technical overview of the textureGather function in GLSL, detailing how the GPU extracts four neighboring texels simultaneously in a single texture lookup. It covers the underlying hardware addressing mechanics, the specific chann">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-glsl-texture-gather-samples-four-texels">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GLSL textureGather Samples Four Texels - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-glsl-texture-gather-samples-four-texels" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a technical overview of the textureGather function in GLSL, detailing how the GPU extracts four neighboring texels simultaneously in a single texture lookup. It covers the underlying hardware addressing mechanics, the specific chann" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-glsl-texturegather-samples-four-texels">How GLSL
+textureGather Samples Four Texels</h1>
+<p>This article provides a technical overview of the
+<code>textureGather</code> function in GLSL, detailing how the GPU
+extracts four neighboring texels simultaneously in a single texture
+lookup. It covers the underlying hardware addressing mechanics, the
+specific channel selection process, the exact ordering of the returned
+four-component vector, and the primary rendering scenarios where this
+instruction delivers optimal performance over standard texture
+fetches.</p>
+<h3 id="the-mechanism-behind-texturegather">The Mechanism Behind
+textureGather</h3>
+<p>In traditional texture mapping, the GLSL <code>texture()</code>
+function performs bilinear interpolation across four adjacent texels to
+return a single blended color vector. Conversely,
+<code>textureGather</code> bypasses the fixed-function interpolation
+hardware. Instead, it directly retrieves the four raw texel values that
+would have contributed to that bilinear footprint and returns them
+simultaneously inside a single <code>vec4</code>.</p>
+<p>When a 2D texture coordinate <span class="math inline">\((u,
+v)\)</span> is passed to <code>textureGather</code>, the GPU converts
+the normalized coordinates into absolute texel-space coordinates by
+multiplying them by the texture dimensions and subtracting <span
+class="math inline">\(0.5\)</span>. The base texel index <span
+class="math inline">\((i, j)\)</span> is computed by flooring these
+continuous coordinates:</p>
+<p><span class="math display">\[i = \lfloor u \times \text{width} - 0.5
+\rfloor\]</span> <span class="math display">\[j = \lfloor v \times
+\text{height} - 0.5 \rfloor\]</span></p>
+<p>The four texels making up the <span class="math inline">\(2 \times
+2\)</span> sampling footprint are defined by the coordinate pairs:</p>
+<ul>
+<li>Bottom-left: <span class="math inline">\((i, j)\)</span></li>
+<li>Bottom-right: <span class="math inline">\((i + 1, j)\)</span></li>
+<li>Top-right: <span class="math inline">\((i + 1, j + 1)\)</span></li>
+<li>Top-left: <span class="math inline">\((i, j + 1)\)</span></li>
+</ul>
+<h3 id="component-selection">Component Selection</h3>
+<p>Because a standard GLSL return value is limited to a four-component
+vector (<code>vec4</code>), <code>textureGather</code> cannot return
+full RGBA data for all four texels simultaneously. Instead, it extracts
+one designated color component from all four texels.</p>
+<p>The component sampled is determined by an optional integer parameter
+<code>comp</code>:</p>
+<ul>
+<li><code>0</code>: Red channel (default if omitted)</li>
+<li><code>1</code>: Green channel</li>
+<li><code>2</code>: Blue channel</li>
+<li><code>3</code>: Alpha channel</li>
+</ul>
+<p>For depth textures, <code>textureGather</code> automatically samples
+the depth component.</p>
+<h3 id="texel-layout-in-the-returned-vector">Texel Layout in the
+Returned Vector</h3>
+<p>The four harvested values are packed into the destination
+<code>vec4</code> in a counter-clockwise order starting from the
+upper-left texel relative to the coordinate origin. The OpenGL and GLSL
+specifications define the component mapping as follows:</p>
+<ul>
+<li><strong><code>.x</code> component:</strong> Texel at <span
+class="math inline">\((i, j + 1)\)</span> [Top-Left]</li>
+<li><strong><code>.y</code> component:</strong> Texel at <span
+class="math inline">\((i + 1, j + 1)\)</span> [Top-Right]</li>
+<li><strong><code>.z</code> component:</strong> Texel at <span
+class="math inline">\((i + 1, j)\)</span> [Bottom-Right]</li>
+<li><strong><code>.w</code> component:</strong> Texel at <span
+class="math inline">\((i, j)\)</span> [Bottom-Left]</li>
+</ul>
+<p>This specific mapping allows shader developers to know the spatial
+orientation of each texel without performing individual coordinate
+offsets.</p>
+<h3 id="practical-applications-and-efficiency">Practical Applications
+and Efficiency</h3>
+<p>Sampling four texels in a single instruction reduces texture cache
+pressure and minimizes memory bandwidth bottlenecks. Rather than issuing
+four separate <code>texelFetch</code> or point-sampled
+<code>texture</code> calls, the GPU issues one memory transaction to
+fetch the quad footprint.</p>
+<p>Key use cases include:</p>
+<ul>
+<li><strong>Percentage-Closer Filtering (PCF):</strong> In shadow
+mapping, <code>textureGather</code> allows testing four depth samples
+against the light-space depth in parallel, followed by custom weighting
+in shader logic.</li>
+<li><strong>Custom Bilinear and Bicubic Filtering:</strong> Shaders
+requiring manual interpolation weights (such as categorical textures or
+normal maps where standard hardware blending corrupts mathematical
+correctness) can reconstruct filters manually using fractional
+coordinate weights.</li>
+<li><strong>Screen-Space Ambient Occlusion (SSAO) and Edge
+Detection:</strong> Depth buffer discontinuities and surface normal
+edges can be analyzed rapidly across a <span class="math inline">\(2
+\times 2\)</span> neighborhood without multiple fetch instructions.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

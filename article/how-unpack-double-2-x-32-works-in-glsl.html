@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How unpackDouble2x32 Works in GLSL - glsl</title>
+    <meta name="description" content="The unpackDouble2x32 function in the OpenGL Shading Language (GLSL) deconstructs a 64-bit double-precision floating-point value into two 32-bit unsigned integers. Rather than performing a numerical conversion, it performs a raw bit-level extraction, spli">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-unpack-double-2-x-32-works-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How unpackDouble2x32 Works in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-unpack-double-2-x-32-works-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The unpackDouble2x32 function in the OpenGL Shading Language (GLSL) deconstructs a 64-bit double-precision floating-point value into two 32-bit unsigned integers. Rather than performing a numerical conversion, it performs a raw bit-level extraction, spli" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-unpackdouble2x32-works-in-glsl">How unpackDouble2x32 Works
+in GLSL</h1>
+<p>The <code>unpackDouble2x32</code> function in the OpenGL Shading
+Language (GLSL) deconstructs a 64-bit double-precision floating-point
+value into two 32-bit unsigned integers. Rather than performing a
+numerical conversion, it performs a raw bit-level extraction, splitting
+the underlying binary representation into a two-component unsigned
+integer vector (<code>uvec2</code>). This article details the structural
+mechanics of <code>unpackDouble2x32</code>, the bit-significance order
+of its output, and why it is essential for low-level shader
+programming.</p>
+<h2 id="function-signature-and-core-behavior">Function Signature and
+Core Behavior</h2>
+<p>In GLSL, the function is defined as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uvec2</span> <span class="bu">unpackDouble2x32</span><span class="op">(</span><span class="dt">double</span> v<span class="op">);</span></span></code></pre></div>
+<p>When called, <code>unpackDouble2x32</code> interprets the 64-bit IEEE
+754 representation of the input parameter <code>v</code> and splits it
+directly down the middle. It yields a <code>uvec2</code> where the
+original bit pattern is preserved completely without rounding,
+truncation, or floating-point normalization.</p>
+<h2 id="component-mapping-lsb-vs-msb">Component Mapping: LSB vs.
+MSB</h2>
+<p>The 64 bits are distributed into the returned <code>uvec2</code>
+vector based on strict endianness rules defined by the GLSL
+specification:</p>
+<ul>
+<li><strong><code>.x</code> (First Component):</strong> Contains the 32
+least significant bits (LSBs) of the double-precision float.</li>
+<li><strong><code>.y</code> (Second Component):</strong> Contains the 32
+most significant bits (MSBs) of the double-precision float.</li>
+</ul>
+<p>Under the IEEE 754 standard for 64-bit binary floating-point
+numbers:</p>
+<ul>
+<li><strong>Bit 63:</strong> Sign bit.</li>
+<li><strong>Bits 62–52:</strong> 11-bit biased exponent.</li>
+<li><strong>Bits 51–0:</strong> 52-bit fraction (mantissa).</li>
+</ul>
+<p>Because of this layout, the <code>.y</code> component of the
+resulting <code>uvec2</code> contains the sign bit, the entirety of the
+11-bit exponent, and the highest 20 bits of the mantissa. The
+<code>.x</code> component holds the remaining 32 lower-order bits of the
+mantissa.</p>
+<h2 id="reversing-the-operation">Reversing the Operation</h2>
+<p>The reverse operation is handled by <code>packDouble2x32</code>:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> <span class="bu">packDouble2x32</span><span class="op">(</span><span class="dt">uvec2</span> v<span class="op">);</span></span></code></pre></div>
+<p>Passing the output of <code>unpackDouble2x32</code> directly into
+<code>packDouble2x32</code> reconstructs the original 64-bit double
+value bit-for-bit, including special conditions like subnormal values,
+infinities, and NaNs.</p>
+<h2 id="typical-use-cases">Typical Use Cases</h2>
+<ol type="1">
+<li><strong>Hardware and Buffer Interoperability:</strong> Modern
+graphics pipelines often interface with Shader Storage Buffer Objects
+(SSBOs) or uniform buffers where alignment rules or platform limitations
+make native 64-bit operations complex. Unpacking allows shaders to store
+or transmit 64-bit data as standard 32-bit unsigned integer pairs.</li>
+<li><strong>Bitwise Inspection and Manipulation:</strong> GLSL does not
+allow bitwise operators (<code>&amp;</code>, <code>|</code>,
+<code>^</code>, <code>&lt;&lt;</code>, <code>&gt;&gt;</code>) directly
+on <code>double</code> types. Deconstructing the value into unsigned
+integers enables bit manipulation—such as manually extracting the
+exponent or modifying the sign bit.</li>
+<li><strong>Emulated Extended Precision:</strong> Shaders performing
+high-precision geometric calculations (such as deep-zoom fractals or
+large-coordinate GIS rendering) can use <code>unpackDouble2x32</code> to
+split doubles into components for customized high-precision
+floating-point arithmetic routines.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

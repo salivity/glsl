@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Light Propagation in Voxel Cone Tracing with GLSL - glsl</title>
+    <meta name="description" content="This article explains the light propagation algorithm across 3D voxel grids in Voxel Cone Tracing (VCT) using the OpenGL Shading Language (GLSL). It covers the direct radiance injection phase, the generation of anisotropic 3D mipmap chains to simulate di">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/light-propagation-in-voxel-cone-tracing-with-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Light Propagation in Voxel Cone Tracing with GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/light-propagation-in-voxel-cone-tracing-with-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains the light propagation algorithm across 3D voxel grids in Voxel Cone Tracing (VCT) using the OpenGL Shading Language (GLSL). It covers the direct radiance injection phase, the generation of anisotropic 3D mipmap chains to simulate di" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="light-propagation-in-voxel-cone-tracing-with-glsl">Light
+Propagation in Voxel Cone Tracing with GLSL</h1>
+<p>This article explains the light propagation algorithm across 3D voxel
+grids in Voxel Cone Tracing (VCT) using the OpenGL Shading Language
+(GLSL). It covers the direct radiance injection phase, the generation of
+anisotropic 3D mipmap chains to simulate directional light transfer, and
+the mathematical implementation of cone tracing compute shaders for
+gathering indirect diffuse and specular illumination in real time.</p>
+<h2 id="1-direct-radiance-injection">1. Direct Radiance Injection</h2>
+<p>The light propagation pipeline begins by discretizing scene geometry
+into a continuous 3D texture using conservative rasterization. Once
+surface voxels are generated with material properties (albedo, normal,
+and roughness), direct illumination is computed for every occupied
+voxel.</p>
+<p>A GLSL compute shader or fragment shader evaluates shadow maps or
+analytical lights for each voxel. The resulting outgoing radiance <span
+class="math inline">\(L_o\)</span> and opacity <span
+class="math inline">\(\alpha\)</span> are written into a 3D texture
+(<code>layout(rgba8) uniform image3D voxelTexture</code> or
+<code>rgba16f</code> for high dynamic range):</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Direct illumination injection</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> directLight <span class="op">=</span> <span class="fu">calculateDirectLighting</span><span class="op">(</span>voxelPos<span class="op">,</span> normal<span class="op">,</span> lightDir<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> radianceOpacity <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>directLight <span class="op">*</span> albedo<span class="op">.</span><span class="fu">rgb</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="bu">imageStore</span><span class="op">(</span>voxelRadianceGrid<span class="op">,</span> <span class="dt">ivec3</span><span class="op">(</span>voxelPos<span class="op">),</span> radianceOpacity<span class="op">);</span></span></code></pre></div>
+<h2 id="2-anisotropic-mipmap-generation">2. Anisotropic Mipmap
+Generation</h2>
+<p>Standard isotropic 3D mipmapping averages adjacent voxels uniformly,
+which causes severe light leaking through thin walls. To propagate light
+accurately across spatial dimensions, VCT uses anisotropic mipmapping.
+Each mip level stores directional occlusion and radiance values along
+the six primary axes: <span class="math inline">\(+X, -X, +Y, -Y, +Z,
+-Z\)</span>.</p>
+<p>A downsampling compute shader reads eight child voxels from level
+<span class="math inline">\(n-1\)</span> and blends them into one parent
+voxel at level <span class="math inline">\(n\)</span>. The blend weights
+respect the direction of light travel:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">8</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">8</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">8</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler3D</span> srcMipLevel<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>rgba16f<span class="op">)</span> <span class="kw">uniform</span> <span class="dt">writeonly</span> <span class="dt">image3D</span> dstMipLevelPositiveX<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> dstCoord <span class="op">=</span> <span class="dt">ivec3</span><span class="op">(</span><span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">xyz</span><span class="op">);</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec3</span> srcCoord <span class="op">=</span> dstCoord <span class="op">*</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Fetch adjacent values along the propagation axis</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> c0 <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>srcMipLevel<span class="op">,</span> srcCoord <span class="op">+</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="dv">0</span><span class="op">),</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> c1 <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>srcMipLevel<span class="op">,</span> srcCoord <span class="op">+</span> <span class="dt">ivec3</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="dv">0</span><span class="op">),</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Front-to-back directional accumulation for +X propagation</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> accumulated <span class="op">=</span> c0 <span class="op">+</span> c1 <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> c0<span class="op">.</span><span class="fu">a</span><span class="op">);</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="bu">imageStore</span><span class="op">(</span>dstMipLevelPositiveX<span class="op">,</span> dstCoord<span class="op">,</span> accumulated<span class="op">);</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This directional aggregation allows secondary light transport to be
+simulated hierarchically. Lower-resolution mip levels inherently
+represent filtered, wider-angle radiance distributed across larger
+spatial distances.</p>
+<h2 id="3-gathering-radiance-via-cone-tracing">3. Gathering Radiance via
+Cone Tracing</h2>
+<p>Light propagation to arbitrary surface points during final rendering
+is calculated by marching cones through the anisotropic 3D texture
+hierarchy. A cone is defined by an origin point <span
+class="math inline">\(\mathbf{o}\)</span> (offset along the surface
+normal to avoid self-occlusion), a normalized direction vector <span
+class="math inline">\(\mathbf{d}\)</span>, and an aperture angle <span
+class="math inline">\(\theta\)</span>.</p>
+<p>As the ray advances, the cone diameter increases proportionally to
+distance <span class="math inline">\(t\)</span>:</p>
+<p><span class="math display">\[\text{diameter} = 2 \cdot t \cdot
+\tan\left(\frac{\theta}{2}\right)\]</span></p>
+<p>The algorithm samples the 3D texture at a mip level <span
+class="math inline">\(L\)</span> derived from the cone diameter relative
+to the base voxel size:</p>
+<p><span class="math display">\[L =
+\log_2\left(\frac{\text{diameter}}{\text{voxelSize}}\right)\]</span></p>
+<p>At each step, accumulated color and opacity are updated using
+front-to-back compositing:</p>
+<p><span class="math display">\[\mathbf{C}_{\text{acc}} \leftarrow
+\mathbf{C}_{\text{acc}} + (1 - \alpha_{\text{acc}}) \cdot
+\mathbf{C}_{\text{sample}} \cdot \alpha_{\text{sample}}\]</span></p>
+<p><span class="math display">\[\alpha_{\text{acc}} \leftarrow
+\alpha_{\text{acc}} + (1 - \alpha_{\text{acc}}) \cdot
+\alpha_{\text{sample}}\]</span></p>
+<p>The step size is dynamically scaled with the current cone diameter to
+ensure continuous integration without oversampling.</p>
+<h2 id="4-glsl-implementation-of-cone-sampling">4. GLSL Implementation
+of Cone Sampling</h2>
+<p>The following GLSL function executes the light gathering algorithm
+across the 3D texture hierarchy:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler3D</span> voxelGrid<span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> voxelGridResolution<span class="op">;</span> <span class="co">// e.g., 256.0</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> <span class="fu">coneTrace</span><span class="op">(</span><span class="dt">vec3</span> origin<span class="op">,</span> <span class="dt">vec3</span> direction<span class="op">,</span> <span class="dt">float</span> aperture<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> voxelSize <span class="op">=</span> <span class="fl">1.0</span> <span class="op">/</span> voxelGridResolution<span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> dist <span class="op">=</span> voxelSize <span class="op">*</span> <span class="fl">2.0</span><span class="op">;</span> <span class="co">// Offset start past surface boundary</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> accumulated <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">while</span> <span class="op">(</span>dist <span class="op">&lt;</span> <span class="fl">1.732</span> <span class="op">&amp;&amp;</span> accumulated<span class="op">.</span><span class="fu">a</span> <span class="op">&lt;</span> <span class="fl">0.95</span><span class="op">)</span> <span class="op">{</span> <span class="co">// 1.732 is unit cube diagonal</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> samplePos <span class="op">=</span> origin <span class="op">+</span> direction <span class="op">*</span> dist<span class="op">;</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Ensure sample remains inside grid boundaries [0, 1]</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span><span class="bu">any</span><span class="op">(</span><span class="bu">lessThan</span><span class="op">(</span>samplePos<span class="op">,</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">)))</span> <span class="op">||</span> <span class="bu">any</span><span class="op">(</span><span class="bu">greaterThan</span><span class="op">(</span>samplePos<span class="op">,</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">))))</span> <span class="op">{</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>            <span class="kw">break</span><span class="op">;</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> diameter <span class="op">=</span> <span class="fl">2.0</span> <span class="op">*</span> dist <span class="op">*</span> <span class="bu">tan</span><span class="op">(</span>aperture <span class="op">*</span> <span class="fl">0.5</span><span class="op">);</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> mipLevel <span class="op">=</span> <span class="bu">log2</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>diameter <span class="op">*</span> voxelGridResolution<span class="op">,</span> <span class="fl">1.0</span><span class="op">));</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Sample anisotropic or filtered 3D texture</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec4</span> voxelSample <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>voxelGrid<span class="op">,</span> samplePos<span class="op">,</span> mipLevel<span class="op">);</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Front-to-back alpha blending</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>        accumulated<span class="op">.</span><span class="fu">rgb</span> <span class="op">+=</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> accumulated<span class="op">.</span><span class="fu">a</span><span class="op">)</span> <span class="op">*</span> voxelSample<span class="op">.</span><span class="fu">rgb</span> <span class="op">*</span> voxelSample<span class="op">.</span><span class="fu">a</span><span class="op">;</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>        accumulated<span class="op">.</span><span class="fu">a</span> <span class="op">+=</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> accumulated<span class="op">.</span><span class="fu">a</span><span class="op">)</span> <span class="op">*</span> voxelSample<span class="op">.</span><span class="fu">a</span><span class="op">;</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Step forward by a fraction of current diameter to avoid gaps</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>        dist <span class="op">+=</span> <span class="bu">max</span><span class="op">(</span>diameter <span class="op">*</span> <span class="fl">0.5</span><span class="op">,</span> voxelSize<span class="op">);</span></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> accumulated<span class="op">;</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>For diffuse indirect illumination, multiple cones (typically 5 to 9)
+are traced over the hemisphere oriented along the surface normal. For
+specular reflections, a single cone oriented along the reflection vector
+<span class="math inline">\(\mathbf{r} = \text{reflect}(-\mathbf{v},
+\mathbf{n})\)</span> is traced, with the aperture angle determined by
+surface roughness. Repeated execution across frames allows multi-bounce
+global illumination to settle progressively.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

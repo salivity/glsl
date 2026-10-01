@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generating Hi-Z Depth Pyramids in GLSL Compute - glsl</title>
+    <meta name="description" content="This article provides a technical guide on constructing a Hierarchical Depth (Hi-Z) buffer using compute shaders and min-reduction in GLSL. It covers the texture configuration required for mipmapped depth data, the GLSL compute shader implementation for">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/generating-hi-z-depth-pyramids-in-glsl-compute">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Generating Hi-Z Depth Pyramids in GLSL Compute - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/generating-hi-z-depth-pyramids-in-glsl-compute" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a technical guide on constructing a Hierarchical Depth (Hi-Z) buffer using compute shaders and min-reduction in GLSL. It covers the texture configuration required for mipmapped depth data, the GLSL compute shader implementation for" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="generating-hi-z-depth-pyramids-in-glsl-compute">Generating Hi-Z
+Depth Pyramids in GLSL Compute</h1>
+<p>This article provides a technical guide on constructing a
+Hierarchical Depth (Hi-Z) buffer using compute shaders and min-reduction
+in GLSL. It covers the texture configuration required for mipmapped
+depth data, the GLSL compute shader implementation for sampling and
+reducing texels, edge-case management for odd texture dimensions, and
+the host-side dispatch loop with proper execution barriers.</p>
+<hr />
+<h3 id="hi-z-concept-overview">Hi-Z Concept Overview</h3>
+<p>A Hierarchical Depth (Hi-Z) buffer is a mipmapped texture where each
+texel in mip level <span class="math inline">\(N\)</span> contains the
+conservative depth (typically the minimum or maximum depth) of a <span
+class="math inline">\(2 \times 2\)</span> texel footprint from mip level
+<span class="math inline">\(N-1\)</span>. This pyramid allows GPU-driven
+occlusion culling algorithms to test an object's bounding box against a
+low-resolution depth representation before rasterization.</p>
+<p>In standard depth conventions (where near is 0.0 and far is 1.0), the
+reduction operation uses <code>min</code> to capture the closest
+occluding surface. In reversed-Z setups (where near is 1.0 and far is
+0.0), a <code>max</code> reduction must be used instead.</p>
+<hr />
+<h3 id="texture-setup">Texture Setup</h3>
+<p>The Hi-Z buffer requires a single-channel floating-point format that
+supports mipmapping and simultaneous bindless or image load/store
+access. <code>GL_R32F</code> is commonly chosen for compatibility and
+precision.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>GLuint hiZTex<span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>glCreateTextures<span class="op">(</span>GL_TEXTURE_2D<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="op">&amp;</span>hiZTex<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> levels <span class="op">=</span> <span class="dv">1</span> <span class="op">+</span> <span class="bu">std::</span>floor<span class="op">(</span><span class="bu">std::</span>log2<span class="op">(</span><span class="bu">std::</span>max<span class="op">(</span>width<span class="op">,</span> height<span class="op">)));</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>glTextureStorage2D<span class="op">(</span>hiZTex<span class="op">,</span> levels<span class="op">,</span> GL_R32F<span class="op">,</span> width<span class="op">,</span> height<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>glTextureParameteri<span class="op">(</span>hiZTex<span class="op">,</span> GL_TEXTURE_MIN_FILTER<span class="op">,</span> GL_NEAREST_MIPMAP_NEAREST<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>glTextureParameteri<span class="op">(</span>hiZTex<span class="op">,</span> GL_TEXTURE_MAG_FILTER<span class="op">,</span> GL_NEAREST<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>glTextureParameteri<span class="op">(</span>hiZTex<span class="op">,</span> GL_TEXTURE_WRAP_S<span class="op">,</span> GL_CLAMP_TO_EDGE<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>glTextureParameteri<span class="op">(</span>hiZTex<span class="op">,</span> GL_TEXTURE_WRAP_T<span class="op">,</span> GL_CLAMP_TO_EDGE<span class="op">);</span></span></code></pre></div>
+<p>Mip 0 is initialized by copying the primary depth attachment from
+your geometry pass into level 0 using <code>glCopyImageSubData</code> or
+a full-screen blit.</p>
+<hr />
+<h3 id="compute-shader-implementation">Compute Shader
+Implementation</h3>
+<p>The downsampling pass is executed per mip level. A standard workgroup
+size of <span class="math inline">\(8 \times 8\)</span> or <span
+class="math inline">\(16 \times 16\)</span> threads processes texels in
+the destination mip level.</p>
+<p>When source dimensions are odd numbers, a <span
+class="math inline">\(2 \times 2\)</span> texel window can omit border
+texels. To preserve conservative depth testing, compute shaders must
+expand the search footprint up to a <span class="math inline">\(3 \times
+3\)</span> or conditionally fetch extra samples along the edges when
+reducing odd-sized parent levels.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">8</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">8</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Sampler bound to input mip level (N-1)</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">sampler2D</span> uSourceMip<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co">// Image bound to output mip level (N)</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>r32f<span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">writeonly</span> <span class="kw">uniform</span> <span class="dt">image2D</span> uDestinationMip<span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">ivec2</span> uSourceSize<span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">ivec2</span> uDestinationSize<span class="op">;</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span> destCoord <span class="op">=</span> <span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">xy</span><span class="op">);</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>destCoord<span class="op">.</span><span class="fu">x</span> <span class="op">&gt;=</span> uDestinationSize<span class="op">.</span><span class="fu">x</span> <span class="op">||</span> destCoord<span class="op">.</span><span class="fu">y</span> <span class="op">&gt;=</span> uDestinationSize<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        <span class="kw">return</span><span class="op">;</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ivec2</span> sourceCoord <span class="op">=</span> destCoord <span class="op">*</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Check if source dimensions are odd</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> isOddX <span class="op">=</span> <span class="op">(</span>uSourceSize<span class="op">.</span><span class="fu">x</span> <span class="op">&amp;</span> <span class="dv">1</span><span class="op">)</span> <span class="op">!=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> isOddY <span class="op">=</span> <span class="op">(</span>uSourceSize<span class="op">.</span><span class="fu">y</span> <span class="op">&amp;</span> <span class="dv">1</span><span class="op">)</span> <span class="op">!=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Base 2x2 footprint</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d0 <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>uSourceMip<span class="op">,</span> sourceCoord <span class="op">+</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">0</span><span class="op">),</span> <span class="dv">0</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d1 <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>uSourceMip<span class="op">,</span> sourceCoord <span class="op">+</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">0</span><span class="op">),</span> <span class="dv">0</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d2 <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>uSourceMip<span class="op">,</span> sourceCoord <span class="op">+</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">),</span> <span class="dv">0</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d3 <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>uSourceMip<span class="op">,</span> sourceCoord <span class="op">+</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">),</span> <span class="dv">0</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> minDepth <span class="op">=</span> <span class="bu">min</span><span class="op">(</span><span class="bu">min</span><span class="op">(</span>d0<span class="op">,</span> d1<span class="op">),</span> <span class="bu">min</span><span class="op">(</span>d2<span class="op">,</span> d3<span class="op">));</span></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Handle extra row/column for non-power-of-two (NPOT) dimensions</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>isOddX <span class="op">&amp;&amp;</span> <span class="op">(</span>destCoord<span class="op">.</span><span class="fu">x</span> <span class="op">==</span> uDestinationSize<span class="op">.</span><span class="fu">x</span> <span class="op">-</span> <span class="dv">1</span><span class="op">))</span> <span class="op">{</span></span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> extraX0 <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>uSourceMip<span class="op">,</span> sourceCoord <span class="op">+</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="dv">0</span><span class="op">),</span> <span class="dv">0</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> extraX1 <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>uSourceMip<span class="op">,</span> sourceCoord <span class="op">+</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="dv">1</span><span class="op">),</span> <span class="dv">0</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>        minDepth <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>minDepth<span class="op">,</span> <span class="bu">min</span><span class="op">(</span>extraX0<span class="op">,</span> extraX1<span class="op">));</span></span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>isOddY <span class="op">&amp;&amp;</span> <span class="op">(</span>destCoord<span class="op">.</span><span class="fu">y</span> <span class="op">==</span> uDestinationSize<span class="op">.</span><span class="fu">y</span> <span class="op">-</span> <span class="dv">1</span><span class="op">))</span> <span class="op">{</span></span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> extraY0 <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>uSourceMip<span class="op">,</span> sourceCoord <span class="op">+</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">2</span><span class="op">),</span> <span class="dv">0</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> extraY1 <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>uSourceMip<span class="op">,</span> sourceCoord <span class="op">+</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">),</span> <span class="dv">0</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>        minDepth <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>minDepth<span class="op">,</span> <span class="bu">min</span><span class="op">(</span>extraY0<span class="op">,</span> extraY1<span class="op">));</span></span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>isOddX <span class="op">&amp;&amp;</span> isOddY <span class="op">&amp;&amp;</span> <span class="op">(</span>destCoord <span class="op">==</span> uDestinationSize <span class="op">-</span> <span class="dv">1</span><span class="op">))</span> <span class="op">{</span></span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> corner <span class="op">=</span> <span class="bu">texelFetch</span><span class="op">(</span>uSourceMip<span class="op">,</span> sourceCoord <span class="op">+</span> <span class="dt">ivec2</span><span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="dv">2</span><span class="op">),</span> <span class="dv">0</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a>        minDepth <span class="op">=</span> <span class="bu">min</span><span class="op">(</span>minDepth<span class="op">,</span> corner<span class="op">);</span></span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>    <span class="bu">imageStore</span><span class="op">(</span>uDestinationMip<span class="op">,</span> destCoord<span class="op">,</span> <span class="dt">vec4</span><span class="op">(</span>minDepth<span class="op">));</span></span>
+<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<hr />
+<h3 id="host-side-dispatch-loop-and-synchronization">Host-Side Dispatch
+Loop and Synchronization</h3>
+<p>Because each level <span class="math inline">\(N\)</span> depends
+directly on the results of level <span
+class="math inline">\(N-1\)</span>, generating the full pyramid requires
+sequential dispatches with memory barriers to avoid data races.</p>
+<p>Using <code>glTextureView</code> avoids rebinding the entire
+mipmapped resource and isolates specific mip levels for sampling.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>glUseProgram<span class="op">(</span>hiZPipeline<span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> curWidth <span class="op">=</span> width<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> curHeight <span class="op">=</span> height<span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> level <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> level <span class="op">&lt;</span> levels<span class="op">;</span> <span class="op">++</span>level<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> nextWidth <span class="op">=</span> <span class="bu">std::</span>max<span class="op">(</span><span class="dv">1</span><span class="op">,</span> curWidth <span class="op">/</span> <span class="dv">2</span><span class="op">);</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> nextHeight <span class="op">=</span> <span class="bu">std::</span>max<span class="op">(</span><span class="dv">1</span><span class="op">,</span> curHeight <span class="op">/</span> <span class="dv">2</span><span class="op">);</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Pass dimensions to compute shader</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    glUniform2i<span class="op">(</span><span class="dv">0</span><span class="op">,</span> curWidth<span class="op">,</span> curHeight<span class="op">);</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    glUniform2i<span class="op">(</span><span class="dv">1</span><span class="op">,</span> nextWidth<span class="op">,</span> nextHeight<span class="op">);</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Bind source mip (level - 1) as a texture sampler via texture view</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    glBindTextureUnit<span class="op">(</span><span class="dv">0</span><span class="op">,</span> mipViews<span class="op">[</span>level <span class="op">-</span> <span class="dv">1</span><span class="op">]);</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Bind destination mip (level) as writable image</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    glBindImageTexture<span class="op">(</span><span class="dv">1</span><span class="op">,</span> hiZTex<span class="op">,</span> level<span class="op">,</span> GL_FALSE<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> GL_WRITE_ONLY<span class="op">,</span> GL_R32F<span class="op">);</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate workgroup dispatches (8x8 threads per group)</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    GLuint groupsX <span class="op">=</span> <span class="op">(</span>nextWidth <span class="op">+</span> <span class="dv">7</span><span class="op">)</span> <span class="op">/</span> <span class="dv">8</span><span class="op">;</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    GLuint groupsY <span class="op">=</span> <span class="op">(</span>nextHeight <span class="op">+</span> <span class="dv">7</span><span class="op">)</span> <span class="op">/</span> <span class="dv">8</span><span class="op">;</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>    glDispatchCompute<span class="op">(</span>groupsX<span class="op">,</span> groupsY<span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Synchronize image writes with subsequent shader reads</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    glMemoryBarrier<span class="op">(</span>GL_SHADER_IMAGE_ACCESS_BARRIER_BIT <span class="op">|</span> GL_TEXTURE_FETCH_BARRIER_BIT<span class="op">);</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    curWidth <span class="op">=</span> nextWidth<span class="op">;</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>    curHeight <span class="op">=</span> nextHeight<span class="op">;</span></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="performance-considerations">Performance Considerations</h3>
+<ol type="1">
+<li><strong>Subgroup Min Reductions:</strong> Modern hardware allows
+workgroups to perform intra-group reductions using
+<code>subgroupMin</code> (GL_KHR_shader_subgroup_arithmetic) if
+processing multiple destination texels per workgroup, which reduces
+overall memory bandwidth.</li>
+<li><strong>Texture Views vs. Base Level Sampling:</strong> Creating
+individual <code>glTextureView</code> handles for each mip level enables
+the use of <code>sampler2D</code> at level 0 instead of re-specifying
+<code>GL_TEXTURE_BASE_LEVEL</code> and <code>GL_TEXTURE_MAX_LEVEL</code>
+on the primary texture prior to every dispatch.</li>
+<li><strong>Texture Gather Alternative:</strong> If power-of-two
+dimensions are guaranteed, <code>textureGather</code> can collect the
+<span class="math inline">\(2 \times 2\)</span> footprint in a single
+instruction by sampling at the boundary between the four source
+texels.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Translating GLSL Uniform Buffers to SPIR-V OpTypeStruct - glsl</title>
+    <meta name="description" content="This article provides a technical overview of how the glslang compiler translates OpenGL Shading Language (GLSL) uniform buffer blocks into SPIR-V OpTypeStruct definitions. It outlines the end-to-end compilation process, starting from the Abstract Syntax">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/translating-glsl-uniform-buffers-to-spir-v-op-type-struct">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Translating GLSL Uniform Buffers to SPIR-V OpTypeStruct - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/translating-glsl-uniform-buffers-to-spir-v-op-type-struct" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a technical overview of how the glslang compiler translates OpenGL Shading Language (GLSL) uniform buffer blocks into SPIR-V OpTypeStruct definitions. It outlines the end-to-end compilation process, starting from the Abstract Syntax" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="translating-glsl-uniform-buffers-to-spir-v-optypestruct">Translating
+GLSL Uniform Buffers to SPIR-V OpTypeStruct</h1>
+<p>This article provides a technical overview of how the
+<code>glslang</code> compiler translates OpenGL Shading Language (GLSL)
+uniform buffer blocks into SPIR-V <code>OpTypeStruct</code> definitions.
+It outlines the end-to-end compilation process, starting from the
+Abstract Syntax Tree (AST) representation, through layout calculations
+according to memory alignment rules (such as <code>std140</code>), the
+emission of SPIR-V type definitions and layout decorations, and the
+final instantiation of descriptor variables.</p>
+<h3 id="1-ast-construction-and-type-identification">1. AST Construction
+and Type Identification</h3>
+<p>When <code>glslang</code> parses a GLSL uniform block declaration
+(e.g.,
+<code>layout(binding = 0) uniform CameraData { mat4 view; vec3 pos; };</code>),
+it constructs an internal type node (<code>TType</code>) within its
+intermediate representation.</p>
+<p>The compiler identifies the block as an interface block and flags it
+with storage qualifier <code>EvqUniform</code>. The members are stored
+sequentially in a field list, preserving their declared order, explicit
+layout qualifiers (<code>std140</code>, <code>std430</code>,
+<code>row_major</code>, <code>column_major</code>), and base GLSL data
+types.</p>
+<h3 id="2-recursive-member-type-mapping">2. Recursive Member Type
+Mapping</h3>
+<p>Before generating the composite structure type in SPIR-V,
+<code>glslang</code> recursively processes each member of the block to
+ensure all child types exist in the SPIR-V module:</p>
+<ol type="1">
+<li><strong>Scalar and Vector Types:</strong> GLSL primitives like
+<code>float</code>, <code>int</code>, and <code>vec4</code> are lowered
+to their SPIR-V equivalents (<code>OpTypeFloat 32</code>,
+<code>OpTypeInt 32 1</code>, <code>OpTypeVector %float 4</code>).</li>
+<li><strong>Matrices:</strong> Matrices are lowered to
+<code>OpTypeMatrix</code> (a column-vector representation).</li>
+<li><strong>Arrays and Nested Structs:</strong> Fixed-size arrays
+trigger <code>OpTypeArray</code>, and nested GLSL structures recursively
+trigger their own separate <code>OpTypeStruct</code> emissions.</li>
+</ol>
+<h3 id="3-layout-and-offset-computation">3. Layout and Offset
+Computation</h3>
+<p>SPIR-V requires explicit byte offsets for all fields inside uniform
+buffer structures. <code>glslang</code> includes a target layout
+calculator that steps through the struct members according to the
+specified interface packing standard (defaulting to <code>std140</code>
+for uniform buffers, or <code>std430</code> if explicitly
+qualified).</p>
+<p>For each field, <code>glslang</code>:</p>
+<ul>
+<li>Determines the required alignment (e.g., scalars are aligned to
+their size, <code>vec3</code>/<code>vec4</code> to 16 bytes, matrices to
+the alignment of their vector columns).</li>
+<li>Rounds up the current byte counter to match the alignment.</li>
+<li>Records the computed byte offset.</li>
+<li>Advances the byte counter by the size of the field.</li>
+</ul>
+<h3 id="4-emitting-optypestruct">4. Emitting
+<code>OpTypeStruct</code></h3>
+<p>Once all constituent member type IDs are assigned and byte offsets
+are calculated, <code>glslang</code> invokes its SPIR-V builder
+(<code>spv::Builder</code>) to declare the composite structure:</p>
+<pre class="spirv"><code>%CameraData = OpTypeStruct %mat4v4float %v3float</code></pre>
+<p>The operands to <code>OpTypeStruct</code> are the ordered result IDs
+of the previously emitted member types.</p>
+<h3 id="5-applying-spir-v-layout-decorations">5. Applying SPIR-V Layout
+Decorations</h3>
+<p>Uniform blocks require metadata so that the GPU driver understands
+the binary layout in memory. <code>glslang</code> uses
+<code>OpDecorate</code> and <code>OpMemberDecorate</code> instructions
+to attach this information:</p>
+<ul>
+<li><strong>Block Decoration:</strong> <code>glslang</code> marks the
+structure with <code>OpDecorate %CameraData Block</code> to identify it
+as a standard uniform block.</li>
+<li><strong>Member Offsets:</strong> Each member receives an offset
+decoration:
+<pre class="spirv"><code>OpMemberDecorate %CameraData 0 Offset 0
+OpMemberDecorate %CameraData 1 Offset 64</code></pre></li>
+<li><strong>Matrix Layout:</strong> Matrix members receive stride and
+orientation decorations, such as
+<code>OpMemberDecorate %CameraData 0 ColMajor</code> and
+<code>OpMemberDecorate %CameraData 0 MatrixStride 16</code>.</li>
+<li><strong>Array Strides:</strong> Array members receive
+<code>OpDecorate %ArrayType ArrayStride &lt;size&gt;</code> to
+explicitly convey element spacing.</li>
+</ul>
+<h3 id="6-wrapping-in-pointer-types-and-opvariable">6. Wrapping in
+Pointer Types and OpVariable</h3>
+<p>An <code>OpTypeStruct</code> in SPIR-V defines only the memory
+layout, not the storage instance. To make the uniform block accessible
+to the shader:</p>
+<ol type="1">
+<li><strong>Pointer Type Declaration:</strong> <code>glslang</code>
+declares a pointer type targeting the struct inside the
+<code>Uniform</code> storage class:
+<pre class="spirv"><code>%_ptr_Uniform_CameraData = OpTypePointer Uniform %CameraData</code></pre></li>
+<li><strong>Variable Instantiation:</strong> <code>glslang</code> emits
+an <code>OpVariable</code> referencing that pointer type:
+<pre class="spirv"><code>%camera_var = OpVariable %_ptr_Uniform_CameraData Uniform</code></pre></li>
+<li><strong>Pipeline Decorations:</strong> Interface qualifiers such as
+<code>binding</code> and <code>set</code> from GLSL are attached
+directly to this <code>OpVariable</code> using
+<code>OpDecorate %camera_var DescriptorSet &lt;id&gt;</code> and
+<code>OpDecorate %camera_var Binding &lt;id&gt;</code>.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

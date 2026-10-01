@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Is gl_FragDepth in GLSL Fragment Shaders? - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), glFragDepth is a built-in output variable that allows fragment shaders to manually set or override the depth value written to the depth buffer for a given fragment. By default, the GPU automatically computes and assigns">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-is-gl-frag-depth-in-glsl-fragment-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Is gl_FragDepth in GLSL Fragment Shaders? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-is-gl-frag-depth-in-glsl-fragment-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), glFragDepth is a built-in output variable that allows fragment shaders to manually set or override the depth value written to the depth buffer for a given fragment. By default, the GPU automatically computes and assigns" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-is-gl_fragdepth-in-glsl-fragment-shaders">What Is
+gl_FragDepth in GLSL Fragment Shaders?</h1>
+<p>In OpenGL Shading Language (GLSL), <code>gl_FragDepth</code> is a
+built-in output variable that allows fragment shaders to manually set or
+override the depth value written to the depth buffer for a given
+fragment. By default, the GPU automatically computes and assigns a
+fragment's depth using the interpolated z-coordinate from vertex
+processing. Manually writing to <code>gl_FragDepth</code> gives
+developers fine-grained control over occlusion and z-testing, enabling
+advanced rendering techniques such as raymarched signed distance fields,
+spherical impostors, and custom depth bias effects, though it carries
+important performance implications regarding early depth
+optimizations.</p>
+<h2 id="default-depth-computation-vs-manual-overrides">Default Depth
+Computation vs. Manual Overrides</h2>
+<p>During standard rasterization, the fixed-function pipeline
+interpolates the clip-space coordinates of a primitive's vertices across
+the surface of each generated fragment. The resulting normalized device
+coordinate (NDC) depth is mapped to the viewport's depth range
+(typically <span class="math inline">\([0.0, 1.0]\)</span>) and exposed
+to the fragment shader as the read-only variable
+<code>gl_FragCoord.z</code>. If the shader does not write to
+<code>gl_FragDepth</code>, the hardware automatically writes
+<code>gl_FragCoord.z</code> into the depth buffer when depth testing is
+enabled.</p>
+<p>When a shader explicitly writes a value to <code>gl_FragDepth</code>,
+it overrides this automatic assignment:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute custom fragment color</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.5</span><span class="op">,</span> <span class="fl">0.2</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Explicitly write a modified depth value</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_FragDepth</span> <span class="op">=</span> <span class="fl">0.5</span><span class="op">;</span> </span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The assigned value must be a floating-point scalar, generally clamped
+between <span class="math inline">\(0.0\)</span> and <span
+class="math inline">\(1.0\)</span>, corresponding to the near and far
+clipping planes of the active depth buffer.</p>
+<h2 id="common-use-cases-for-gl_fragdepth">Common Use Cases for
+gl_FragDepth</h2>
+<p>Manual depth control is essential in several specialized rendering
+pipelines:</p>
+<ul>
+<li><strong>Raymarching and Volumetric Rendering:</strong> When
+rendering implicit surfaces, fractals, or volumes via sphere tracing
+inside a bounding volume (such as a cube or full-screen quad), the
+actual intersection point lies behind the rasterized geometry. Writing
+the calculated ray-intersection depth to <code>gl_FragDepth</code>
+ensures the volume correctly intersects and occludes other scene
+objects.</li>
+<li><strong>3D Impostors and Billboarding:</strong> Flat quads facing
+the camera to represent 3D spheres or particles can compute an
+analytical sphere normal and depth offset in the fragment shader.
+Setting <code>gl_FragDepth</code> makes the 2D quad behave as a
+volumetric sphere during depth tests against adjacent geometry.</li>
+<li><strong>Custom Shadow Mapping and Depth Biasing:</strong> Shaders
+can modify the depth value written during shadow map generation passes
+to implement slope-scaled or nonlinear bias adjustments directly in
+code.</li>
+<li><strong>Logarithmic Depth Buffers:</strong> In planetary or space
+rendering engines where scenes span astronomical distances, setting
+<code>gl_FragDepth</code> using a logarithmic formula preserves
+precision across extreme near-to-far ratios.</li>
+</ul>
+<h2 id="performance-considerations-and-early-z-testing">Performance
+Considerations and Early-Z Testing</h2>
+<p>Modern GPUs optimize rendering throughput using <strong>Early Depth
+Testing</strong> (Early-Z), where depth and stencil tests occur before
+the fragment shader executes. If a fragment is determined to be occluded
+by previously rendered geometry, the GPU discards it immediately,
+avoiding the computational cost of running complex lighting, texturing,
+or math operations.</p>
+<p>Writing to <code>gl_FragDepth</code> disrupts this optimization.
+Because the final depth value depends on calculations inside the shader,
+the GPU cannot determine fragment visibility beforehand and must disable
+standard Early-Z testing. This forces the fragment shader to execute for
+all rasterized fragments, increasing overdraw costs and potentially
+degrading framerates.</p>
+<h2 id="preserving-performance-with-conservative-depth">Preserving
+Performance with Conservative Depth</h2>
+<p>To mitigate the performance impact of disabling Early-Z, GLSL
+(version 4.20 and newer, or via the
+<code>GL_ARB_conservative_depth</code> extension) provides depth layout
+qualifiers. These qualifiers inform the GPU about how
+<code>gl_FragDepth</code> will be modified relative to
+<code>gl_FragCoord.z</code>, allowing the driver to preserve partial
+Early-Z culling:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 430 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Inform the GPU that the custom depth is always greater than or equal to gl_FragCoord.z</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span> <span class="op">(</span>depth_greater<span class="op">)</span> <span class="dt">out</span> <span class="dt">float</span> <span class="bu">gl_FragDepth</span><span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> FragColor<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    FragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_FragDepth</span> <span class="op">=</span> <span class="bu">gl_FragCoord</span><span class="op">.</span><span class="fu">z</span> <span class="op">+</span> <span class="fl">0.05</span><span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Available layout qualifiers include:</p>
+<ul>
+<li><code>depth_any</code>: The default behavior. Depth can change in
+any direction, disabling Early-Z optimizations.</li>
+<li><code>depth_greater</code>: The shader will only write values
+greater than or equal to <code>gl_FragCoord.z</code>.</li>
+<li><code>depth_less</code>: The shader will only write values less than
+or equal to <code>gl_FragCoord.z</code>.</li>
+<li><code>depth_unchanged</code>: The shader may write to
+<code>gl_FragDepth</code>, but the written value will always equal
+<code>gl_FragCoord.z</code>.</li>
+</ul>
+<p>Using these qualifiers allows the GPU hardware to perform
+conservative tests against the depth buffer before shader invocation,
+recovering much of the performance lost when manual depth writes are
+required.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

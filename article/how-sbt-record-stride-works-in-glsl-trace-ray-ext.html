@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How sbtRecordStride Works in GLSL traceRayEXT - glsl</title>
+    <meta name="description" content="In Vulkan ray tracing, the sbtRecordStride parameter in GLSL’s traceRayEXT function directly controls how the GPU indexes through hit group records in the Shader Binding Table (SBT) when a bottom-level acceleration structure (BLAS) contains multiple ge">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-sbt-record-stride-works-in-glsl-trace-ray-ext">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How sbtRecordStride Works in GLSL traceRayEXT - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-sbt-record-stride-works-in-glsl-trace-ray-ext" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In Vulkan ray tracing, the sbtRecordStride parameter in GLSL’s traceRayEXT function directly controls how the GPU indexes through hit group records in the Shader Binding Table (SBT) when a bottom-level acceleration structure (BLAS) contains multiple ge" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-sbtrecordstride-works-in-glsl-tracerayext">How
+sbtRecordStride Works in GLSL traceRayEXT</h1>
+<p>In Vulkan ray tracing, the <code>sbtRecordStride</code> parameter in
+GLSL’s <code>traceRayEXT</code> function directly controls how the GPU
+indexes through hit group records in the Shader Binding Table (SBT) when
+a bottom-level acceleration structure (BLAS) contains multiple
+geometries. By acting as a multiplier against the internal geometry
+index, <code>sbtRecordStride</code> dictates the stride between
+consecutive geometry records, enabling shaders to efficiently multiplex
+between different ray types—such as primary, shadow, or ambient
+occlusion rays—without requiring separate acceleration structures.</p>
+<h3 id="the-hit-group-indexing-formula">The Hit Group Indexing
+Formula</h3>
+<p>When a ray intersects a geometry within a BLAS, the ray tracing
+pipeline calculates the index of the hit group shader record in the SBT
+using the following standard equation:</p>
+<pre class="text"><code>HitGroupIndex = instanceShaderBindingTableRecordOffset + 
+                (geometryIndex * sbtRecordStride) + 
+                sbtRecordOffset</code></pre>
+<p>In this formula:</p>
+<ul>
+<li><strong><code>instanceShaderBindingTableRecordOffset</code></strong>
+is defined on the CPU inside the
+<code>VkAccelerationStructureInstanceKHR</code> descriptor for the given
+instance.</li>
+<li><strong><code>geometryIndex</code></strong> is the zero-based index
+of the specific geometry within the BLAS that was intersected.</li>
+<li><strong><code>sbtRecordStride</code></strong> is passed dynamically
+via <code>traceRayEXT</code>.</li>
+<li><strong><code>sbtRecordOffset</code></strong> is passed dynamically
+via <code>traceRayEXT</code> to identify the specific ray type.</li>
+</ul>
+<h3 id="how-sbtrecordstride-dictates-memory-progression">How
+sbtRecordStride Dictates Memory Progression</h3>
+<p>The primary purpose of <code>sbtRecordStride</code> is to handle
+instances where a single BLAS consists of <span
+class="math inline">\(N\)</span> geometries and the application supports
+<span class="math inline">\(M\)</span> ray types.</p>
+<p>To organize the SBT for multiple ray types, hit groups are typically
+grouped by geometry or interleaved by ray type. The standard layout
+arranges the SBT so that each geometry has a dedicated block of shader
+records, with one record per ray type:</p>
+<ul>
+<li><code>sbtRecordStride</code> must equal <span
+class="math inline">\(M\)</span> (the total number of ray types per
+geometry).</li>
+<li><code>sbtRecordOffset</code> must equal the index of the current ray
+type (ranging from <span class="math inline">\(0\)</span> to <span
+class="math inline">\(M - 1\)</span>).</li>
+</ul>
+<p>When a hit occurs, the hardware multiplies the current
+<code>geometryIndex</code> by <code>sbtRecordStride</code>. This jumps
+over all the shader records allocated to preceding geometries in the
+BLAS. After the stride calculation lands on the base record for the
+intersected geometry, <code>sbtRecordOffset</code> is added to select
+the precise shader record for the active ray type.</p>
+<h3 id="practical-example">Practical Example</h3>
+<p>Consider a scene with two ray types:</p>
+<ol type="1">
+<li>Radiance Ray (<code>sbtRecordOffset = 0</code>)</li>
+<li>Shadow Ray (<code>sbtRecordOffset = 1</code>)</li>
+</ol>
+<p>Because there are two ray types per geometry,
+<code>sbtRecordStride</code> is set to <code>2</code>.</p>
+<p>If a BLAS contains three geometries (Indices 0, 1, and 2), the SBT
+layout for that instance appears as:</p>
+<ul>
+<li><strong>Index 0:</strong> Geometry 0 — Radiance Hit Group</li>
+<li><strong>Index 1:</strong> Geometry 0 — Shadow Hit Group</li>
+<li><strong>Index 2:</strong> Geometry 1 — Radiance Hit Group</li>
+<li><strong>Index 3:</strong> Geometry 1 — Shadow Hit Group</li>
+<li><strong>Index 4:</strong> Geometry 2 — Radiance Hit Group</li>
+<li><strong>Index 5:</strong> Geometry 2 — Shadow Hit Group</li>
+</ul>
+<p>When tracing a shadow ray (<code>sbtRecordOffset = 1</code>,
+<code>sbtRecordStride = 2</code>) that hits Geometry 2
+(<code>geometryIndex = 2</code>):</p>
+<pre class="text"><code>HitGroupIndex = 0 + (2 * 2) + 1 = 5</code></pre>
+<p>The stride calculation advances 4 records past Geometries 0 and 1,
+and the offset selects the shadow record at index 5.</p>
+<h3 id="behavioral-edge-cases">Behavioral Edge Cases</h3>
+<ul>
+<li><strong>Single Ray Type:</strong> If an application only uses one
+ray type across all geometries, <code>sbtRecordStride</code> is set to
+<code>1</code>, advancing one shader record per geometry.</li>
+<li><strong>Shared Hit Groups Across Geometries:</strong> If all
+geometries in a BLAS share the exact same shader record for a given ray
+type, <code>sbtRecordStride</code> can be set to <code>0</code>. This
+eliminates the geometry index from the equation, causing every geometry
+in that BLAS to resolve to the same record determined solely by
+<code>instanceShaderBindingTableRecordOffset + sbtRecordOffset</code>.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

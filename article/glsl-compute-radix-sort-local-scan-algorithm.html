@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Compute Radix Sort Local Scan Algorithm - glsl</title>
+    <meta name="description" content="This article explains the algorithms for digit extraction and local prefix scanning within a GPU-accelerated radix sort implemented in GLSL compute shaders. It details how keys are decomposed into radix digits using bitwise manipulation, how thread group">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-compute-radix-sort-local-scan-algorithm">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Compute Radix Sort Local Scan Algorithm - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-compute-radix-sort-local-scan-algorithm" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains the algorithms for digit extraction and local prefix scanning within a GPU-accelerated radix sort implemented in GLSL compute shaders. It details how keys are decomposed into radix digits using bitwise manipulation, how thread group" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-compute-radix-sort-local-scan-algorithm">GLSL Compute Radix
+Sort Local Scan Algorithm</h1>
+<p>This article explains the algorithms for digit extraction and local
+prefix scanning within a GPU-accelerated radix sort implemented in GLSL
+compute shaders. It details how keys are decomposed into radix digits
+using bitwise manipulation, how thread groups construct local histograms
+in shared memory, and how parallel prefix scans (such as Blelloch or
+Hillis-Steele) compute the local offsets required to reorder keys
+efficiently across compute workgroups.</p>
+<h2 id="digit-extraction">Digit Extraction</h2>
+<p>In a GPU radix sort, multi-byte keys (typically 32-bit unsigned
+integers) are sorted in multiple passes. In each pass, a specific slice
+of bits—known as the radix digit—is processed. A standard choice is an
+8-bit radix (<span class="math inline">\(b = 8\)</span>), which
+partitions the sort into 4 passes over 256 possible digit bins (<span
+class="math inline">\(2^8 = 256\)</span>). A 4-bit radix (<span
+class="math inline">\(b = 4\)</span>, 16 bins) is also common for
+low-register-pressure implementations.</p>
+<p>The digit extraction algorithm isolates these bits using a bitwise
+right-shift followed by a bitwise AND with a bitmask.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uint</span> <span class="fu">extract_digit</span><span class="op">(</span><span class="dt">uint</span> key<span class="op">,</span> <span class="dt">uint</span> pass_index<span class="op">,</span> <span class="dt">uint</span> radix_bits<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> bit_shift <span class="op">=</span> pass_index <span class="op">*</span> radix_bits<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> bit_mask <span class="op">=</span> <span class="op">(</span><span class="dv">1</span>u <span class="op">&lt;&lt;</span> radix_bits<span class="op">)</span> <span class="op">-</span> <span class="dv">1</span>u<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span>key <span class="op">&gt;&gt;</span> bit_shift<span class="op">)</span> <span class="op">&amp;</span> bit_mask<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>For an 8-bit radix, the mask is <code>0xFFu</code> (255). On pass 0,
+the shift is <code>0</code>; on pass 1, <code>8</code>; on pass 2,
+<code>16</code>; and on pass 3, <code>24</code>.</p>
+<hr />
+<h2 id="local-prefix-scanning">Local Prefix Scanning</h2>
+<p>Once each thread in a workgroup extracts the digit for its assigned
+key, the workgroup must determine where each key will land relative to
+others with the same digit. This requires two steps: constructing a
+frequency histogram of digits within the workgroup and running a prefix
+sum (scan) over that histogram.</p>
+<p>Depending on the architecture, local prefix scanning operates either
+at the thread level (local ranking) or at the bin level (histogram
+prefix sum). The standard local prefix scan pipeline consists of three
+phases:</p>
+<h3 id="1-local-histogram-accumulation">1. Local Histogram
+Accumulation</h3>
+<p>Threads load keys from global memory, extract the digits, and tally
+the count of each digit within shared memory
+(<code>shared uint</code>).</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define RADIX_SIZE 256</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#define WORKGROUP_SIZE 256</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">shared</span> <span class="dt">uint</span> s_histogram<span class="op">[</span>RADIX_SIZE<span class="op">];</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">build_local_histogram</span><span class="op">(</span><span class="dt">uint</span> thread_id<span class="op">,</span> <span class="dt">uint</span> key<span class="op">,</span> <span class="dt">uint</span> pass<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Zero out shared memory</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    s_histogram<span class="op">[</span>thread_id<span class="op">]</span> <span class="op">=</span> <span class="dv">0</span>u<span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">barrier</span><span class="op">();</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Extract digit and increment count atomically</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> digit <span class="op">=</span> <span class="op">(</span>key <span class="op">&gt;&gt;</span> <span class="op">(</span>pass <span class="op">*</span> <span class="dv">8</span>u<span class="op">))</span> <span class="op">&amp;</span> <span class="bn">0xFF</span>u<span class="op">;</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">atomicAdd</span><span class="op">(</span>s_histogram<span class="op">[</span>digit<span class="op">],</span> <span class="dv">1</span>u<span class="op">);</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">barrier</span><span class="op">();</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="2-multi-pass-or-hillis-steele-workgroup-scan">2. Multi-Pass or
+Hillis-Steele Workgroup Scan</h3>
+<p>To convert bin totals into base write offsets, an exclusive prefix
+scan is executed over <code>s_histogram</code>. A Hillis-Steele scan is
+simple and effective for execution inside GLSL shared memory:</p>
+<ol type="1">
+<li><strong>Step-based Addition:</strong> For offsets <span
+class="math inline">\(d = 1, 2, 4, 8, \dots &lt; N\)</span>, each
+element at index <span class="math inline">\(i\)</span> adds the value
+at index <span class="math inline">\(i - d\)</span> to itself.</li>
+<li><strong>Synchronization:</strong> A <code>barrier()</code> must be
+placed between every step to prevent data hazards.</li>
+<li><strong>Inclusive to Exclusive Conversion:</strong> Shift the final
+array right by one element and pad index 0 with a <code>0</code>.</li>
+</ol>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">shared</span> <span class="dt">uint</span> s_scan<span class="op">[</span>RADIX_SIZE<span class="op">];</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">workgroup_exclusive_scan</span><span class="op">(</span><span class="dt">uint</span> thread_id<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Load histogram to scan array</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    s_scan<span class="op">[</span>thread_id<span class="op">]</span> <span class="op">=</span> s_histogram<span class="op">[</span>thread_id<span class="op">];</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">barrier</span><span class="op">();</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Hillis-Steele inclusive scan</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">uint</span> <span class="dt">offset</span> <span class="op">=</span> <span class="dv">1</span>u<span class="op">;</span> <span class="dt">offset</span> <span class="op">&lt;</span> RADIX_SIZE<span class="op">;</span> <span class="dt">offset</span> <span class="op">&lt;&lt;=</span> <span class="dv">1</span>u<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        <span class="dt">uint</span> val <span class="op">=</span> <span class="dv">0</span>u<span class="op">;</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>thread_id <span class="op">&gt;=</span> <span class="dt">offset</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>            val <span class="op">=</span> s_scan<span class="op">[</span>thread_id <span class="op">-</span> <span class="dt">offset</span><span class="op">];</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        <span class="bu">barrier</span><span class="op">();</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        s_scan<span class="op">[</span>thread_id<span class="op">]</span> <span class="op">+=</span> val<span class="op">;</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">barrier</span><span class="op">();</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Convert inclusive to exclusive scan</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> inclusive_sum <span class="op">=</span> s_scan<span class="op">[</span>thread_id<span class="op">];</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    <span class="bu">barrier</span><span class="op">();</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>thread_id <span class="op">==</span> <span class="dv">0</span>u<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>        s_histogram<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">0</span>u<span class="op">;</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>        s_histogram<span class="op">[</span>thread_id<span class="op">]</span> <span class="op">=</span> s_scan<span class="op">[</span>thread_id <span class="op">-</span> <span class="dv">1</span>u<span class="op">];</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    <span class="bu">barrier</span><span class="op">();</span></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="3-intra-workgroup-thread-ranking">3. Intra-Workgroup Thread
+Ranking</h3>
+<p>In addition to bin offsets, when multiple threads hold keys with
+identical digits, each thread needs a unique index within that bin. This
+is resolved via intra-workgroup ranking:</p>
+<ol type="1">
+<li><strong>Subgroup Intrinsics:</strong> Modern GLSL compute shaders
+utilize subgroup (wavefront/warp) operations. A ballot instruction
+(<code>subgroupBallot</code>) matches all threads in the subgroup
+holding the exact same digit.</li>
+<li><strong>Bit Counting:</strong>
+<code>subgroupBallotExclusiveBitCount()</code> counts how many active
+threads with the same digit precede the current thread.</li>
+<li><strong>Offset Calculation:</strong> The final local index for a key
+is: <span class="math display">\[\text{Local Index} =
+\text{s\_histogram}[\text{digit}] + \text{subgroup\_rank}\]</span></li>
+</ol>
+<p>After computing the local indices, keys are rearranged in shared
+memory or directly scattered to their designated positions in a globally
+partitioned prefix sum scheme (such as OneSweep or Chained Decoupled
+Lookback).</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

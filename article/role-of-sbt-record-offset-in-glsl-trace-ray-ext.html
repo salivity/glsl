@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Role of sbtRecordOffset in GLSL traceRayEXT - glsl</title>
+    <meta name="description" content="In Vulkan ray tracing using GLSL, the sbtRecordOffset parameter in traceRayEXT controls which hit group is selected from the Shader Binding Table (SBT) when a ray intersects geometry. This article explains the function of sbtRecordOffset, details its pos">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/role-of-sbt-record-offset-in-glsl-trace-ray-ext">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Role of sbtRecordOffset in GLSL traceRayEXT - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/role-of-sbt-record-offset-in-glsl-trace-ray-ext" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In Vulkan ray tracing using GLSL, the sbtRecordOffset parameter in traceRayEXT controls which hit group is selected from the Shader Binding Table (SBT) when a ray intersects geometry. This article explains the function of sbtRecordOffset, details its pos" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="role-of-sbtrecordoffset-in-glsl-tracerayext">Role of
+sbtRecordOffset in GLSL traceRayEXT</h1>
+<p>In Vulkan ray tracing using GLSL, the <code>sbtRecordOffset</code>
+parameter in <code>traceRayEXT</code> controls which hit group is
+selected from the Shader Binding Table (SBT) when a ray intersects
+geometry. This article explains the function of
+<code>sbtRecordOffset</code>, details its position within the SBT
+addressing calculation, and illustrates how it enables the pipeline to
+execute different shader programs—such as radiance and shadow
+shaders—for the exact same geometry.</p>
+<h2 id="the-shader-binding-table-indexing-formula">The Shader Binding
+Table Indexing Formula</h2>
+<p>When a ray intersects a primitive, the ray tracing pipeline
+calculates the index of the hit shader record to execute from the SBT.
+According to the Vulkan specification, the formula for determining this
+hit group index is:</p>
+<pre class="text"><code>HitGroupIndex = instanceShaderBindingTableRecordOffset 
+              + sbtRecordOffset 
+              + (sbtRecordStride * geometryIndex)</code></pre>
+<p>Within this equation:</p>
+<ul>
+<li><code>instanceShaderBindingTableRecordOffset</code> is set on the
+CPU/host side within the <code>VkAccelerationStructureInstanceKHR</code>
+descriptor.</li>
+<li><code>geometryIndex</code> is the zero-based index of the geometry
+description within a bottom-level acceleration structure (BLAS).</li>
+<li><code>sbtRecordStride</code> dictates the spacing between
+consecutive geometries in the SBT.</li>
+<li><code>sbtRecordOffset</code> is provided directly by the caller
+inside the shader via <code>traceRayEXT</code>.</li>
+</ul>
+<h2 id="primary-function-ray-type-differentiation">Primary Function:
+Ray-Type Differentiation</h2>
+<p>The fundamental purpose of <code>sbtRecordOffset</code> is to select
+different behavior based on the <em>type</em> of ray being traced,
+without requiring separate geometry or multiple acceleration
+structures.</p>
+<p>Typical ray tracing pipelines define multiple ray types:</p>
+<ol type="1">
+<li><strong>Radiance/Primary Rays:</strong> Require full closest hit
+shaders to evaluate complex materials, textures, and lighting
+calculations.</li>
+<li><strong>Shadow/Occlusion Rays:</strong> Require simplified hit logic
+(often just an any-hit shader to determine visibility or even
+terminating immediately upon intersection) without evaluating full
+material properties.</li>
+<li><strong>Secondary/Probe Rays:</strong> May require custom sampling
+routines, such as global illumination gathering.</li>
+</ol>
+<p>By providing a distinct <code>sbtRecordOffset</code> for each ray
+type, you redirect the pipeline to the appropriate shader record for
+that specific ray context.</p>
+<h2 id="practical-example">Practical Example</h2>
+<p>Consider a scene with two ray types:</p>
+<ul>
+<li><strong>Ray Type 0 (Radiance):</strong> Uses
+<code>sbtRecordOffset = 0</code></li>
+<li><strong>Ray Type 1 (Shadow):</strong> Uses
+<code>sbtRecordOffset = 1</code></li>
+</ul>
+<p>Because each geometry has two corresponding hit records (one for
+radiance, one for shadow), the <code>sbtRecordStride</code> passed to
+<code>traceRayEXT</code> is set to <code>2</code>.</p>
+<p>When casting a radiance ray:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">traceRayEXT</span><span class="op">(</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    topLevelAS<span class="op">,</span>     <span class="co">// accelerationStructureEXT</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    gl_RayFlagsOpaqueEXT<span class="op">,</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="bn">0xFF</span><span class="op">,</span>           <span class="co">// cullMask</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dv">0</span><span class="op">,</span>              <span class="co">// sbtRecordOffset (Primary Ray)</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dv">2</span><span class="op">,</span>              <span class="co">// sbtRecordStride (Number of ray types)</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dv">0</span><span class="op">,</span>              <span class="co">// missIndex</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    origin<span class="op">,</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    tMin<span class="op">,</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    direction<span class="op">,</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    tMax<span class="op">,</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="dv">0</span>               <span class="co">// payload location</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<p>For geometry <code>0</code>, the calculated index is:
+<code>instanceOffset + 0 + (2 * 0) = instanceOffset + 0</code> (Radiance
+Hit Group).</p>
+<p>When casting a shadow ray from within that radiance hit shader:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">traceRayEXT</span><span class="op">(</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    topLevelAS<span class="op">,</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    gl_RayFlagsTerminateOnFirstHitEXT <span class="op">|</span> gl_RayFlagsOpaqueEXT <span class="op">|</span> gl_RayFlagsSkipClosestHitShaderEXT<span class="op">,</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="bn">0xFF</span><span class="op">,</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dv">1</span><span class="op">,</span>              <span class="co">// sbtRecordOffset (Shadow Ray)</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dv">2</span><span class="op">,</span>              <span class="co">// sbtRecordStride</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="dv">1</span><span class="op">,</span>              <span class="co">// missIndex (Shadow Miss)</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    shadowOrigin<span class="op">,</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    tMin<span class="op">,</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    shadowDir<span class="op">,</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    lightDist<span class="op">,</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="dv">1</span>               <span class="co">// shadow payload location</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<p>For geometry <code>0</code>, the calculated index is:
+<code>instanceOffset + 1 + (2 * 0) = instanceOffset + 1</code> (Shadow
+Hit Group).</p>
+<p>For a secondary geometry <code>1</code> in the same BLAS:</p>
+<ul>
+<li>The radiance ray uses index
+<code>instanceOffset + 0 + (2 * 1) = instanceOffset + 2</code>.</li>
+<li>The shadow ray uses index
+<code>instanceOffset + 1 + (2 * 1) = instanceOffset + 3</code>.</li>
+</ul>
+<h2 id="summary-of-constraints-and-behavior">Summary of Constraints and
+Behavior</h2>
+<ul>
+<li><strong>Dynamic Selection:</strong> Unlike instance-level offsets,
+<code>sbtRecordOffset</code> is evaluated dynamically in shader code per
+call to <code>traceRayEXT</code>.</li>
+<li><strong>Range:</strong> The offset value must ensure that
+<code>HitGroupIndex</code> does not exceed the total number of hit
+records allocated in the SBT hit buffer; accessing out-of-bounds records
+results in undefined behavior or device loss.</li>
+<li><strong>Independence from Miss Shaders:</strong> The
+<code>sbtRecordOffset</code> parameter only affects hit group
+calculations; miss shaders are indexed entirely separately via the
+<code>missIndex</code> parameter.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

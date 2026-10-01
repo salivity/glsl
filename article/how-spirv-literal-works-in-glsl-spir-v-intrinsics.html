@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How spirv_literal Works in GLSL SPIR-V Intrinsics - glsl</title>
+    <meta name="description" content="This article provides an overview of the spirvliteral qualifier introduced by the GLEXTspirvintrinsics GLSL extension. It explains the distinction between SPIR-V <id> operands and literal operands, demonstrates how spirvliteral forces compile-time consta">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-spirv-literal-works-in-glsl-spir-v-intrinsics">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How spirv_literal Works in GLSL SPIR-V Intrinsics - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-spirv-literal-works-in-glsl-spir-v-intrinsics" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of the spirvliteral qualifier introduced by the GLEXTspirvintrinsics GLSL extension. It explains the distinction between SPIR-V <id> operands and literal operands, demonstrates how spirvliteral forces compile-time consta" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-spirv_literal-works-in-glsl-spir-v-intrinsics">How
+spirv_literal Works in GLSL SPIR-V Intrinsics</h1>
+<p>This article provides an overview of the <code>spirv_literal</code>
+qualifier introduced by the <code>GL_EXT_spirv_intrinsics</code> GLSL
+extension. It explains the distinction between SPIR-V
+<code>&lt;id&gt;</code> operands and literal operands, demonstrates how
+<code>spirv_literal</code> forces compile-time constant values to be
+emitted directly into the SPIR-V instruction binary stream, and outlines
+the syntactical requirements for using it properly in shader code.</p>
+<h3 id="the-problem-spir-v-ids-vs-literals">The Problem: SPIR-V IDs vs.
+Literals</h3>
+<p>In the SPIR-V binary format, instruction operands are strictly
+categorized into two primary forms:</p>
+<ol type="1">
+<li><strong>ID References (<code>&lt;id&gt;</code>)</strong>: Pointers
+to types, variables, intermediate values, or constants declared
+elsewhere in the module via instructions such as
+<code>OpConstant</code>.</li>
+<li><strong>Literal Numbers</strong>: Raw, immediate values encoded
+directly within the binary words of the instruction itself. These are
+typically used for bitmasks, enumeration values, memory access flags,
+and execution modes.</li>
+</ol>
+<p>Standard GLSL function arguments are evaluated to values or
+variables, which compilers like <code>glslang</code> map to SPIR-V
+<code>&lt;id&gt;</code> operands. If a SPIR-V opcode expects an
+immediate literal operand rather than an <code>IdRef</code>, passing a
+standard GLSL expression or even an <code>OpConstant</code> reference
+will cause validation errors or compilation failure because an
+<code>&lt;id&gt;</code> is supplied where raw binary data is
+required.</p>
+<h3 id="the-role-of-spirv_literal">The Role of
+<code>spirv_literal</code></h3>
+<p>The <code>GL_EXT_spirv_intrinsics</code> extension resolves this
+issue by providing the <code>spirv_literal</code> parameter qualifier.
+When applied to an argument in a SPIR-V intrinsic function declaration,
+<code>spirv_literal</code> informs the compiler that the value passed to
+this parameter must not be converted into an <code>&lt;id&gt;</code>.
+Instead, the compiler takes the evaluated constant integer or
+floating-point value and embeds it as an immediate numeric literal
+directly into the SPIR-V instruction's word stream.</p>
+<h3 id="syntax-and-implementation">Syntax and Implementation</h3>
+<p>To use <code>spirv_literal</code>, the shader must enable the
+<code>GL_EXT_spirv_intrinsics</code> extension. The qualifier is then
+declared in front of parameters that correspond directly to literal
+slots in the target SPIR-V instruction.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_spirv_intrinsics : require</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// OpMemoryBarrier takes two literal operands:</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 1. Memory Semantics &lt;id&gt; or Scope &lt;id&gt; depending on specification, </span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co">// but certain opcodes or custom instructions demand literal values.</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Below illustrates an intrinsic where the second operand must be a raw literal:</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="fu">spirv_instruction</span><span class="op">(</span>id <span class="op">=</span> <span class="dv">224</span><span class="op">)</span> <span class="co">// OpMemoryBarrier</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">spirv_memory_barrier</span><span class="op">(</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> scope<span class="op">,</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    spirv_literal <span class="dt">uint</span> semantics</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<p>When calling <code>spirv_memory_barrier</code>:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Correct: Passing a compile-time constant for spirv_literal</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">uint</span> AcquireReleaseMask <span class="op">=</span> <span class="bn">0x8</span>u<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">spirv_memory_barrier</span><span class="op">(</span>gl_ScopeWorkgroup<span class="op">,</span> AcquireReleaseMask<span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="compiler-constraints-and-rules">Compiler Constraints and
+Rules</h3>
+<p>When using <code>spirv_literal</code>, several strict rules
+apply:</p>
+<ul>
+<li><strong>Compile-Time Constant Evaluation</strong>: The argument
+passed to a <code>spirv_literal</code> parameter must be a constant
+expression evaluated at compile time. Passing non-constant variables,
+function inputs, or runtime expressions results in a compile-time
+error.</li>
+<li><strong>Type Compatibility</strong>: The constant type in GLSL must
+match the expected width (such as 32-bit integer or 64-bit integer) of
+the corresponding SPIR-V literal operand.</li>
+<li><strong>Binary Alignment</strong>: The compiler writes the integer
+or floating-point bit pattern directly into the instruction word
+sequence without emitting prerequisite <code>OpConstant</code>
+definitions in the module header for that specific operand slot.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

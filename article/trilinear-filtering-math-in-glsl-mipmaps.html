@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trilinear Filtering Math in GLSL Mipmaps - glsl</title>
+    <meta name="description" content="Trilinear filtering in OpenGL Shading Language (GLSL) eliminates texture aliasing and visible transitions between mipmap levels by combining two separate bilinear texture lookups with a linear interpolation between adjacent mipmap layers. This process re">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/trilinear-filtering-math-in-glsl-mipmaps">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Trilinear Filtering Math in GLSL Mipmaps - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/trilinear-filtering-math-in-glsl-mipmaps" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Trilinear filtering in OpenGL Shading Language (GLSL) eliminates texture aliasing and visible transitions between mipmap levels by combining two separate bilinear texture lookups with a linear interpolation between adjacent mipmap layers. This process re" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="trilinear-filtering-math-in-glsl-mipmaps">Trilinear Filtering
+Math in GLSL Mipmaps</h1>
+<p>Trilinear filtering in OpenGL Shading Language (GLSL) eliminates
+texture aliasing and visible transitions between mipmap levels by
+combining two separate bilinear texture lookups with a linear
+interpolation between adjacent mipmap layers. This process relies on
+calculating a floating-point Level of Detail (LOD) via screen-space
+derivatives, determining the two enclosing integer mipmap tiers,
+evaluating the 2D bilinear samples within each tier, and interpolating
+the results using the fractional component of the LOD.</p>
+<h2 id="1-computing-the-level-of-detail-lod">1. Computing the Level of
+Detail (LOD)</h2>
+<p>The GPU dynamically decides which mipmap layers to sample based on
+how fast texture coordinates change relative to window coordinates. This
+rate of change is measured using implicit partial derivatives:</p>
+<p><span class="math display">\[\frac{\partial u}{\partial x}, \quad
+\frac{\partial u}{\partial y}, \quad \frac{\partial v}{\partial x},
+\quad \frac{\partial v}{\partial y}\]</span></p>
+<p>In GLSL, these are internally evaluated via helper functions
+equivalent to <code>dFdx</code> and <code>dFdy</code>. To convert these
+derivatives to texel units, they are scaled by the base texture
+dimensions <span class="math inline">\((w_0, h_0)\)</span>:</p>
+<p><span class="math display">\[\rho_x = \sqrt{\left( \frac{\partial
+u}{\partial x} w_0 \right)^2 + \left( \frac{\partial v}{\partial x} h_0
+\right)^2}\]</span></p>
+<p><span class="math display">\[\rho_y = \sqrt{\left( \frac{\partial
+u}{\partial y} w_0 \right)^2 + \left( \frac{\partial v}{\partial y} h_0
+\right)^2}\]</span></p>
+<p>The maximum anisotropic scale factor <span
+class="math inline">\(\rho\)</span> governs isotropic mipmapping:</p>
+<p><span class="math display">\[\rho = \max(\rho_x, \rho_y)\]</span></p>
+<p>The continuous Level of Detail (<span
+class="math inline">\(\lambda\)</span>) is obtained using the base-2
+logarithm:</p>
+<p><span class="math display">\[\lambda = \log_2(\rho) +
+\text{bias}\]</span></p>
+<p>Where <span class="math inline">\(\text{bias}\)</span> includes
+texture-level or sampler-level LOD bias settings.</p>
+<h2 id="2-determining-mipmap-levels-and-weights">2. Determining Mipmap
+Levels and Weights</h2>
+<p>The floating-point value <span class="math inline">\(\lambda\)</span>
+is clamped between zero and the maximum available mipmap index <span
+class="math inline">\((N - 1)\)</span>:</p>
+<p><span class="math display">\[\lambda_{\text{clamped}} =
+\text{clamp}(\lambda, 0, N - 1)\]</span></p>
+<p>The two adjacent integer mipmap levels are defined as:</p>
+<p><span class="math display">\[D_0 = \lfloor \lambda_{\text{clamped}}
+\rfloor\]</span> <span class="math display">\[D_1 = \min(D_0 + 1, N -
+1)\]</span></p>
+<p>The transition blending factor <span class="math inline">\(f\)</span>
+represents the fractional part of <span
+class="math inline">\(\lambda_{\text{clamped}}\)</span>:</p>
+<p><span class="math display">\[f =
+\text{fract}(\lambda_{\text{clamped}}) = \lambda_{\text{clamped}} -
+D_0\]</span></p>
+<h2 id="3-bilinear-interpolation-at-each-level">3. Bilinear
+Interpolation at Each Level</h2>
+<p>At each selected level <span class="math inline">\(d \in \{D_0,
+D_1\}\)</span>, the sampler performs standard 2D bilinear filtering
+across the nearest <span class="math inline">\(2 \times 2\)</span> grid
+of texels.</p>
+<p>Given continuous texel coordinates <span class="math inline">\((s_d,
+t_d) = (u \cdot w_d - 0.5, v \cdot h_d - 0.5)\)</span> for mip level
+<span class="math inline">\(d\)</span>:</p>
+<p><span class="math display">\[i = \lfloor s_d \rfloor, \quad j =
+\lfloor t_d \rfloor\]</span> <span class="math display">\[\alpha =
+\text{fract}(s_d), \quad \beta = \text{fract}(t_d)\]</span></p>
+<p>The bilinear evaluation <span class="math inline">\(C_d\)</span> is
+computed from the four neighboring texels <span
+class="math inline">\(T\)</span>:</p>
+<p><span class="math display">\[C_d = (1 - \alpha)(1 - \beta) T(i, j) +
+\alpha(1 - \beta) T(i + 1, j) + (1 - \alpha)\beta T(i, j + 1) + \alpha
+\beta T(i + 1, j + 1)\]</span></p>
+<p>Evaluating this at both tiers yields two filtered colors: <span
+class="math inline">\(C_0\)</span> for level <span
+class="math inline">\(D_0\)</span> and <span
+class="math inline">\(C_1\)</span> for level <span
+class="math inline">\(D_1\)</span>.</p>
+<h2 id="4-final-inter-level-linear-blend">4. Final Inter-Level Linear
+Blend</h2>
+<p>The third dimension of trilinear filtering is the linear
+interpolation between the two bilinear results using weight <span
+class="math inline">\(f\)</span>:</p>
+<p><span class="math display">\[C_{\text{final}} = (1 - f) C_0 + f
+C_1\]</span></p>
+<p>In GLSL vector notation, this is evaluated as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> C_final <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>C0<span class="op">,</span> C1<span class="op">,</span> f<span class="op">);</span></span></code></pre></div>
+<h2 id="glsl-manual-emulation-example">GLSL Manual Emulation
+Example</h2>
+<p>While native hardware executes this logic via
+<code>texture(sampler2D, uv)</code>, the underlying mathematical
+evaluation can be explicitly written in GLSL as follows:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> <span class="fu">manualTrilinear</span><span class="op">(</span><span class="dt">sampler2D</span> tex<span class="op">,</span> <span class="dt">vec2</span> uv<span class="op">,</span> <span class="dt">vec2</span> <span class="bu">textureSize</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 1. Calculate derivatives and isotropic scale</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> dx <span class="op">=</span> <span class="bu">dFdx</span><span class="op">(</span>uv <span class="op">*</span> <span class="bu">textureSize</span><span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> dy <span class="op">=</span> <span class="bu">dFdy</span><span class="op">(</span>uv <span class="op">*</span> <span class="bu">textureSize</span><span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> rho <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="bu">length</span><span class="op">(</span>dx<span class="op">),</span> <span class="bu">length</span><span class="op">(</span>dy<span class="op">));</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 2. Compute floating-point LOD</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> lambda <span class="op">=</span> <span class="bu">log2</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span>rho<span class="op">,</span> <span class="fl">1.0</span><span class="op">));</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 3. Determine integer levels and interpolation factor</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d0 <span class="op">=</span> <span class="bu">floor</span><span class="op">(</span>lambda<span class="op">);</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d1 <span class="op">=</span> d0 <span class="op">+</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> f <span class="op">=</span> <span class="bu">fract</span><span class="op">(</span>lambda<span class="op">);</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 4. Sample bilinear values at both mip levels</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> c0 <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>tex<span class="op">,</span> uv<span class="op">,</span> d0<span class="op">);</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> c1 <span class="op">=</span> <span class="bu">textureLod</span><span class="op">(</span>tex<span class="op">,</span> uv<span class="op">,</span> d1<span class="op">);</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 5. Final linear blend across transitions</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">mix</span><span class="op">(</span>c0<span class="op">,</span> c1<span class="op">,</span> f<span class="op">);</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

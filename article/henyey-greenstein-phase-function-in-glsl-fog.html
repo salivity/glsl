@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Henyey-Greenstein Phase Function in GLSL Fog - glsl</title>
+    <meta name="description" content="This article explains the mathematical formula for the Henyey-Greenstein phase function and details its implementation in GLSL for real-time volumetric fog rendering. The Henyey-Greenstein phase function is widely used in computer graphics to approximate">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/henyey-greenstein-phase-function-in-glsl-fog">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Henyey-Greenstein Phase Function in GLSL Fog - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/henyey-greenstein-phase-function-in-glsl-fog" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains the mathematical formula for the Henyey-Greenstein phase function and details its implementation in GLSL for real-time volumetric fog rendering. The Henyey-Greenstein phase function is widely used in computer graphics to approximate" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="henyey-greenstein-phase-function-in-glsl-fog">Henyey-Greenstein
+Phase Function in GLSL Fog</h1>
+<p>This article explains the mathematical formula for the
+Henyey-Greenstein phase function and details its implementation in GLSL
+for real-time volumetric fog rendering. The Henyey-Greenstein phase
+function is widely used in computer graphics to approximate anisotropic
+light scattering—known as Mie scattering—in participating media like
+clouds, haze, and dust. Below, you will find the exact mathematical
+formulation, parameter explanations, and ready-to-use GLSL shader code
+optimized for volumetric raymarching.</p>
+<h3 id="mathematical-formula">Mathematical Formula</h3>
+<p>The standard Henyey-Greenstein phase function defines the probability
+distribution of light scattering at an angle <span
+class="math inline">\(\theta\)</span> relative to the incoming light
+ray:</p>
+<p><span class="math display">\[P(\theta) = \frac{1}{4\pi} \frac{1 -
+g^2}{(1 + g^2 - 2g \cos\theta)^{3/2}}\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(\theta\)</span> is the scattering angle
+between the direction of the light ray and the view direction (the
+direction light travels toward the camera).</li>
+<li><span class="math inline">\(\cos\theta\)</span> is computed using
+the dot product of the normalized light direction vector <span
+class="math inline">\(\vec{L}\)</span> and the view ray direction <span
+class="math inline">\(\vec{V}\)</span>: <span
+class="math inline">\(\cos\theta = \vec{V} \cdot \vec{L}\)</span>.</li>
+<li><span class="math inline">\(g\)</span> is the asymmetry parameter,
+defined in the range <span class="math inline">\([-1, 1]\)</span>:
+<ul>
+<li><span class="math inline">\(g &gt; 0\)</span>: Produces forward
+scattering (light scatters forward, common in fog and water
+droplets).</li>
+<li><span class="math inline">\(g &lt; 0\)</span>: Produces backward
+scattering (light bounces back toward the light source).</li>
+<li><span class="math inline">\(g = 0\)</span>: Produces isotropic
+scattering, reducing the formula to <span
+class="math inline">\(P(\theta) = \frac{1}{4\pi}\)</span>.</li>
+</ul></li>
+</ul>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>In GLSL shaders, the constant factor <span
+class="math inline">\(\frac{1}{4\pi} \approx 0.07957747\)</span> can be
+precalculated to reduce computational overhead during volumetric
+raymarching.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define PI 3.14159265359</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#define INV_4PI 0.07957747154594767</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">henyeyGreenstein</span><span class="op">(</span><span class="dt">float</span> cosTheta<span class="op">,</span> <span class="dt">float</span> g<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> g2 <span class="op">=</span> g <span class="op">*</span> g<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> denom <span class="op">=</span> <span class="fl">1.0</span> <span class="op">+</span> g2 <span class="op">-</span> <span class="fl">2.0</span> <span class="op">*</span> g <span class="op">*</span> cosTheta<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> INV_4PI <span class="op">*</span> <span class="op">((</span><span class="fl">1.0</span> <span class="op">-</span> g2<span class="op">)</span> <span class="op">/</span> <span class="bu">max</span><span class="op">(</span><span class="bu">pow</span><span class="op">(</span>denom<span class="op">,</span> <span class="fl">1.5</span><span class="op">),</span> <span class="fl">0.0001</span><span class="op">));</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="integration-in-volumetric-raymarching">Integration in Volumetric
+Raymarching</h3>
+<p>To evaluate scattering at a specific sample point along a ray:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// rayDir: normalized camera ray direction (pointing away from camera)</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="co">// lightDir: normalized direction towards the light source</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Since scattering points toward the camera, we compare rayDir with lightDir</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> cosTheta <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>rayDir<span class="op">,</span> lightDir<span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Evaluate phase function with an asymmetry factor (e.g., g = 0.6 for forward scattering fog)</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> phase <span class="op">=</span> <span class="fu">henyeyGreenstein</span><span class="op">(</span>cosTheta<span class="op">,</span> <span class="fl">0.6</span><span class="op">);</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Multiply the accumulated in-scattered light by the phase factor</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> inScattering <span class="op">=</span> lightColor <span class="op">*</span> lightTransmittance <span class="op">*</span> fogDensity <span class="op">*</span> phase<span class="op">;</span></span></code></pre></div>
+<h3 id="dual-henyey-greenstein-phase-function">Dual Henyey-Greenstein
+Phase Function</h3>
+<p>Atmospheric phenomena often exhibit both strong forward scattering
+around light sources and a subtle backward scattering rim. A common
+industry technique is the two-lobe (dual) Henyey-Greenstein function,
+which combines two phase evaluations using a blend factor <span
+class="math inline">\(k\)</span>:</p>
+<p><span class="math display">\[P_{dual}(\theta) = k \cdot P(\theta,
+g_1) + (1 - k) \cdot P(\theta, g_2)\]</span></p>
+<p>In GLSL:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">dualHenyeyGreenstein</span><span class="op">(</span><span class="dt">float</span> cosTheta<span class="op">,</span> <span class="dt">float</span> g1<span class="op">,</span> <span class="dt">float</span> g2<span class="op">,</span> <span class="dt">float</span> k<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">mix</span><span class="op">(</span><span class="fu">henyeyGreenstein</span><span class="op">(</span>cosTheta<span class="op">,</span> g2<span class="op">),</span> <span class="fu">henyeyGreenstein</span><span class="op">(</span>cosTheta<span class="op">,</span> g1<span class="op">),</span> k<span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Using <span class="math inline">\(g_1 &gt; 0\)</span> (such as <span
+class="math inline">\(0.7\)</span>), <span class="math inline">\(g_2
+&lt; 0\)</span> (such as <span class="math inline">\(-0.2\)</span>), and
+<span class="math inline">\(k \approx 0.8\)</span> produces realistic
+atmospheric fog with both a pronounced forward silver lining and a
+slight backward glow.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

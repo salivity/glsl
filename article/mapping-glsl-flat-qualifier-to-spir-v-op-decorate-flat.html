@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapping GLSL Flat Qualifier to SPIR-V OpDecorate Flat - glsl</title>
+    <meta name="description" content="This article explains how shader compilers translate the GLSL flat interpolation qualifier into SPIR-V binary code. It covers the underlying purpose of non-interpolated attributes, how the GLSL compiler associates the qualifier with intermediate represen">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/mapping-glsl-flat-qualifier-to-spir-v-op-decorate-flat">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Mapping GLSL Flat Qualifier to SPIR-V OpDecorate Flat - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/mapping-glsl-flat-qualifier-to-spir-v-op-decorate-flat" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how shader compilers translate the GLSL flat interpolation qualifier into SPIR-V binary code. It covers the underlying purpose of non-interpolated attributes, how the GLSL compiler associates the qualifier with intermediate represen" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="mapping-glsl-flat-qualifier-to-spir-v-opdecorate-flat">Mapping
+GLSL Flat Qualifier to SPIR-V OpDecorate Flat</h1>
+<p>This article explains how shader compilers translate the GLSL
+<code>flat</code> interpolation qualifier into SPIR-V binary code. It
+covers the underlying purpose of non-interpolated attributes, how the
+GLSL compiler associates the qualifier with intermediate representation
+targets, and the exact emission of <code>OpDecorate</code> and
+<code>OpMemberDecorate</code> instructions in the resulting SPIR-V
+module.</p>
+<h3 id="the-role-of-the-flat-qualifier-in-glsl">The Role of the
+<code>flat</code> Qualifier in GLSL</h3>
+<p>In GLSL, vertex output attributes and fragment input attributes are
+smoothly interpolated across a primitive by default. The
+<code>flat</code> qualifier explicitly disables interpolation:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Output from vertex shader</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">flat</span> <span class="dt">out</span> <span class="dt">int</span> v_primitiveID<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Input to fragment shader</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">flat</span> <span class="dt">in</span> <span class="dt">int</span> v_primitiveID<span class="op">;</span></span></code></pre></div>
+<p>When <code>flat</code> is applied, the fragment shader receives the
+attribute value directly from the provoking vertex of the primitive
+without any hardware blending. This qualifier is syntactically mandatory
+in GLSL for integer types (<code>int</code>, <code>uint</code>, and
+their vector variants) and double-precision types passing through the
+rasterizer.</p>
+<h3 id="the-spir-v-decoration-model">The SPIR-V Decoration Model</h3>
+<p>SPIR-V separates the structural definition of types and variables
+from the metadata that alters their behavior. Metadata such as
+interpolation modes, layout bindings, and memory qualifiers are applied
+using the decoration mechanism rather than being baked into the data
+type itself.</p>
+<p>To modify how an attribute is consumed across the rasterization
+interface, SPIR-V defines the <code>Flat</code> decoration:</p>
+<ul>
+<li><strong>Instruction</strong>: <code>OpDecorate</code></li>
+<li><strong>Target</strong>: The <code>&lt;id&gt;</code> of an
+<code>OpVariable</code></li>
+<li><strong>Decoration</strong>: <code>Flat</code> (value
+<code>32</code> in the SPIR-V core specification)</li>
+</ul>
+<h3 id="step-by-step-translation-process">Step-by-Step Translation
+Process</h3>
+<p>When a compiler like <code>glslang</code> parses a GLSL shader
+containing the <code>flat</code> qualifier, it executes the following
+steps:</p>
+<ol type="1">
+<li><strong>AST Node Creation</strong>: The compiler parses the variable
+declaration, identifying both its storage class (<code>in</code> or
+<code>out</code>) and its auxiliary interpolation qualifier
+(<code>flat</code>).</li>
+<li><strong>Intermediate Variable Allocation</strong>: An
+<code>OpVariable</code> instruction is generated in the SPIR-V module
+with a storage class of either <code>Input</code> or
+<code>Output</code>.</li>
+<li><strong>Decoration Generation</strong>: The compiler emits an
+<code>OpDecorate</code> instruction targeting the variable’s ID,
+specifying the <code>Flat</code> decoration before the module's
+declaration section closes.</li>
+</ol>
+<h4 id="standalone-variable-example">Standalone Variable Example</h4>
+<p>Given the GLSL declaration:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">flat</span> <span class="dt">out</span> <span class="dt">int</span> v_entityID<span class="op">;</span></span></code></pre></div>
+<p>The resulting SPIR-V disassembly takes the following form:</p>
+<pre class="spirv"><code>; Module Decorations
+OpDecorate %v_entityID Flat
+OpDecorate %v_entityID Location 0
+
+; Type Declarations
+%int = OpTypeInt 32 1
+%ptr_Output_int = OpTypePointer Output %int
+
+; Variable Definition
+%v_entityID = OpVariable %ptr_Output_int Output</code></pre>
+<p>The <code>OpDecorate %v_entityID Flat</code> instruction informs the
+Vulkan or OpenGL driver's compiler that the pipeline must bypass the
+barycentric interpolation logic for this specific I/O location.</p>
+<h3 id="handling-interface-blocks-with-opmemberdecorate">Handling
+Interface Blocks with <code>OpMemberDecorate</code></h3>
+<p>When the <code>flat</code> qualifier is applied to individual members
+inside a GLSL interface block rather than an individual variable, SPIR-V
+shifts from <code>OpDecorate</code> to
+<code>OpMemberDecorate</code>.</p>
+<p>Consider the following GLSL interface block:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> VertexData <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> normal<span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">flat</span> <span class="dt">int</span> materialID<span class="op">;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> outData<span class="op">;</span></span></code></pre></div>
+<p>In this scenario, <code>flat</code> applies only to the second field
+of the structure. The SPIR-V representation targets the composite type
+rather than the global variable:</p>
+<pre class="spirv"><code>; Member Decorations
+OpMemberDecorate %VertexData 1 Flat
+OpMemberDecorate %VertexData 0 Location 0
+OpMemberDecorate %VertexData 1 Location 1
+
+; Type and Variable Declarations
+%VertexData = OpTypeStruct %v3float %int
+%ptr_Output_VertexData = OpTypePointer Output %VertexData
+%outData = OpVariable %ptr_Output_VertexData Output</code></pre>
+<p><code>OpMemberDecorate</code> takes the struct type ID, the
+zero-based index of the target member (in this case, index
+<code>1</code> for <code>materialID</code>), and the <code>Flat</code>
+decoration.</p>
+<h3 id="spir-v-validation-requirements-for-integers">SPIR-V Validation
+Requirements for Integers</h3>
+<p>The SPIR-V specification enforces that any pipeline input or output
+variable of an integer, 64-bit float, or boolean type must be decorated
+with <code>Flat</code>. Because of this rule, if a compiler encounters
+an interface variable with an integer data type, it will implicitly
+generate the <code>OpDecorate %id Flat</code> instruction to ensure the
+generated SPIR-V passes validation, conforming directly to the
+underlying hardware execution model.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

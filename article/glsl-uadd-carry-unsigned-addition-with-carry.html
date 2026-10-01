@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL uaddCarry: Unsigned Addition with Carry - glsl</title>
+    <meta name="description" content="The GLSL built-in function uaddCarry adds two 32-bit unsigned integers or vectors while simultaneously calculating whether an arithmetic overflow occurred. Instead of discarding the excess high-order bit, uaddCarry outputs the standard modulo $2^{32}$ su">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-uadd-carry-unsigned-addition-with-carry">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL uaddCarry: Unsigned Addition with Carry - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-uadd-carry-unsigned-addition-with-carry" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The GLSL built-in function uaddCarry adds two 32-bit unsigned integers or vectors while simultaneously calculating whether an arithmetic overflow occurred. Instead of discarding the excess high-order bit, uaddCarry outputs the standard modulo $2^{32}$ su" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-uaddcarry-unsigned-addition-with-carry">GLSL uaddCarry:
+Unsigned Addition with Carry</h1>
+<p>The GLSL built-in function <code>uaddCarry</code> adds two 32-bit
+unsigned integers or vectors while simultaneously calculating whether an
+arithmetic overflow occurred. Instead of discarding the excess
+high-order bit, <code>uaddCarry</code> outputs the standard modulo <span
+class="math inline">\(2^{32}\)</span> sum as its return value and writes
+the resulting overflow (the carry-out bit) into an <code>out</code>
+parameter. This mechanism enables precise multi-word arithmetic on GPUs,
+allowing shaders to execute extended-precision integer calculations that
+exceed standard 32-bit register capacities.</p>
+<h2 id="function-signature-and-mechanism">Function Signature and
+Mechanism</h2>
+<p>The standard declaration for <code>uaddCarry</code> in GLSL supports
+both scalar and vector types:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>genUType <span class="bu">uaddCarry</span><span class="op">(</span>genUType x<span class="op">,</span> genUType y<span class="op">,</span> <span class="dt">out</span> genUType carry<span class="op">);</span></span></code></pre></div>
+<p>Here, <code>genUType</code> represents <code>uint</code>,
+<code>uvec2</code>, <code>uvec3</code>, or <code>uvec4</code>.</p>
+<p>When the function executes, it performs addition on the unsigned
+arguments <code>x</code> and <code>y</code>:</p>
+<ol type="1">
+<li><strong>Sum Evaluation:</strong> The primary operation calculates
+<span class="math inline">\((x + y) \pmod{2^{32}}\)</span>. This 32-bit
+truncated sum is returned directly by the function.</li>
+<li><strong>Carry Evaluation:</strong> If the mathematical sum of <span
+class="math inline">\(x\)</span> and <span
+class="math inline">\(y\)</span> is greater than or equal to <span
+class="math inline">\(2^{32}\)</span> (equivalent to
+<code>0x100000000u</code>), an arithmetic overflow has occurred. The
+function assigns <code>1u</code> to the <code>carry</code> variable. If
+no overflow occurs, <code>carry</code> is set to <code>0u</code>.</li>
+</ol>
+<h2 id="component-wise-processing">Component-Wise Processing</h2>
+<p>When used with vector types (<code>uvec2</code>, <code>uvec3</code>,
+<code>uvec4</code>), <code>uaddCarry</code> operates strictly
+component-wise. The addition and carry generation for each vector lane
+occur independently:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uvec2</span> a <span class="op">=</span> <span class="dt">uvec2</span><span class="op">(</span><span class="bn">0xFFFFFFFF</span>u<span class="op">,</span> <span class="dv">5</span>u<span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">uvec2</span> b <span class="op">=</span> <span class="dt">uvec2</span><span class="op">(</span><span class="dv">1</span>u<span class="op">,</span> <span class="dv">10</span>u<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">uvec2</span> carry<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">uvec2</span> result <span class="op">=</span> <span class="bu">uaddCarry</span><span class="op">(</span>a<span class="op">,</span> b<span class="op">,</span> carry<span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co">// result is uvec2(0u, 15u)</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co">// carry  is uvec2(1u, 0u)</span></span></code></pre></div>
+<p>In the first lane, <code>0xFFFFFFFFu + 1u</code> overflows, producing
+a sum of <code>0u</code> and setting the first carry component to
+<code>1u</code>. In the second lane, <code>5u + 10u</code> yields
+<code>15u</code> without overflowing, setting the second carry component
+to <code>0u</code>.</p>
+<h2 id="emulating-multi-word-precision">Emulating Multi-Word
+Precision</h2>
+<p>The primary practical application of <code>uaddCarry</code> is
+emulating 64-bit or larger arithmetic in environments without native
+64-bit integer support, such as cryptographic hashing algorithms or
+high-precision counters.</p>
+<p>To add two 64-bit values represented by two <code>uvec2</code>
+structures (where the <code>x</code> component is the low 32 bits and
+the <code>y</code> component is the high 32 bits),
+<code>uaddCarry</code> chains the lower-half overflow into the
+upper-half calculation:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">uvec2</span> <span class="fu">add64</span><span class="op">(</span><span class="dt">uvec2</span> numA<span class="op">,</span> <span class="dt">uvec2</span> numB<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> carry<span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uvec2</span> sum<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Add lower 32-bit words and extract carry</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    sum<span class="op">.</span><span class="fu">x</span> <span class="op">=</span> <span class="bu">uaddCarry</span><span class="op">(</span>numA<span class="op">.</span><span class="fu">x</span><span class="op">,</span> numB<span class="op">.</span><span class="fu">x</span><span class="op">,</span> carry<span class="op">);</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Add upper 32-bit words along with the carry from the lower addition</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    sum<span class="op">.</span><span class="fu">y</span> <span class="op">=</span> numA<span class="op">.</span><span class="fu">y</span> <span class="op">+</span> numB<span class="op">.</span><span class="fu">y</span> <span class="op">+</span> carry<span class="op">;</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> sum<span class="op">;</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Because modern graphics hardware includes dedicated carry-generation
+logic in its arithmetic logic units (ALUs), <code>uaddCarry</code>
+typically compiles into single, native machine instructions rather than
+multi-step branches or software comparisons, maintaining high shader
+execution performance.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

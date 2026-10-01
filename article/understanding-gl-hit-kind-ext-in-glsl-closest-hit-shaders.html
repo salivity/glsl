@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding gl_HitKindEXT in GLSL Closest-Hit Shaders - glsl</title>
+    <meta name="description" content="This article explores the purpose and data provided by the glHitKindEXT built-in variable in GLSL closest-hit shaders under the GLEXTraytracing extension. It covers how this variable communicates geometry orientation for hardware-accelerated triangles an">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-gl-hit-kind-ext-in-glsl-closest-hit-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding gl_HitKindEXT in GLSL Closest-Hit Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-gl-hit-kind-ext-in-glsl-closest-hit-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores the purpose and data provided by the glHitKindEXT built-in variable in GLSL closest-hit shaders under the GLEXTraytracing extension. It covers how this variable communicates geometry orientation for hardware-accelerated triangles an" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="understanding-gl_hitkindext-in-glsl-closest-hit-shaders">Understanding
+gl_HitKindEXT in GLSL Closest-Hit Shaders</h1>
+<p>This article explores the purpose and data provided by the
+<code>gl_HitKindEXT</code> built-in variable in GLSL closest-hit shaders
+under the <code>GL_EXT_ray_tracing</code> extension. It covers how this
+variable communicates geometry orientation for hardware-accelerated
+triangles and how it transfers custom classification data from
+procedural intersection shaders directly to closest-hit evaluation.</p>
+<h2 id="what-is-gl_hitkindext">What is gl_HitKindEXT?</h2>
+<p>In GLSL ray tracing pipelines, <code>gl_HitKindEXT</code> is a
+built-in input variable of type <code>uint</code>. It is accessible
+within both closest-hit shaders and any-hit shaders. The variable
+identifies the specific nature of the hit that caused the shader to
+execute, distinguishing between front-facing triangles, back-facing
+triangles, and custom procedural geometry hits.</p>
+<h2 id="hit-kinds-for-built-in-triangle-geometries">Hit Kinds for
+Built-in Triangle Geometries</h2>
+<p>When a ray intersects standard hardware-accelerated triangle
+geometry, <code>gl_HitKindEXT</code> automatically reflects the winding
+orientation of the intersected primitive relative to the incoming ray.
+It provides one of two standardized constants:</p>
+<ul>
+<li><strong><code>gl_HitKindFrontFacingTriangleEXT</code> (value
+<code>0xFE</code> / <code>254</code>):</strong> Indicates that the ray
+intersected the front face of the triangle, determined by the vertex
+winding order defined in the acceleration structure.</li>
+<li><strong><code>gl_HitKindBackFacingTriangleEXT</code> (value
+<code>0xFF</code> / <code>255</code>):</strong> Indicates that the ray
+intersected the back face of the triangle.</li>
+</ul>
+<p>This allows closest-hit shaders to quickly determine surface
+orientation without needing to perform manual dot-product comparisons
+between the geometric normal and the ray direction
+(<code>gl_WorldRayDirectionEXT</code>).</p>
+<h2 id="hit-kinds-for-custom-procedural-geometries">Hit Kinds for Custom
+Procedural Geometries</h2>
+<p>For procedural geometry defined by Axis-Aligned Bounding Boxes
+(AABBs), ray-primitive intersections are calculated manually inside an
+intersection shader using the <code>reportIntersectionEXT</code>
+function:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> <span class="fu">reportIntersectionEXT</span><span class="op">(</span><span class="dt">float</span> hitT<span class="op">,</span> <span class="dt">uint</span> hitKind<span class="op">);</span></span></code></pre></div>
+<p>When an intersection is accepted, the integer value passed into the
+<code>hitKind</code> parameter is directly forwarded to the closest-hit
+shader and made readable through <code>gl_HitKindEXT</code>.</p>
+<p>Key characteristics for procedural hit kinds include:</p>
+<ul>
+<li><strong>Valid Range:</strong> Custom hit kinds must be within the
+range of <code>0</code> to <code>127</code> (<code>0x00</code> to
+<code>0x7F</code>). Values from <code>128</code> to <code>255</code> are
+reserved for built-in implementation types.</li>
+<li><strong>Application-Specific Data:</strong> Developers can use this
+7-bit integer to encode contextual data, such as sub-primitive types
+(e.g., distinguishing between the body and caps of a procedural
+cylinder), material IDs, or specific intersection surfaces within a
+complex procedural volume.</li>
+</ul>
+<h2 id="summary-of-usage-in-closest-hit-shaders">Summary of Usage in
+Closest-Hit Shaders</h2>
+<p>Inside the closest-hit shader, <code>gl_HitKindEXT</code>
+delivers:</p>
+<ol type="1">
+<li><strong>Facing Information:</strong> Immediate identification of
+front-facing versus back-facing triangle hits to flip shading normals or
+adjust lighting models accordingly.</li>
+<li><strong>Intersection Metadata:</strong> User-defined identification
+flags emitted by custom intersection shaders, eliminating the need to
+pass auxiliary classification data through hit attributes or payload
+structures.</li>
+</ol></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL memoryBarrier Function Guarantees Explained - glsl</title>
+    <meta name="description" content="In OpenGL Shading Language (GLSL), the memoryBarrier() function acts as a comprehensive ordering control for memory transactions issued by a single shader invocation. This article details the specific guarantees provided by memoryBarrier() across all sup">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-memory-barrier-function-guarantees-explained">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL memoryBarrier Function Guarantees Explained - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-memory-barrier-function-guarantees-explained" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In OpenGL Shading Language (GLSL), the memoryBarrier() function acts as a comprehensive ordering control for memory transactions issued by a single shader invocation. This article details the specific guarantees provided by memoryBarrier() across all sup" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-memorybarrier-function-guarantees-explained">GLSL
+memoryBarrier Function Guarantees Explained</h1>
+<p>In OpenGL Shading Language (GLSL), the <code>memoryBarrier()</code>
+function acts as a comprehensive ordering control for memory
+transactions issued by a single shader invocation. This article details
+the specific guarantees provided by <code>memoryBarrier()</code> across
+all supported GLSL memory spaces, how it affects the ordering of memory
+reads and writes, its interaction with the <code>coherent</code>
+qualifier, and how it differs from execution synchronization barriers
+like <code>barrier()</code>.</p>
+<h3 id="the-core-guarantee-ordering-of-memory-transactions">The Core
+Guarantee: Ordering of Memory Transactions</h3>
+<p>The primary guarantee of <code>memoryBarrier()</code> is compile-time
+and run-time <strong>ordering</strong>, not execution synchronization.
+When an invocation calls <code>memoryBarrier()</code>, the GLSL
+specification guarantees that:</p>
+<ol type="1">
+<li>All memory writes issued by that invocation prior to calling
+<code>memoryBarrier()</code> will complete and be committed to memory
+before any memory reads or writes issued after the call to
+<code>memoryBarrier()</code> are executed.</li>
+<li>Memory operations cannot be reordered by the compiler or the GPU
+memory architecture across the barrier boundary.</li>
+</ol>
+<p><code>memoryBarrier()</code> does not stall or pause other shader
+invocations, nor does it guarantee that other invocations have reached
+the same point in execution. It only controls the relative order of
+memory operations initiated by the calling invocation.</p>
+<h3 id="memory-spaces-covered-by-memorybarrier">Memory Spaces Covered by
+memoryBarrier()</h3>
+<p>Calling <code>memoryBarrier()</code> serves as an umbrella operation.
+It provides the combined ordering guarantees of all specialized GLSL
+memory barriers in a single call, covering the following memory
+spaces:</p>
+<ul>
+<li><strong>Buffer Variables (SSBOs):</strong> Guarantees ordering for
+all reads and writes to Shader Storage Buffer Objects (equivalent to
+<code>memoryBarrierBuffer()</code>).</li>
+<li><strong>Image Variables:</strong> Guarantees ordering for memory
+operations initiated through image functions such as
+<code>imageStore()</code>, <code>imageLoad()</code>, and
+<code>imageAtomic*()</code> (equivalent to
+<code>memoryBarrierImage()</code>).</li>
+<li><strong>Atomic Counters:</strong> Guarantees ordering for atomic
+counter operations such as <code>atomicCounterIncrement()</code> and
+<code>atomicCounterDecrement()</code> (equivalent to
+<code>memoryBarrierAtomicCounter()</code>).</li>
+<li><strong>Shared Variables:</strong> In compute shaders, it guarantees
+ordering for accesses to variables declared with the <code>shared</code>
+storage qualifier (equivalent to
+<code>memoryBarrierShared()</code>).</li>
+</ul>
+<p>Because it spans all these spaces simultaneously, a write to an SSBO
+before the barrier is guaranteed to complete before an image read after
+the barrier is executed, preventing cross-resource race conditions
+within the invocation.</p>
+<h3
+id="inter-invocation-visibility-and-the-coherent-qualifier">Inter-Invocation
+Visibility and the <code>coherent</code> Qualifier</h3>
+<p>For writes ordered by <code>memoryBarrier()</code> to become visible
+to other invocations, the targeted resources must be declared with the
+<code>coherent</code> memory qualifier (which is the default for atomic
+counters).</p>
+<ul>
+<li><strong>Without <code>coherent</code>:</strong> Writes may remain in
+local invocation caches, and subsequent reads by other invocations may
+read stale cached values, regardless of memory barriers.</li>
+<li><strong>With <code>coherent</code>:</strong>
+<code>memoryBarrier()</code> forces pending writes from the calling
+invocation out of local caches toward shared visibility, and ensures
+that subsequent reads by the invocation invalidate stale cache entries
+to observe newly committed data.</li>
+</ul>
+<h3 id="memorybarrier-vs-barrier"><code>memoryBarrier()</code> vs.
+<code>barrier()</code></h3>
+<p>It is vital to distinguish <code>memoryBarrier()</code> from
+<code>barrier()</code>:</p>
+<ul>
+<li><strong><code>memoryBarrier()</code></strong>: Affects only memory
+access ordering within the calling invocation. It can be called inside
+conditional code and non-uniform control flow without causing undefined
+behavior or GPU deadlocks.</li>
+<li><strong><code>barrier()</code></strong>: An execution barrier for
+compute shaders and tessellation control shaders. It forces all
+invocations in the local workgroup to pause until all invocations reach
+the barrier, while also ordering shared and memory operations. Unlike
+<code>memoryBarrier()</code>, <code>barrier()</code> must be encountered
+uniformly by all invocations in a workgroup.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

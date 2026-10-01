@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Screen Space Reflections Trace Rays in GLSL - glsl</title>
+    <meta name="description" content="Screen-space reflections (SSR) simulate specular surface reflections in real-time graphics by marching rays directly across the screen's existing depth and color buffers rather than traversing complex scene geometry. This article explains the underlying">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-screen-space-reflections-trace-rays-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Screen Space Reflections Trace Rays in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-screen-space-reflections-trace-rays-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Screen-space reflections (SSR) simulate specular surface reflections in real-time graphics by marching rays directly across the screen's existing depth and color buffers rather than traversing complex scene geometry. This article explains the underlying" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-screen-space-reflections-trace-rays-in-glsl">How Screen
+Space Reflections Trace Rays in GLSL</h1>
+<p>Screen-space reflections (SSR) simulate specular surface reflections
+in real-time graphics by marching rays directly across the screen's
+existing depth and color buffers rather than traversing complex scene
+geometry. This article explains the underlying mechanics of tracing rays
+through a depth buffer inside a GLSL fragment shader, covering ray
+generation in view space, projection to screen space, depth comparisons,
+intersection refinement techniques, and artifact mitigation.</p>
+<h2 id="1-ray-initialization-in-view-space">1. Ray Initialization in
+View Space</h2>
+<p>The SSR process begins in the fragment shader by establishing the
+origin and direction of the reflection ray in view (camera) space.</p>
+<ol type="1">
+<li><strong>Reconstruct View Position:</strong> The origin of the ray
+(<span class="math inline">\(\mathbf{P}\)</span>) is the view-space
+position of the current fragment. This can be sampled directly from a
+G-buffer position texture or reconstructed from the camera's depth
+buffer using the fragment's screen coordinates and the inverse
+projection matrix:
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> clipSpacePos <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>vTexCoord <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">,</span> depthSample <span class="op">*</span> <span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> viewSpacePos <span class="op">=</span> invProjectionMatrix <span class="op">*</span> clipSpacePos<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> rayOrigin <span class="op">=</span> viewSpacePos<span class="op">.</span><span class="fu">xyz</span> <span class="op">/</span> viewSpacePos<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span></code></pre></div></li>
+<li><strong>Calculate Reflection Vector:</strong> The view vector (<span
+class="math inline">\(\mathbf{V}\)</span>) points from the camera
+(origin in view space, <span class="math inline">\((0,0,0)\)</span>) to
+the fragment position (<span class="math inline">\(\mathbf{P}\)</span>).
+Given the surface normal (<span
+class="math inline">\(\mathbf{N}\)</span>) in view space, the reflection
+direction (<span class="math inline">\(\mathbf{R}\)</span>) is computed
+using the GLSL built-in <code>reflect</code> function:
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> viewDir <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>rayOrigin<span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> rayDir <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="bu">reflect</span><span class="op">(</span>viewDir<span class="op">,</span> <span class="bu">normalize</span><span class="op">(</span>viewNormal<span class="op">)));</span></span></code></pre></div></li>
+</ol>
+<h2 id="2-ray-marching-and-projection">2. Ray Marching and
+Projection</h2>
+<p>Rays can be traversed either by stepping in view space and projecting
+each step onto the screen, or by stepping directly in 2D screen space.
+The most common and robust method for general implementations steps
+linearly along the ray in view space and projects each step to texture
+space.</p>
+<p>At each step <span class="math inline">\(i\)</span>, with a step size
+<span class="math inline">\(\Delta t\)</span>:</p>
+<p><span class="math display">\[\mathbf{P}_i = \text{rayOrigin} +
+(\text{rayDir} \cdot \Delta t \cdot i)\]</span></p>
+<p>To sample the depth buffer, <span
+class="math inline">\(\mathbf{P}_i\)</span> must be transformed into
+normalized device coordinates (NDC) and then into <span
+class="math inline">\([0, 1]\)</span> texture coordinates:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> projCoord <span class="op">=</span> projectionMatrix <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>currentRayPos<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>projCoord<span class="op">.</span><span class="fu">xy</span> <span class="op">/=</span> projCoord<span class="op">.</span><span class="fu">w</span><span class="op">;</span> <span class="co">// Perspective division to [-1, 1]</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> sampleUV <span class="op">=</span> projCoord<span class="op">.</span><span class="fu">xy</span> <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span> <span class="co">// Map to [0, 1]</span></span></code></pre></div>
+<h2 id="3-depth-comparison-and-intersection-logic">3. Depth Comparison
+and Intersection Logic</h2>
+<p>Because the depth buffer represents a 2.5D heightfield of the visible
+scene rather than full 3D geometry, an intersection test must evaluate
+whether the ray has passed behind a visible surface.</p>
+<ol type="1">
+<li><strong>Depth Fetching:</strong> The shader samples the depth buffer
+at <code>sampleUV</code>. This raw depth is transformed into linear
+view-space depth (<span
+class="math inline">\(Z_{\text{buffer}}\)</span>) using near and far
+clipping planes.</li>
+<li><strong>Ray Depth Evaluation:</strong> The ray's actual view-space
+depth (<span class="math inline">\(Z_{\text{ray}} =
+\mathbf{P}_{i}.z\)</span>) is compared against <span
+class="math inline">\(Z_{\text{buffer}}\)</span>.</li>
+<li><strong>Thickness Thresholding:</strong> A simple test of <span
+class="math inline">\(Z_{\text{ray}} \le Z_{\text{buffer}}\)</span>
+(assuming negative <span class="math inline">\(Z\)</span> in view space)
+is insufficient because the depth buffer has no back-faces; objects
+appear infinitely thick. To avoid false intersections with objects
+behind foreground geometry, a surface thickness tolerance (<span
+class="math inline">\(\tau\)</span>) is enforced:</li>
+</ol>
+<p><span class="math display">\[Z_{\text{buffer}} \ge Z_{\text{ray}} \ge
+Z_{\text{buffer}} - \tau\]</span></p>
+<p>In GLSL:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> rawDepth <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>depthTexture<span class="op">,</span> sampleUV<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> sceneDepth <span class="op">=</span> <span class="fu">linearizeDepth</span><span class="op">(</span>rawDepth<span class="op">);</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> rayDepth <span class="op">=</span> <span class="op">-</span>currentRayPos<span class="op">.</span><span class="fu">z</span><span class="op">;</span> <span class="co">// Treat depth as positive distance</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span>rayDepth <span class="op">&gt;=</span> sceneDepth <span class="op">&amp;&amp;</span> <span class="op">(</span>rayDepth <span class="op">-</span> sceneDepth<span class="op">)</span> <span class="op">&lt;</span> thickness<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Hit detected</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="4-refinement-via-binary-search">4. Refinement via Binary
+Search</h2>
+<p>Linear ray marching requires large step sizes for performance, which
+leads to banding artifacts and imprecise contact points. When a hit is
+detected during linear marching, a binary search (bisection) is
+performed between the previous step (a known miss) and the current step
+(the detected hit) to resolve the exact surface boundary:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> startPos <span class="op">=</span> currentRayPos <span class="op">-</span> rayDir <span class="op">*</span> stepSize<span class="op">;</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> endPos <span class="op">=</span> currentRayPos<span class="op">;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> j <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> BINARY_SEARCH_STEPS<span class="op">;</span> j<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> midPos <span class="op">=</span> <span class="op">(</span>startPos <span class="op">+</span> endPos<span class="op">)</span> <span class="op">*</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> proj <span class="op">=</span> projectionMatrix <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>midPos<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> uv <span class="op">=</span> <span class="op">(</span>proj<span class="op">.</span><span class="fu">xy</span> <span class="op">/</span> proj<span class="op">.</span><span class="fu">w</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sceneDepth <span class="op">=</span> <span class="fu">linearizeDepth</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>depthTexture<span class="op">,</span> uv<span class="op">).</span><span class="fu">r</span><span class="op">);</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> rayDepth <span class="op">=</span> <span class="op">-</span>midPos<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>rayDepth <span class="op">&gt;=</span> sceneDepth<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>        endPos <span class="op">=</span> midPos<span class="op">;</span> <span class="co">// Ray is inside or behind surface</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>        startPos <span class="op">=</span> midPos<span class="op">;</span> <span class="co">// Ray is in front of surface</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>After refinement, the final <code>uv</code> coordinates represent the
+hit location.</p>
+<h2 id="5-glsl-ray-marching-implementation">5. GLSL Ray Marching
+Implementation</h2>
+<p>The following complete fragment shader function combines view-space
+ray marching, depth comparisons, and screen-edge validation:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">traceScreenSpaceRay</span><span class="op">(</span><span class="dt">vec3</span> rayOrigin<span class="op">,</span> <span class="dt">vec3</span> rayDir<span class="op">,</span> <span class="dt">int</span> maxSteps<span class="op">,</span> <span class="dt">float</span> stepSize<span class="op">,</span> <span class="dt">float</span> thickness<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> currentRayPos <span class="op">=</span> rayOrigin<span class="op">;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> maxSteps<span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>        currentRayPos <span class="op">+=</span> rayDir <span class="op">*</span> stepSize<span class="op">;</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec4</span> proj <span class="op">=</span> projectionMatrix <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>currentRayPos<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> hitNDC <span class="op">=</span> proj<span class="op">.</span><span class="fu">xyz</span> <span class="op">/</span> proj<span class="op">.</span><span class="fu">w</span><span class="op">;</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span> sampleUV <span class="op">=</span> hitNDC<span class="op">.</span><span class="fu">xy</span> <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Ray stepped outside the screen boundaries</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>sampleUV<span class="op">.</span><span class="fu">x</span> <span class="op">&lt;</span> <span class="fl">0.0</span> <span class="op">||</span> sampleUV<span class="op">.</span><span class="fu">x</span> <span class="op">&gt;</span> <span class="fl">1.0</span> <span class="op">||</span> sampleUV<span class="op">.</span><span class="fu">y</span> <span class="op">&lt;</span> <span class="fl">0.0</span> <span class="op">||</span> sampleUV<span class="op">.</span><span class="fu">y</span> <span class="op">&gt;</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>            <span class="kw">break</span><span class="op">;</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> rawDepth <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>depthTexture<span class="op">,</span> sampleUV<span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> sceneDepth <span class="op">=</span> <span class="fu">linearizeDepth</span><span class="op">(</span>rawDepth<span class="op">);</span></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> rayDepth <span class="op">=</span> <span class="op">-</span>currentRayPos<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Intersection check with thickness threshold</span></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>rayDepth <span class="op">&gt;</span> sceneDepth <span class="op">&amp;&amp;</span> <span class="op">(</span>rayDepth <span class="op">-</span> sceneDepth<span class="op">)</span> <span class="op">&lt;</span> thickness<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Binary search refinement</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec3</span> minRay <span class="op">=</span> currentRayPos <span class="op">-</span> rayDir <span class="op">*</span> stepSize<span class="op">;</span></span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec3</span> maxRay <span class="op">=</span> currentRayPos<span class="op">;</span></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>            <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> j <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> <span class="dv">8</span><span class="op">;</span> j<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>                <span class="dt">vec3</span> midRay <span class="op">=</span> <span class="op">(</span>minRay <span class="op">+</span> maxRay<span class="op">)</span> <span class="op">*</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>                <span class="dt">vec4</span> midProj <span class="op">=</span> projectionMatrix <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>midRay<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>                <span class="dt">vec2</span> midUV <span class="op">=</span> <span class="op">(</span>midProj<span class="op">.</span><span class="fu">xy</span> <span class="op">/</span> midProj<span class="op">.</span><span class="fu">w</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>                </span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>                <span class="dt">float</span> d <span class="op">=</span> <span class="fu">linearizeDepth</span><span class="op">(</span><span class="bu">texture</span><span class="op">(</span>depthTexture<span class="op">,</span> midUV<span class="op">).</span><span class="fu">r</span><span class="op">);</span></span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>                <span class="kw">if</span> <span class="op">(-</span>midRay<span class="op">.</span><span class="fu">z</span> <span class="op">&gt;</span> d<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>                    maxRay <span class="op">=</span> midRay<span class="op">;</span></span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>                <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>                    minRay <span class="op">=</span> midRay<span class="op">;</span></span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>                <span class="op">}</span></span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a>            <span class="dt">vec4</span> finalProj <span class="op">=</span> projectionMatrix <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>maxRay<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb6-40"><a href="#cb6-40" aria-hidden="true" tabindex="-1"></a>            <span class="kw">return</span> <span class="dt">vec3</span><span class="op">((</span>finalProj<span class="op">.</span><span class="fu">xy</span> <span class="op">/</span> finalProj<span class="op">.</span><span class="fu">w</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span> <span class="co">// xy = UV, z = hit flag</span></span>
+<span id="cb6-41"><a href="#cb6-41" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb6-42"><a href="#cb6-42" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-43"><a href="#cb6-43" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb6-44"><a href="#cb6-44" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span> <span class="co">// No intersection found</span></span>
+<span id="cb6-45"><a href="#cb6-45" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="6-handling-boundary-conditions-and-edge-fading">6. Handling
+Boundary Conditions and Edge Fading</h2>
+<p>Because SSR relies strictly on screen-space data, rays marching
+off-screen or reflecting geometry facing away from the camera will cause
+visual anomalies. To resolve these:</p>
+<ul>
+<li><strong>Screen Edge Fade:</strong> Calculate a falloff weight based
+on the hit UV’s proximity to screen edges <span
+class="math inline">\((0.0\text{ and }1.0)\)</span>. Multiply the
+sampled reflection color by this weight to transition smoothly to a
+fallback environment map.</li>
+<li><strong>Ray Direction Fade:</strong> Smoothly fade out reflections
+as the reflection vector points back toward the camera (<span
+class="math inline">\(\mathbf{R} \cdot \mathbf{V} \approx 1\)</span>),
+where data is obscured or absent in the depth buffer.</li>
+<li><strong>Max Distance Fade:</strong> Gradually diminish reflection
+intensity as the ray length approaches the maximum step limit to prevent
+abrupt popping artifacts.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

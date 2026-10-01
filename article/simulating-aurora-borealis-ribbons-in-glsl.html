@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulating Aurora Borealis Ribbons in GLSL - glsl</title>
+    <meta name="description" content="This article explains how to simulate the fluid, waving curtains of an aurora borealis in GLSL using sinusoidal field displacement. By feeding continuous coordinate space through multi-frequency sine and cosine functions—a technique known as domain war">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/simulating-aurora-borealis-ribbons-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Simulating Aurora Borealis Ribbons in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/simulating-aurora-borealis-ribbons-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how to simulate the fluid, waving curtains of an aurora borealis in GLSL using sinusoidal field displacement. By feeding continuous coordinate space through multi-frequency sine and cosine functions—a technique known as domain war" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="simulating-aurora-borealis-ribbons-in-glsl">Simulating Aurora
+Borealis Ribbons in GLSL</h1>
+<p>This article explains how to simulate the fluid, waving curtains of
+an aurora borealis in GLSL using sinusoidal field displacement. By
+feeding continuous coordinate space through multi-frequency sine and
+cosine functions—a technique known as domain warping—shaders perturb
+flat planes or raymarched volumes into intricate folds. The following
+sections detail the mathematical principles of sinusoidal displacement,
+how to layer waves for organic motion, the construction of the ribbon
+geometry, and the final color mapping.</p>
+<h3 id="mathematical-basis-of-sinusoidal-displacement">Mathematical
+Basis of Sinusoidal Displacement</h3>
+<p>The fundamental visual characteristic of an aurora is its vertical,
+folded "curtain" shape drifting across the sky. In GLSL, this curtain
+begins as an implicit 2D or 3D coordinate field. Instead of manipulating
+individual mesh vertices, sinusoidal field displacement alters the
+coordinates before sampling a density function.</p>
+<p>In its simplest 2D form, a point <span class="math inline">\((x,
+z)\)</span> along the horizontal ground plane is displaced along one
+axis using a sine function of the other axis and time:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">displace</span><span class="op">(</span><span class="dt">vec2</span> p<span class="op">,</span> <span class="dt">float</span> time<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    p<span class="op">.</span><span class="fu">x</span> <span class="op">+=</span> <span class="bu">sin</span><span class="op">(</span>p<span class="op">.</span><span class="fu">z</span> <span class="op">*</span> <span class="fl">1.5</span> <span class="op">+</span> time <span class="op">*</span> <span class="fl">0.8</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.4</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> p<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By substituting the displaced coordinate into a distance function,
+straight lines or boundaries warp into smooth, wave-like curves.</p>
+<h3 id="layering-frequencies-and-domain-warping">Layering Frequencies
+and Domain Warping</h3>
+<p>A single sine wave produces an unnatural, uniform oscillation.
+Realistic auroral motion requires chaotic, organic variation created by
+layering multiple sine and cosine waves at different frequencies,
+amplitudes, and speeds, mirroring Fractional Brownian Motion (fBM):</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">auroraDisplacement</span><span class="op">(</span><span class="dt">vec2</span> p<span class="op">,</span> <span class="dt">float</span> time<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> wave1 <span class="op">=</span> <span class="bu">sin</span><span class="op">(</span>p<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> <span class="fl">2.0</span> <span class="op">+</span> time <span class="op">*</span> <span class="fl">0.5</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.3</span><span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> wave2 <span class="op">=</span> <span class="bu">cos</span><span class="op">(</span>p<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> <span class="fl">3.5</span> <span class="op">-</span> time <span class="op">*</span> <span class="fl">0.7</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.15</span><span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> wave3 <span class="op">=</span> <span class="bu">sin</span><span class="op">((</span>p<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> p<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">*</span> <span class="fl">5.0</span> <span class="op">+</span> time <span class="op">*</span> <span class="fl">1.2</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.05</span><span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> p <span class="op">+</span> <span class="dt">vec2</span><span class="op">(</span>wave1 <span class="op">+</span> wave3<span class="op">,</span> wave2 <span class="op">+</span> wave3<span class="op">);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>To create the tight folds visible in high-intensity displays, shaders
+apply domain warping: displacing coordinates with a function that itself
+samples displaced coordinates. This feedback loop folds the coordinate
+space over itself, producing sharp crests and stretched troughs
+reminiscent of magnetic flux lines.</p>
+<h3 id="defining-ribbon-density-and-vertical-strands">Defining Ribbon
+Density and Vertical Strands</h3>
+<p>Once the domain is displaced, the shader calculates ribbon density.
+The core of a ribbon is typically defined by calculating the distance of
+the displaced coordinates to an arbitrary centerline:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> ribbonPath <span class="op">=</span> <span class="bu">abs</span><span class="op">(</span>displacedPos<span class="op">.</span><span class="fu">x</span><span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> ribbonMask <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>ribbonPath <span class="op">*</span> <span class="fl">8.0</span><span class="op">);</span> <span class="co">// Sharp falloff from the center</span></span></code></pre></div>
+<p>Aurora borealis curtains also feature distinctive vertical striations
+(rays) caused by charged particles aligning with the Earth's magnetic
+field lines. This is achieved by modulating the ribbon mask with a
+high-frequency horizontal wave applied along the vertical axis (<span
+class="math inline">\(y\)</span>):</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> striations <span class="op">=</span> <span class="bu">sin</span><span class="op">(</span>displacedPos<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> <span class="fl">40.0</span> <span class="op">+</span> displacedPos<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> <span class="fl">10.0</span><span class="op">)</span> <span class="op">*</span> <span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> finalDensity <span class="op">=</span> ribbonMask <span class="op">*</span> <span class="bu">mix</span><span class="op">(</span><span class="fl">0.6</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> striations<span class="op">);</span></span></code></pre></div>
+<h3 id="altitude-shaping-and-volumetric-raymarching">Altitude Shaping
+and Volumetric Raymarching</h3>
+<p>Auroras exist within specific altitude bands, fading out both below
+and above their peak excitation layer. A vertical envelope restricts the
+ribbon's intensity:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> altitudeFade <span class="op">=</span> <span class="bu">smoothstep</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.3</span><span class="op">,</span> uv<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">*</span> <span class="bu">smoothstep</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.4</span><span class="op">,</span> uv<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> auroraIntensity <span class="op">=</span> finalDensity <span class="op">*</span> altitudeFade<span class="op">;</span></span></code></pre></div>
+<p>In 3D implementations, this density function is sampled along a
+camera ray using raymarching. The ray steps through the bounding volume,
+evaluating the displaced coordinates at each step, accumulating density
+and applying lighting via additive blending:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> colorAccum <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">32</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> p <span class="op">=</span> rayOrigin <span class="op">+</span> rayDir <span class="op">*</span> stepSize <span class="op">*</span> <span class="dt">float</span><span class="op">(</span>i<span class="op">);</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> displacedXZ <span class="op">=</span> <span class="fu">auroraDisplacement</span><span class="op">(</span>p<span class="op">.</span><span class="fu">xz</span><span class="op">,</span> u_time<span class="op">);</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> density <span class="op">=</span> <span class="fu">calculateDensity</span><span class="op">(</span><span class="dt">vec3</span><span class="op">(</span>displacedXZ<span class="op">.</span><span class="fu">x</span><span class="op">,</span> p<span class="op">.</span><span class="fu">y</span><span class="op">,</span> displacedXZ<span class="op">.</span><span class="fu">y</span><span class="op">));</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> stepColor <span class="op">=</span> <span class="fu">mapAuroraColor</span><span class="op">(</span>p<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">*</span> density <span class="op">*</span> stepSize<span class="op">;</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    colorAccum <span class="op">+=</span> stepColor<span class="op">;</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="color-mapping">Color Mapping</h3>
+<p>The emission spectrum of an aurora depends on altitude and gas
+composition. At lower altitudes (100–150 km), molecular nitrogen and
+atomic oxygen produce bright green emissions. At higher altitudes (above
+200 km), low-density atomic oxygen produces deep reds and purples.</p>
+<p>In the shader, the altitude coordinate (or the vertical texture
+coordinate) maps directly to this gradient:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> <span class="fu">mapAuroraColor</span><span class="op">(</span><span class="dt">float</span> altitude<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> baseGreen <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.1</span><span class="op">,</span> <span class="fl">0.9</span><span class="op">,</span> <span class="fl">0.4</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> topPurple <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.6</span><span class="op">,</span> <span class="fl">0.1</span><span class="op">,</span> <span class="fl">0.8</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">mix</span><span class="op">(</span>baseGreen<span class="op">,</span> topPurple<span class="op">,</span> <span class="bu">smoothstep</span><span class="op">(</span><span class="fl">0.2</span><span class="op">,</span> <span class="fl">0.8</span><span class="op">,</span> altitude<span class="op">));</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Multiplying this gradient by the displaced density field completes
+the simulation, delivering continuous, undulating ribbon oscillations
+entirely computed within the GPU's fragment pipeline.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

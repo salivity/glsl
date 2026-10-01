@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Do vec2, vec3, and vec4 Work in GLSL? - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), vec2, vec3, and vec4 are core floating-point vector types designed for high-performance graphics operations, representing data with two, three, and four components respectively. These vector types provide built-in h">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-do-vec-2-vec-3-and-vec-4-work-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Do vec2, vec3, and vec4 Work in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-do-vec-2-vec-3-and-vec-4-work-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), vec2, vec3, and vec4 are core floating-point vector types designed for high-performance graphics operations, representing data with two, three, and four components respectively. These vector types provide built-in h" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-do-vec2-vec3-and-vec4-work-in-glsl">How Do vec2, vec3, and
+vec4 Work in GLSL?</h1>
+<p>In the OpenGL Shading Language (GLSL), <code>vec2</code>,
+<code>vec3</code>, and <code>vec4</code> are core floating-point vector
+types designed for high-performance graphics operations, representing
+data with two, three, and four components respectively. These vector
+types provide built-in hardware acceleration for geometric
+transformations, color manipulation, and spatial coordinates.
+Understanding how they handle initialization, arithmetic operations, and
+flexible component access is fundamental to writing efficient vertex and
+fragment shaders.</p>
+<h2 id="vector-declarations-and-initialization">Vector Declarations and
+Initialization</h2>
+<p>GLSL vectors are strongly typed arrays of floating-point values. They
+can be instantiated with single values, combinations of scalars and
+smaller vectors, or fully defined component lists. When a single scalar
+is passed to a vector constructor, that value is broadcast to all
+components.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Broadcasting a single scalar</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> white <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">);</span> <span class="co">// Equivalent to vec3(1.0, 1.0, 1.0)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Explicit component assignment</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> uv <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.5</span><span class="op">,</span> <span class="fl">0.5</span><span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> color <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co">// Composite construction from smaller vectors</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> position3D <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span>uv<span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> position4D <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>position3D<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span></code></pre></div>
+<h2 id="component-access-and-swizzling">Component Access and
+Swizzling</h2>
+<p>GLSL provides three interchangeable naming sets for accessing vector
+components: spatial coordinates (<code>{x, y, z, w}</code>), color
+channels (<code>{r, g, b, a}</code>), and texture coordinates
+(<code>{s, t, p, q}</code>). Each set corresponds to the identical
+underlying index (index 0, 1, 2, and 3).</p>
+<table>
+<thead>
+<tr>
+<th>Vector Type</th>
+<th>Valid Index Sets</th>
+<th>Example Components</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vec2</code></td>
+<td><code>x, y</code> / <code>r, g</code> / <code>s, t</code></td>
+<td><code>vec.x</code>, <code>vec.r</code>, <code>vec[0]</code></td>
+</tr>
+<tr>
+<td><code>vec3</code></td>
+<td><code>x, y, z</code> / <code>r, g, b</code> /
+<code>s, t, p</code></td>
+<td><code>vec.z</code>, <code>vec.b</code>, <code>vec[2]</code></td>
+</tr>
+<tr>
+<td><code>vec4</code></td>
+<td><code>x, y, z, w</code> / <code>r, g, b, a</code> /
+<code>s, t, p, q</code></td>
+<td><code>vec.w</code>, <code>vec.a</code>, <code>vec[3]</code></td>
+</tr>
+</tbody>
+</table>
+<p>Swizzling allows you to rearrange, duplicate, or slice vector
+components directly via field selection:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> rgba <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.2</span><span class="op">,</span> <span class="fl">0.4</span><span class="op">,</span> <span class="fl">0.6</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Reordering and duplicating components</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> bgr <span class="op">=</span> rgba<span class="op">.</span><span class="fu">bgr</span><span class="op">;</span>       <span class="co">// vec3(0.6, 0.4, 0.2)</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> redundant <span class="op">=</span> rgba<span class="op">.</span><span class="fu">xx</span><span class="op">;</span>   <span class="co">// vec2(0.2, 0.2)</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co">// Writing to swizzled components (l-value swizzling)</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> pos <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">2.0</span><span class="op">,</span> <span class="fl">3.0</span><span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>pos<span class="op">.</span><span class="fu">xy</span> <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">5.0</span><span class="op">,</span> <span class="fl">6.0</span><span class="op">);</span>    <span class="co">// pos is now vec3(5.0, 6.0, 3.0)</span></span></code></pre></div>
+<p>Swizzling within an l-value (the left side of an assignment) requires
+that each component name appears only once.</p>
+<h2 id="arithmetic-and-built-in-operations">Arithmetic and Built-in
+Operations</h2>
+<p>Vector operations in GLSL execute on a component-wise basis by
+default. When an operation occurs between two vectors of the same size,
+each corresponding pair of components is evaluated independently. When
+operating between a vector and a scalar, the scalar applies across every
+component.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> a <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">2.0</span><span class="op">,</span> <span class="fl">3.0</span><span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> b <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">2.0</span><span class="op">,</span> <span class="fl">3.0</span><span class="op">,</span> <span class="fl">4.0</span><span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> sum <span class="op">=</span> a <span class="op">+</span> b<span class="op">;</span>           <span class="co">// vec3(3.0, 5.0, 7.0)</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> scaled <span class="op">=</span> a <span class="op">*</span> <span class="fl">2.0</span><span class="op">;</span>      <span class="co">// vec3(2.0, 4.0, 6.0)</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> modulated <span class="op">=</span> a <span class="op">*</span> b<span class="op">;</span>     <span class="co">// vec3(2.0, 6.0, 12.0)</span></span></code></pre></div>
+<p>GLSL includes standard geometric functions designed specifically for
+these vector types:</p>
+<ul>
+<li><code>dot(vecA, vecB)</code>: Computes the scalar dot product.</li>
+<li><code>cross(vec3A, vec3B)</code>: Computes the cross product
+(defined only for <code>vec3</code>).</li>
+<li><code>length(vecA)</code>: Calculates the Euclidean norm of the
+vector.</li>
+<li><code>normalize(vecA)</code>: Scales the vector to unit length
+(<span class="math inline">\(1.0\)</span>).</li>
+<li><code>reflect(incident, normal)</code>: Calculates reflection
+direction against a surface normal.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

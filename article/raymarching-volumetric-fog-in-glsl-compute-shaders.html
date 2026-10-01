@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raymarching Volumetric Fog in GLSL Compute Shaders - glsl</title>
+    <meta name="description" content="This article explores the technical implementation of real-time volumetric fog using raymarching step accumulation within a OpenGL or Vulkan GLSL compute shader. It breaks down the process of casting rays through participating media, sampling density dis">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/raymarching-volumetric-fog-in-glsl-compute-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Raymarching Volumetric Fog in GLSL Compute Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/raymarching-volumetric-fog-in-glsl-compute-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores the technical implementation of real-time volumetric fog using raymarching step accumulation within a OpenGL or Vulkan GLSL compute shader. It breaks down the process of casting rays through participating media, sampling density dis" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="raymarching-volumetric-fog-in-glsl-compute-shaders">Raymarching
+Volumetric Fog in GLSL Compute Shaders</h1>
+<p>This article explores the technical implementation of real-time
+volumetric fog using raymarching step accumulation within a OpenGL or
+Vulkan GLSL compute shader. It breaks down the process of casting rays
+through participating media, sampling density distributions, evaluating
+direct lighting and shadow maps, applying phase functions, and
+numerically integrating transmittance and in-scattering using the
+Beer-Lambert law to produce cohesive atmospheric lighting.</p>
+<h3
+id="mathematical-foundations-the-radiative-transfer-equation">Mathematical
+Foundations: The Radiative Transfer Equation</h3>
+<p>Volumetric fog simulates how light interacts with microscopic
+particles suspended in the air. The core behavior is governed by the
+simplified Radiative Transfer Equation (RTE), which balances light
+extinction (out-scattering and absorption) and in-scattering along a
+viewing ray.</p>
+<p>According to the Beer-Lambert law, the fraction of light that
+survives traveling a distance <span class="math inline">\(d\)</span>
+through a medium with extinction coefficient <span
+class="math inline">\(\sigma_t\)</span> is the transmittance <span
+class="math inline">\(T\)</span>:</p>
+<p><span class="math display">\[T = e^{-\int_0^d \sigma_t(x) \,
+dx}\]</span></p>
+<p>When discretized for raymarching, light accumulation integrates
+scattered light at discrete samples along the ray while compounding the
+transmittance decay.</p>
+<h3 id="setting-up-the-compute-shader">Setting Up the Compute
+Shader</h3>
+<p>A compute shader operates over an invocation grid aligned with the
+render target, processing individual pixels or a low-resolution
+frustum-aligned voxel grid (often called a "froxel" grid).</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">16</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">16</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> rgba16f<span class="op">)</span> <span class="kw">uniform</span> <span class="dt">writeonly</span> <span class="dt">image2D</span> outVolumetricFog<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">sampler2D</span> sceneDepthTex<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">2</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">sampler2D</span> shadowMap<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">3</span><span class="op">)</span> <span class="kw">uniform</span> <span class="dt">sampler3D</span> densityNoiseTex<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> invViewProj<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> cameraPos<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> lightDir<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">vec3</span> lightColor<span class="op">;</span></span></code></pre></div>
+<h3 id="ray-construction-and-depth-clamping">Ray Construction and Depth
+Clamping</h3>
+<p>For each invocation, the compute shader reconstructs a world-space
+ray originating at the camera position and traveling toward the scene
+geometry.</p>
+<ol type="1">
+<li><strong>Calculate Screen UVs:</strong> Convert
+<code>gl_GlobalInvocationID.xy</code> into normalized device coordinates
+(NDC) in the range <code>[-1, 1]</code>.</li>
+<li><strong>Reconstruct World Ray:</strong> Unproject the NDC
+coordinates using the inverse view-projection matrix to determine the
+normalized ray direction <span
+class="math inline">\(\vec{D}\)</span>.</li>
+<li><strong>Determine Ray Bounds:</strong> Sample the scene depth buffer
+at the current UV. Linearize this depth to establish the maximum ray
+distance <span class="math inline">\(t_{\text{max}}\)</span>. Fog
+integration occurs exclusively between the near plane <span
+class="math inline">\(t_{\text{min}}\)</span> and <span
+class="math inline">\(t_{\text{max}}\)</span> to prevent fog from
+rendering behind opaque geometry.</li>
+</ol>
+<h3 id="jittering-and-step-discretization">Jittering and Step
+Discretization</h3>
+<p>Uniform sampling along ray steps causes conspicuous slice banding
+artifacts. To mitigate this, developers apply a pseudo-random or
+blue-noise offset to the starting point of the ray:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> jitter <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>blueNoiseTex<span class="op">,</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">xy</span> <span class="op">/</span> <span class="fl">64.0</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> stepLength <span class="op">=</span> <span class="op">(</span>tMax <span class="op">-</span> tMin<span class="op">)</span> <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>NUM_STEPS<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> currentT <span class="op">=</span> tMin <span class="op">+</span> stepLength <span class="op">*</span> jitter<span class="op">;</span></span></code></pre></div>
+<p>Jittering converts structured banding into high-frequency noise,
+which spatial or temporal denoising filters can subsequently
+resolve.</p>
+<h3 id="the-step-accumulation-loop">The Step Accumulation Loop</h3>
+<p>The raymarcher advances through the volume in fixed or exponential
+increments. At each step <span class="math inline">\(i\)</span>, it
+computes the current world position <span class="math inline">\(\vec{P}
+= \vec{O} + t_i \vec{D}\)</span>.</p>
+<h4 id="1-density-evaluation">1. Density Evaluation</h4>
+<p>Density represents the concentration of particles at <span
+class="math inline">\(\vec{P}\)</span>. A typical density function
+combines an analytical height falloff with a 3D noise texture:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">getDensity</span><span class="op">(</span><span class="dt">vec3</span> p<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> heightFalloff <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>p<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> <span class="fl">0.1</span><span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> <span class="bu">noise</span> <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>densityNoiseTex<span class="op">,</span> p <span class="op">*</span> <span class="fl">0.05</span><span class="op">).</span><span class="fu">r</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">max</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> heightFalloff <span class="op">*</span> <span class="bu">noise</span><span class="op">);</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h4 id="2-phase-function-evaluation">2. Phase Function Evaluation</h4>
+<p>The phase function describes how strongly light scatters toward the
+viewer relative to the incoming light angle <span
+class="math inline">\(\theta\)</span>. The Henyey-Greenstein phase
+function models this anisotropic scattering via the asymmetry parameter
+<span class="math inline">\(g \in (-1, 1)\)</span>, where positive
+values simulate forward scattering:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="fu">henyeyGreenstein</span><span class="op">(</span><span class="dt">float</span> cosTheta<span class="op">,</span> <span class="dt">float</span> g<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> g2 <span class="op">=</span> g <span class="op">*</span> g<span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> g2<span class="op">)</span> <span class="op">/</span> <span class="op">(</span><span class="fl">4.0</span> <span class="op">*</span> <span class="fl">3.14159265</span> <span class="op">*</span> <span class="bu">pow</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">+</span> g2 <span class="op">-</span> <span class="fl">2.0</span> <span class="op">*</span> g <span class="op">*</span> cosTheta<span class="op">,</span> <span class="fl">1.5</span><span class="op">));</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h4 id="3-shadow-and-lighting-sampling">3. Shadow and Lighting
+Sampling</h4>
+<p>The position <span class="math inline">\(\vec{P}\)</span> is
+projected into the light's shadow space to assess visibility. If the
+point resides in shadow, direct in-scattering is omitted, though ambient
+terms may still apply.</p>
+<h4 id="4-transmittance-and-in-scattering-accumulation">4. Transmittance
+and In-Scattering Accumulation</h4>
+<p>The accumulated color and remaining transmittance are updated
+sequentially:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> accumulatedColor <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> accumulatedTransmittance <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> sigmaT <span class="op">=</span> <span class="fl">0.1</span><span class="op">;</span> <span class="co">// Extinction coefficient</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="kw">for</span><span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> NUM_STEPS<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> currentPos <span class="op">=</span> cameraPos <span class="op">+</span> rayDir <span class="op">*</span> currentT<span class="op">;</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> density <span class="op">=</span> <span class="fu">getDensity</span><span class="op">(</span>currentPos<span class="op">);</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>density <span class="op">&gt;</span> <span class="fl">0.001</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> shadow <span class="op">=</span> <span class="fu">sampleShadow</span><span class="op">(</span>currentPos<span class="op">);</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> phase <span class="op">=</span> <span class="fu">henyeyGreenstein</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>rayDir<span class="op">,</span> <span class="op">-</span>lightDir<span class="op">),</span> <span class="fl">0.3</span><span class="op">);</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Attenuation for this single step</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> stepOpticalDepth <span class="op">=</span> density <span class="op">*</span> sigmaT <span class="op">*</span> stepLength<span class="op">;</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> stepTransmittance <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>stepOpticalDepth<span class="op">);</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Light scattered toward the camera at this step</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> inScatteredLight <span class="op">=</span> lightColor <span class="op">*</span> shadow <span class="op">*</span> phase <span class="op">*</span> density<span class="op">;</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Integrated scattering over the step length</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> integratedScattering <span class="op">=</span> <span class="op">(</span>inScatteredLight <span class="op">-</span> inScatteredLight <span class="op">*</span> stepTransmittance<span class="op">)</span> <span class="op">/</span> sigmaT<span class="op">;</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>        accumulatedColor <span class="op">+=</span> accumulatedTransmittance <span class="op">*</span> integratedScattering<span class="op">;</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Attenuate total ray transmittance</span></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>        accumulatedTransmittance <span class="op">*=</span> stepTransmittance<span class="op">;</span></span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>accumulatedTransmittance <span class="op">&lt;</span> <span class="fl">0.01</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>            <span class="kw">break</span><span class="op">;</span> <span class="co">// Early ray termination</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>    currentT <span class="op">+=</span> stepLength<span class="op">;</span></span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="final-compositing">Final Compositing</h3>
+<p>Once the loop completes or early exit triggers, the compute shader
+writes the results to an image texture:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="bu">imageStore</span><span class="op">(</span>outVolumetricFog<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(</span><span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">xy</span><span class="op">),</span> <span class="dt">vec4</span><span class="op">(</span>accumulatedColor<span class="op">,</span> <span class="fl">1.0</span> <span class="op">-</span> accumulatedTransmittance<span class="op">));</span></span></code></pre></div>
+<p>The resulting texture contains both the in-scattered light and the
+fog coverage factor (alpha), which a subsequent raster pass blends over
+the final rendered frame using standard additive and multiplicative
+composition:</p>
+<p><span class="math display">\[\text{FinalColor} = \text{SceneColor}
+\times T_{\text{accumulated}} + \text{InScatteredColor}\]</span></p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

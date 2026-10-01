@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Pixel Reconstruction Along Motion Vectors - glsl</title>
+    <meta name="description" content="This article provides a technical overview of how pixel reconstruction filtering is implemented along motion vector trajectories in OpenGL Shading Language (GLSL). It examines the end-to-end fragment shading pipeline commonly used in Temporal Anti-Aliasi">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-pixel-reconstruction-along-motion-vectors">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Pixel Reconstruction Along Motion Vectors - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-pixel-reconstruction-along-motion-vectors" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides a technical overview of how pixel reconstruction filtering is implemented along motion vector trajectories in OpenGL Shading Language (GLSL). It examines the end-to-end fragment shading pipeline commonly used in Temporal Anti-Aliasi" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-pixel-reconstruction-along-motion-vectors">GLSL Pixel
+Reconstruction Along Motion Vectors</h1>
+<p>This article provides a technical overview of how pixel
+reconstruction filtering is implemented along motion vector trajectories
+in OpenGL Shading Language (GLSL). It examines the end-to-end fragment
+shading pipeline commonly used in Temporal Anti-Aliasing (TAA) and
+temporal upscaling, including reading screen-space velocity, sampling
+historical buffers along the motion path, resolving historical color
+data with cubic filtering, applying neighborhood color bounding to
+prevent ghosting, and blending the temporal accumulation.</p>
+<h3 id="1-motion-vector-retrieval-and-reprojection">1. Motion Vector
+Retrieval and Reprojection</h3>
+<p>Pixel reconstruction begins by determining where the current fragment
+was located in the preceding frame. This is achieved using a
+screen-space velocity buffer generated during the geometry pass or
+derived from depth:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Fetch 2D motion vector (stored in UV space or mapped from screen space)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> velocity <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>uVelocityTexture<span class="op">,</span> vUV<span class="op">).</span><span class="fu">xy</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Calculate the previous frame UV coordinates</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> historyUV <span class="op">=</span> vUV <span class="op">-</span> velocity<span class="op">;</span></span></code></pre></div>
+<p>If the motion vector buffer stores delta coordinates in normalized
+device coordinates (NDC), the vector must be mapped to the <span
+class="math inline">\([0, 1]\)</span> texture coordinate domain before
+subtracting.</p>
+<h3 id="2-high-order-historical-reconstruction">2. High-Order Historical
+Reconstruction</h3>
+<p>Standard bilinear interpolation degrades image sharpness across
+multiple frames. To counteract blur, reconstruction filtering along the
+trajectory samples the historical texture using higher-order filtering
+kernels, such as a Catmull-Rom spline or Mitchell-Netravali filter,
+using a 5-tap or 9-tap optimized gather:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> <span class="fu">SampleTextureCatmullRom</span><span class="op">(</span><span class="dt">sampler2D</span> tex<span class="op">,</span> <span class="dt">vec2</span> uv<span class="op">,</span> <span class="dt">vec2</span> texSize<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> samplePos <span class="op">=</span> uv <span class="op">*</span> texSize<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> tc <span class="op">=</span> <span class="bu">floor</span><span class="op">(</span>samplePos <span class="op">-</span> <span class="fl">0.5</span><span class="op">)</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> f <span class="op">=</span> samplePos <span class="op">-</span> tc<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> w0 <span class="op">=</span> f <span class="op">*</span> <span class="op">(-</span><span class="fl">0.5</span> <span class="op">+</span> f <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> <span class="fl">0.5</span> <span class="op">*</span> f<span class="op">));</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> w1 <span class="op">=</span> <span class="fl">1.0</span> <span class="op">+</span> f <span class="op">*</span> f <span class="op">*</span> <span class="op">(-</span><span class="fl">2.5</span> <span class="op">+</span> <span class="fl">1.5</span> <span class="op">*</span> f<span class="op">);</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> w2 <span class="op">=</span> f <span class="op">*</span> <span class="op">(</span><span class="fl">0.5</span> <span class="op">+</span> f <span class="op">*</span> <span class="op">(</span><span class="fl">2.0</span> <span class="op">-</span> <span class="fl">1.5</span> <span class="op">*</span> f<span class="op">));</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> w3 <span class="op">=</span> f <span class="op">*</span> f <span class="op">*</span> <span class="op">(-</span><span class="fl">0.5</span> <span class="op">+</span> <span class="fl">0.5</span> <span class="op">*</span> f<span class="op">);</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> w12 <span class="op">=</span> w1 <span class="op">+</span> w2<span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> tc12 <span class="op">=</span> tc <span class="op">+</span> w2 <span class="op">/</span> w12<span class="op">;</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> tc0 <span class="op">=</span> tc <span class="op">-</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> tc3 <span class="op">=</span> tc <span class="op">+</span> <span class="fl">2.0</span><span class="op">;</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> color <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    color <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>tex<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>tc12<span class="op">.</span><span class="fu">x</span><span class="op">,</span> tc0<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">/</span> texSize<span class="op">)</span> <span class="op">*</span> <span class="op">(</span>w12<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> w0<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    color <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>tex<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>tc0<span class="op">.</span><span class="fu">x</span><span class="op">,</span> tc12<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">/</span> texSize<span class="op">)</span> <span class="op">*</span> <span class="op">(</span>w0<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> w12<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    color <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>tex<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>tc12<span class="op">.</span><span class="fu">x</span><span class="op">,</span> tc12<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">/</span> texSize<span class="op">)</span> <span class="op">*</span> <span class="op">(</span>w12<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> w12<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    color <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>tex<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>tc3<span class="op">.</span><span class="fu">x</span><span class="op">,</span> tc12<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">/</span> texSize<span class="op">)</span> <span class="op">*</span> <span class="op">(</span>w3<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> w12<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    color <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>tex<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span>tc12<span class="op">.</span><span class="fu">x</span><span class="op">,</span> tc3<span class="op">.</span><span class="fu">y</span><span class="op">)</span> <span class="op">/</span> texSize<span class="op">)</span> <span class="op">*</span> <span class="op">(</span>w12<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> w3<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> color <span class="op">/</span> <span class="op">(</span>w12<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> w0<span class="op">.</span><span class="fu">y</span> <span class="op">+</span> w0<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> w12<span class="op">.</span><span class="fu">y</span> <span class="op">+</span> w12<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> w12<span class="op">.</span><span class="fu">y</span> <span class="op">+</span> w3<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> w12<span class="op">.</span><span class="fu">y</span> <span class="op">+</span> w12<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> w3<span class="op">.</span><span class="fu">y</span><span class="op">);</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="3-trajectory-aligned-accumulation-motion-blur">3.
+Trajectory-Aligned Accumulation (Motion Blur)</h3>
+<p>When performing temporal reconstruction for motion blur rather than
+anti-aliasing, multiple samples are integrated explicitly along the
+direction of the motion vector within the current frame:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> numSamples <span class="op">=</span> <span class="dv">8</span><span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec4</span> motionBlurredColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> totalWeight <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> numSamples<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> t <span class="op">=</span> <span class="op">(</span><span class="dt">float</span><span class="op">(</span>i<span class="op">)</span> <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>numSamples <span class="op">-</span> <span class="dv">1</span><span class="op">))</span> <span class="op">-</span> <span class="fl">0.5</span><span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> sampleUV <span class="op">=</span> vUV <span class="op">+</span> velocity <span class="op">*</span> t<span class="op">;</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Gaussian or tent weighting along the trajectory</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> weight <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span><span class="fl">2.0</span> <span class="op">*</span> t <span class="op">*</span> t<span class="op">);</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    motionBlurredColor <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>uCurrentColorTexture<span class="op">,</span> sampleUV<span class="op">)</span> <span class="op">*</span> weight<span class="op">;</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    totalWeight <span class="op">+=</span> weight<span class="op">;</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>motionBlurredColor <span class="op">/=</span> totalWeight<span class="op">;</span></span></code></pre></div>
+<h3 id="4-neighborhood-clamping-and-variance-clipping">4. Neighborhood
+Clamping and Variance Clipping</h3>
+<p>To mitigate ghosting artifacts caused by occlusion boundaries, the
+reconstructed history sample is bounded using the local neighborhood of
+the current frame. A <span class="math inline">\(3 \times 3\)</span>
+footprint is sampled around the current pixel:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> m1 <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> m2 <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">=</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span> x <span class="op">&lt;=</span> <span class="dv">1</span><span class="op">;</span> <span class="op">++</span>x<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> y <span class="op">=</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span> y <span class="op">&lt;=</span> <span class="dv">1</span><span class="op">;</span> <span class="op">++</span>y<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> c <span class="op">=</span> <span class="bu">textureOffset</span><span class="op">(</span>uCurrentColorTexture<span class="op">,</span> vUV<span class="op">,</span> <span class="dt">ivec2</span><span class="op">(</span>x<span class="op">,</span> y<span class="op">)).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        m1 <span class="op">+=</span> c<span class="op">;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        m2 <span class="op">+=</span> c <span class="op">*</span> c<span class="op">;</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="co">// Calculate mean and variance</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> mean <span class="op">=</span> m1 <span class="op">/</span> <span class="fl">9.0</span><span class="op">;</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> stdDev <span class="op">=</span> <span class="bu">sqrt</span><span class="op">(</span><span class="bu">max</span><span class="op">(</span><span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">),</span> <span class="op">(</span>m2 <span class="op">/</span> <span class="fl">9.0</span><span class="op">)</span> <span class="op">-</span> <span class="op">(</span>mean <span class="op">*</span> mean<span class="op">)));</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="co">// Define axis-aligned bounding box in color space</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> gamma <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span> <span class="co">// Variance scale</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> bMin <span class="op">=</span> mean <span class="op">-</span> gamma <span class="op">*</span> stdDev<span class="op">;</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> bMax <span class="op">=</span> mean <span class="op">+</span> gamma <span class="op">*</span> stdDev<span class="op">;</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="co">// Clip the historical sample to the bounding box</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> clippedHistory <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>historyColor<span class="op">.</span><span class="fu">rgb</span><span class="op">,</span> bMin<span class="op">,</span> bMax<span class="op">);</span></span></code></pre></div>
+<h3 id="5-final-temporal-blend">5. Final Temporal Blend</h3>
+<p>The final step blends the current pixel data with the clamped
+historical data. The blend factor <span
+class="math inline">\(\alpha\)</span> is modulated dynamically based on
+whether the history coordinates are valid (within the screen bounds) and
+the velocity magnitude:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> velocity <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>uVelocityTexture<span class="op">,</span> vUV<span class="op">).</span><span class="fu">xy</span><span class="op">;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> historyUV <span class="op">=</span> vUV <span class="op">-</span> velocity<span class="op">;</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> currentColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>uCurrentColorTexture<span class="op">,</span> vUV<span class="op">);</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> historyColor <span class="op">=</span> <span class="fu">SampleTextureCatmullRom</span><span class="op">(</span>uHistoryTexture<span class="op">,</span> historyUV<span class="op">,</span> uTexSize<span class="op">);</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Apply color space constraints (e.g., in YCoCg or RGB)</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> clampedHistory <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>historyColor<span class="op">.</span><span class="fu">rgb</span><span class="op">,</span> bMin<span class="op">,</span> bMax<span class="op">);</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Base temporal blend weight (typically 0.05 to 0.1 for the current frame)</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> blendWeight <span class="op">=</span> <span class="fl">0.1</span><span class="op">;</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Discard history if reprojection falls outside screen margins</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span><span class="bu">any</span><span class="op">(</span><span class="bu">lessThan</span><span class="op">(</span>historyUV<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">)))</span> <span class="op">||</span> <span class="bu">any</span><span class="op">(</span><span class="bu">greaterThan</span><span class="op">(</span>historyUV<span class="op">,</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">1.0</span><span class="op">))))</span> <span class="op">{</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        blendWeight <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="bu">mix</span><span class="op">(</span>clampedHistory<span class="op">,</span> currentColor<span class="op">.</span><span class="fu">rgb</span><span class="op">,</span> blendWeight<span class="op">),</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This pipeline produces a temporally stable result by balancing the
+high-frequency spatial detail of the current frame with the
+anti-aliased, jitter-accumulated data of prior frames along their true
+geometric motion vectors.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL 1D Convolution for Anamorphic Streak Blurs - glsl</title>
+    <meta name="description" content="This article covers the technical pipeline for generating anamorphic lens flare horizontal streaks using 1D convolution passes in GLSL. It details how bright-pass filtering isolates light sources, how horizontal-only discrete kernel sampling produces dir">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-1-d-convolution-for-anamorphic-streak-blurs">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL 1D Convolution for Anamorphic Streak Blurs - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-1-d-convolution-for-anamorphic-streak-blurs" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article covers the technical pipeline for generating anamorphic lens flare horizontal streaks using 1D convolution passes in GLSL. It details how bright-pass filtering isolates light sources, how horizontal-only discrete kernel sampling produces dir" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-1d-convolution-for-anamorphic-streak-blurs">GLSL 1D
+Convolution for Anamorphic Streak Blurs</h1>
+<p>This article covers the technical pipeline for generating anamorphic
+lens flare horizontal streaks using 1D convolution passes in GLSL. It
+details how bright-pass filtering isolates light sources, how
+horizontal-only discrete kernel sampling produces directional blurring,
+how hardware-accelerated bilinear filtering optimizes performance, and
+how multi-iteration downsampling achieves wide horizontal spreads.</p>
+<h3 id="1-bright-pass-filtering-thresholding">1. Bright-Pass Filtering
+(Thresholding)</h3>
+<p>Anamorphic streaks are caused by strong light sources reflecting off
+the cylindrical elements of anamorphic lenses. Before applying
+horizontal convolution, the scene texture must be filtered to isolate
+pixels exceeding a specific luminance threshold.</p>
+<p>In GLSL, this is evaluated by computing relative luminance (using
+standard Rec. 709 weights) and subtracting a threshold:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Bright-pass fragment shader snippet</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> color <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_SceneTexture<span class="op">,</span> v_TexCoord<span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> luminance <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>color<span class="op">,</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.2126</span><span class="op">,</span> <span class="fl">0.7152</span><span class="op">,</span> <span class="fl">0.0722</span><span class="op">));</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> brightColor <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>color <span class="op">-</span> <span class="dt">vec3</span><span class="op">(</span>u_Threshold<span class="op">),</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">));</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>brightColor <span class="op">*</span> u_Intensity<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span></code></pre></div>
+<h3 id="2-the-1d-horizontal-convolution-kernel">2. The 1D Horizontal
+Convolution Kernel</h3>
+<p>Standard bloom effects typically require two separable 1D passes (one
+horizontal, one vertical) to approximate a 2D Gaussian blur. Anamorphic
+flares, however, simulate cylindrical lens distortion that expands
+almost exclusively along the X-axis. Therefore, the convolution only
+requires horizontal 1D passes.</p>
+<p>The 1D convolution evaluates the weighted sum of neighboring texels
+along the horizontal axis:</p>
+<p><span class="math display">\[I_{\text{out}}(u, v) = \sum_{i=-N}^{N}
+w_i \cdot I_{\text{in}}\left(u + i \cdot \Delta u, v\right)\]</span></p>
+<p>Where <span class="math inline">\(w_i\)</span> represents the kernel
+weight (often an exponential decay or standard Gaussian distribution),
+and <span class="math inline">\(\Delta u\)</span> is the reciprocal of
+the render target's width (<code>1.0 / target_width</code>).</p>
+<h3 id="3-bilinear-hardware-sampling-optimization">3. Bilinear Hardware
+Sampling Optimization</h3>
+<p>To minimize texture fetches, the sampling offsets can be calculated
+to tap into the midpoint between two adjacent texels. Leveraging GPU
+bilinear hardware filtering reduces the required texture fetches from
+<span class="math inline">\(2N + 1\)</span> to roughly <span
+class="math inline">\(N + 1\)</span>.</p>
+<p>For two adjacent weights <span class="math inline">\(w_1\)</span> and
+<span class="math inline">\(w_2\)</span>, the combined weight <span
+class="math inline">\(W\)</span> and texture coordinate offset <span
+class="math inline">\(D\)</span> are derived as:</p>
+<p><span class="math display">\[W = w_1 + w_2\]</span> <span
+class="math display">\[D = \frac{w_2}{w_1 + w_2}\]</span></p>
+<p>In the GLSL shader, evaluating a symmetric 9-tap 1D blur is reduced
+to five hardware texture fetches:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> fragColor<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">in</span> <span class="dt">vec2</span> v_TexCoord<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">sampler2D</span> u_InputTexture<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> u_TexelOffset<span class="op">;</span> <span class="co">// 1.0 / target_width</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co">// Precalculated bilinear weights and offsets</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> weights<span class="op">[</span><span class="dv">3</span><span class="op">]</span> <span class="op">=</span> <span class="dt">float</span><span class="op">[](</span><span class="fl">0.227027</span><span class="op">,</span> <span class="fl">0.3162162</span><span class="op">,</span> <span class="fl">0.0702702</span><span class="op">);</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">float</span> offsets<span class="op">[</span><span class="dv">3</span><span class="op">]</span> <span class="op">=</span> <span class="dt">float</span><span class="op">[](</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.38461538</span><span class="op">,</span> <span class="fl">3.23076923</span><span class="op">);</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> result <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_InputTexture<span class="op">,</span> v_TexCoord<span class="op">).</span><span class="fu">rgb</span> <span class="op">*</span> weights<span class="op">[</span><span class="dv">0</span><span class="op">];</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec2</span> <span class="dt">offset</span> <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span>offsets<span class="op">[</span>i<span class="op">]</span> <span class="op">*</span> u_TexelOffset<span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        result <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>u_InputTexture<span class="op">,</span> v_TexCoord <span class="op">+</span> <span class="dt">offset</span><span class="op">).</span><span class="fu">rgb</span> <span class="op">*</span> weights<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        result <span class="op">+=</span> <span class="bu">texture</span><span class="op">(</span>u_InputTexture<span class="op">,</span> v_TexCoord <span class="op">-</span> <span class="dt">offset</span><span class="op">).</span><span class="fu">rgb</span> <span class="op">*</span> weights<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>result<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="4-achieving-wide-streaks-via-multi-pass-downsampling">4.
+Achieving Wide Streaks via Multi-Pass Downsampling</h3>
+<p>A single 1D convolution pass with a modest kernel radius only yields
+localized horizontal blur. Real-world anamorphic streaks can span the
+entire screen width. Evaluating this with a single kernel requires
+hundreds of taps, which is computationally expensive.</p>
+<p>To achieve large spreads efficiently:</p>
+<ol type="1">
+<li><strong>Horizontal Downsampling:</strong> Downsample the isolated
+bright-pass buffer horizontally (e.g., downscaling width by factors of
+2, 4, or 8 while keeping height constant or minimally reduced).</li>
+<li><strong>Iterative Ping-Pong Convolution:</strong> Run the 1D
+horizontal blur across several iterations using ping-pong framebuffers,
+progressively increasing the step size <span
+class="math inline">\(\Delta u\)</span>.</li>
+<li><strong>MIP-Chain Blurring:</strong> Create a horizontal mip-chain
+where each successive level applies the 1D horizontal blur, followed by
+upsampling and combining the levels additively.</li>
+</ol>
+<h3 id="5-tinting-and-composite">5. Tinting and Composite</h3>
+<p>Anamorphic flares typically exhibit characteristic chromatic tints,
+most commonly deep blue or cyan, due to the anti-reflective lens
+coatings. Once the wide horizontal blur is evaluated, the result is
+tinted and blended additively over the original scene:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> sceneColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_SceneTexture<span class="op">,</span> v_TexCoord<span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> streakColor <span class="op">=</span> <span class="bu">texture</span><span class="op">(</span>u_StreakTexture<span class="op">,</span> v_TexCoord<span class="op">).</span><span class="fu">rgb</span><span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Apply anamorphic blue tint</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> anamorphicTint <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.1</span><span class="op">,</span> <span class="fl">0.4</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> finalColor <span class="op">=</span> sceneColor <span class="op">+</span> <span class="op">(</span>streakColor <span class="op">*</span> anamorphicTint<span class="op">);</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span>finalColor<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span></code></pre></div></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

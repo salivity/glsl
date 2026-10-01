@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Low-Latency Uniforms with GLSL Push Constants - glsl</title>
+    <meta name="description" content="Push constants offer the fastest path to pass frequently changing uniform data from the CPU to GPU shaders in modern graphics APIs like Vulkan. By bypassing standard uniform buffer allocations and descriptor set updates, push constants embed data directl">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/low-latency-uniforms-with-glsl-push-constants">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Low-Latency Uniforms with GLSL Push Constants - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/low-latency-uniforms-with-glsl-push-constants" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Push constants offer the fastest path to pass frequently changing uniform data from the CPU to GPU shaders in modern graphics APIs like Vulkan. By bypassing standard uniform buffer allocations and descriptor set updates, push constants embed data directl" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="low-latency-uniforms-with-glsl-push-constants">Low-Latency
+Uniforms with GLSL Push Constants</h1>
+<p>Push constants offer the fastest path to pass frequently changing
+uniform data from the CPU to GPU shaders in modern graphics APIs like
+Vulkan. By bypassing standard uniform buffer allocations and descriptor
+set updates, push constants embed data directly into the command buffer
+stream. This article explains how push constants achieve low-latency
+uniform updates through the <code>layout(push_constant)</code> qualifier
+in GLSL, examining their hardware-level advantages, memory architecture
+differences, and optimal use cases for high-frequency rendering
+updates.</p>
+<h3 id="the-overhead-of-traditional-uniform-buffers">The Overhead of
+Traditional Uniform Buffers</h3>
+<p>Standard Uniform Buffer Objects (UBOs) require dedicated GPU memory
+allocations, staging buffers, CPU-to-GPU memory copies, and descriptor
+set management. Updating a traditional uniform between draw calls
+typically requires one of several latency-inducing paths:</p>
+<ol type="1">
+<li><strong>Re-binding Descriptor Sets:</strong> Calling binding
+commands that invalidate pipeline state caches.</li>
+<li><strong>Dynamic Offsets:</strong> Using
+<code>VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC</code> to index into a
+large buffer, which still incurs an extra layer of pointer indirection
+during shader execution.</li>
+<li><strong>Pipeline Stalls:</strong> Waiting for synchronization
+barriers to prevent race conditions between adjacent draw calls
+accessing the same memory region.</li>
+</ol>
+<p>These factors introduce CPU overhead and increase GPU latency because
+the shader must fetch data over the memory bus through multiple levels
+of cache hierarchy.</p>
+<h3 id="how-push-constants-eliminate-latency">How Push Constants
+Eliminate Latency</h3>
+<p>Push constants bypass the traditional memory access path entirely.
+Instead of referencing an external buffer via a memory address, push
+constants write small payloads directly into the command stream using
+host API calls like <code>vkCmdPushConstants</code>.</p>
+<p>When the GPU processes the command stream, it routes this inline
+payload directly into fast, on-chip register storage or dedicated
+constant caches. This architectural design yields several latency
+benefits:</p>
+<ul>
+<li><strong>Zero Memory Indirection:</strong> Shaders read push
+constants as if they were localized registers or fast on-chip memory,
+eliminating DRAM read latencies and potential cache misses.</li>
+<li><strong>No Descriptor Allocation:</strong> Push constants do not
+consume descriptor pools, require descriptor sets, or need pipeline
+layout updates.</li>
+<li><strong>Inline State Transitions:</strong> Because the data is
+embedded directly into the recorded Vulkan command buffer, each draw
+call carries its own snapshot of data, naturally eliminating CPU-GPU
+race conditions and synchronization barriers between draws.</li>
+</ul>
+<h3 id="glsl-implementation-via-layoutpush_constant">GLSL Implementation
+via <code>layout(push_constant)</code></h3>
+<p>In GLSL, push constants are exposed via a single uniform block using
+the <code>push_constant</code> layout qualifier. Unlike UBOs, this block
+does not use <code>set</code> or <code>binding</code> qualifiers because
+it does not bind to a descriptor set.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>push_constant<span class="op">)</span> <span class="kw">uniform</span> PushConstantBlock <span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> modelMatrix<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> tintColor<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> materialIndex<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> pushConstants<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> inPosition<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">out</span> <span class="dt">vec4</span> outColor<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> pushConstants<span class="op">.</span><span class="fu">modelMatrix</span> <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>inPosition<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    outColor <span class="op">=</span> pushConstants<span class="op">.</span><span class="fu">tintColor</span><span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The fields within the block must align with the corresponding offsets
+configured in the pipeline's layout on the CPU. The Vulkan pipeline
+layout specifies which shader stages have visibility to which ranges of
+the push constant block, ensuring that only the stages requiring the
+data consume the necessary constant space.</p>
+<h3 id="hardware-limitations-and-best-practices">Hardware Limitations
+and Best Practices</h3>
+<p>Because push constants reside in high-speed, on-chip storage, their
+capacity is strictly limited:</p>
+<ul>
+<li><strong>Size Constraints:</strong> The Vulkan specification
+guarantees a minimum of only 128 bytes (equivalent to two standard 4x4
+floating-point matrices). While many modern hardware vendors support up
+to 256 bytes or more, exceeding 128 bytes compromises portability across
+mobile and embedded GPUs.</li>
+<li><strong>Best Use Cases:</strong> Push constants are ideal for highly
+volatile, per-draw data that changes every draw call, such as model
+matrices, object IDs for GPU-driven rendering, time values, and
+animation indices.</li>
+<li><strong>Bulk Data:</strong> Bulk data, skeletal bones, or global
+frame state that stays static across hundreds of draw calls should
+remain in standard UBOs, Storage Buffers (SSBOs), or bindless resource
+arrays.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

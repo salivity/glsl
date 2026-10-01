@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How subgroupShuffleXor Exchanges Data in GLSL - glsl</title>
+    <meta name="description" content="The subgroupShuffleXor function in GLSL allows threads within the same compute subgroup to directly exchange register data without relying on shared memory. By taking an input value and a bitwise mask, it calculates a partner lane's index using a bitwise">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-subgroup-shuffle-xor-exchanges-data-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How subgroupShuffleXor Exchanges Data in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-subgroup-shuffle-xor-exchanges-data-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The subgroupShuffleXor function in GLSL allows threads within the same compute subgroup to directly exchange register data without relying on shared memory. By taking an input value and a bitwise mask, it calculates a partner lane's index using a bitwise" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-subgroupshufflexor-exchanges-data-in-glsl">How
+subgroupShuffleXor Exchanges Data in GLSL</h1>
+<p>The <code>subgroupShuffleXor</code> function in GLSL allows threads
+within the same compute subgroup to directly exchange register data
+without relying on shared memory. By taking an input value and a bitwise
+mask, it calculates a partner lane's index using a bitwise XOR operation
+and retrieves that partner's data. This article explains the underlying
+mechanics of <code>subgroupShuffleXor</code>, how the bitwise XOR
+operation maps lane exchanges, and its practical use in high-performance
+GPU algorithms.</p>
+<h2 id="the-core-mechanism">The Core Mechanism</h2>
+<p>In GLSL subgroups (analogous to warps in CUDA or wavefronts in ROCm),
+each thread has a unique identifier given by
+<code>gl_SubgroupInvocationID</code>.</p>
+<p>The function signature generally follows this structure:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>type <span class="fu">subgroupShuffleXor</span><span class="op">(</span>type value<span class="op">,</span> <span class="dt">uint</span> mask<span class="op">);</span></span></code></pre></div>
+<p>When a thread executes <code>subgroupShuffleXor(value, mask)</code>,
+the GPU hardware calculates the source invocation index (<span
+class="math inline">\(S\)</span>) using the current invocation index
+(<span class="math inline">\(I\)</span>) and the provided bitwise mask
+(<span class="math inline">\(M\)</span>):</p>
+<p><span class="math display">\[S = I \oplus M\]</span></p>
+<p>The calling thread then receives the <code>value</code> held by
+invocation <span class="math inline">\(S\)</span>.</p>
+<h2 id="symmetric-pairing-via-bitwise-xor">Symmetric Pairing via Bitwise
+XOR</h2>
+<p>Because the XOR operation is commutative and self-inverting (<span
+class="math inline">\((A \oplus B) \oplus B = A\)</span>), lane pairing
+is strictly symmetric. If lane <span class="math inline">\(A\)</span>
+reads from lane <span class="math inline">\(B\)</span>, lane <span
+class="math inline">\(B\)</span> simultaneously reads from lane <span
+class="math inline">\(A\)</span>.</p>
+<p>Here is how different masks pair invocations within an 8-lane
+subgroup:</p>
+<h3 id="mask--1-0b001">Mask = 1 (<code>0b001</code>)</h3>
+<p>Flipping the least significant bit swaps immediately adjacent
+lanes:</p>
+<ul>
+<li>Lane 0 (<code>000</code>) <span
+class="math inline">\(\leftrightarrow\)</span> Lane 1
+(<code>001</code>)</li>
+<li>Lane 2 (<code>010</code>) <span
+class="math inline">\(\leftrightarrow\)</span> Lane 3
+(<code>011</code>)</li>
+<li>Lane 4 (<code>100</code>) <span
+class="math inline">\(\leftrightarrow\)</span> Lane 5
+(<code>101</code>)</li>
+<li>Lane 6 (<code>110</code>) <span
+class="math inline">\(\leftrightarrow\)</span> Lane 7
+(<code>111</code>)</li>
+</ul>
+<h3 id="mask--2-0b010">Mask = 2 (<code>0b010</code>)</h3>
+<p>Flipping the second bit pairs lanes with a stride of two:</p>
+<ul>
+<li>Lane 0 (<code>000</code>) <span
+class="math inline">\(\leftrightarrow\)</span> Lane 2
+(<code>010</code>)</li>
+<li>Lane 1 (<code>001</code>) <span
+class="math inline">\(\leftrightarrow\)</span> Lane 3
+(<code>011</code>)</li>
+<li>Lane 4 (<code>100</code>) <span
+class="math inline">\(\leftrightarrow\)</span> Lane 6
+(<code>110</code>)</li>
+<li>Lane 5 (<code>101</code>) <span
+class="math inline">\(\leftrightarrow\)</span> Lane 7
+(<code>111</code>)</li>
+</ul>
+<h3 id="mask--4-0b100">Mask = 4 (<code>0b100</code>)</h3>
+<p>Flipping the third bit pairs lanes across halves of a 4-lane
+group:</p>
+<ul>
+<li>Lane 0 (<code>000</code>) <span
+class="math inline">\(\leftrightarrow\)</span> Lane 4
+(<code>100</code>)</li>
+<li>Lane 1 (<code>001</code>) <span
+class="math inline">\(\leftrightarrow\)</span> Lane 5
+(<code>101</code>)</li>
+<li>Lane 2 (<code>010</code>) <span
+class="math inline">\(\leftrightarrow\)</span> Lane 6
+(<code>110</code>)</li>
+<li>Lane 3 (<code>011</code>) <span
+class="math inline">\(\leftrightarrow\)</span> Lane 7
+(<code>111</code>)</li>
+</ul>
+<h2 id="practical-applications">Practical Applications</h2>
+<p>The structured power-of-two exchange pattern makes
+<code>subgroupShuffleXor</code> the preferred instruction for
+butterfly-style parallel algorithms:</p>
+<ul>
+<li><strong>Subgroup Reductions:</strong> By iterating through masks
+that double each step (1, 2, 4, 8, etc.), an entire subgroup can compute
+sums, minimums, or maximums across all lanes in <span
+class="math inline">\(\log_2(\text{subgroupSize})\)</span> steps.</li>
+<li><strong>Fast Fourier Transforms (FFT):</strong> The butterfly data
+dependency of the Cooley-Tukey FFT directly matches the XOR lane
+permutation.</li>
+<li><strong>Bitonic Sorting:</strong> Reversing and merging bitonic
+sequences across registers requires exchanging elements across
+power-of-two distances.</li>
+</ul>
+<h2 id="performance-considerations">Performance Considerations</h2>
+<ul>
+<li><strong>Constant Masks:</strong> Hardware executes shuffle
+instructions most efficiently when <code>mask</code> is a dynamically
+uniform value or a compile-time constant across the subgroup.</li>
+<li><strong>Inactive Invocations:</strong> If the calculated source lane
+is inactive (due to divergent branching or execution outside the
+draw/dispatch bounds), the returned value is undefined. Algorithms
+should ensure all participating threads remain active during shuffle
+operations.</li>
+<li><strong>Memory Bypassing:</strong> Unlike shared memory swaps,
+<code>subgroupShuffleXor</code> does not require explicit barrier
+synchronizations (<code>barrier()</code> or
+<code>subgroupBarrier()</code>), eliminating pipeline stalls and shared
+memory bank conflicts.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

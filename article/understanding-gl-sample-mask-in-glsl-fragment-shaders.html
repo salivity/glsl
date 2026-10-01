@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding gl_SampleMask in GLSL Fragment Shaders - glsl</title>
+    <meta name="description" content="In multisample rendering, the glSampleMask built-in output array in GLSL allows a fragment shader to programmatically control which sub-pixel samples are written to the framebuffer. This article explains the function of glSampleMask, how it interacts wit">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/understanding-gl-sample-mask-in-glsl-fragment-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Understanding gl_SampleMask in GLSL Fragment Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/understanding-gl-sample-mask-in-glsl-fragment-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In multisample rendering, the glSampleMask built-in output array in GLSL allows a fragment shader to programmatically control which sub-pixel samples are written to the framebuffer. This article explains the function of glSampleMask, how it interacts wit" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="understanding-gl_samplemask-in-glsl-fragment-shaders">Understanding
+gl_SampleMask in GLSL Fragment Shaders</h1>
+<p>In multisample rendering, the <code>gl_SampleMask</code> built-in
+output array in GLSL allows a fragment shader to programmatically
+control which sub-pixel samples are written to the framebuffer. This
+article explains the function of <code>gl_SampleMask</code>, how it
+interacts with the GPU's rasterization pipeline, and common scenarios
+where developers use it to customize multisample anti-aliasing
+(MSAA).</p>
+<h3 id="definition-and-functionality">Definition and Functionality</h3>
+<p><code>gl_SampleMask</code> is a built-in fragment shader output
+variable defined as an array of 32-bit integers
+(<code>out int gl_SampleMask[]</code>). Its primary role is to set a
+bitmask that dictates sample coverage for the currently processed
+fragment.</p>
+<p>Each bit in the mask corresponds to an individual sub-pixel
+sample:</p>
+<ul>
+<li>Bit <span class="math inline">\(n\)</span> in
+<code>gl_SampleMask[0]</code> determines coverage for sample <span
+class="math inline">\(n\)</span> (from sample 0 up to sample 31).</li>
+<li>If an implementation supports more than 32 samples per pixel,
+subsequent array elements control higher-indexed samples (e.g.,
+<code>gl_SampleMask[1]</code> covers samples 32 through 63).</li>
+</ul>
+<p>When a bit is set to <code>1</code>, the corresponding sample remains
+eligible to be written to the framebuffer. When a bit is set to
+<code>0</code>, that sample is discarded, preventing color, depth, and
+stencil updates for that specific sample location.</p>
+<h3 id="interaction-with-hardware-rasterization">Interaction with
+Hardware Rasterization</h3>
+<p>Writing to <code>gl_SampleMask</code> does not grant the shader the
+ability to revive samples outside the primitive's geometric boundaries.
+Instead, the final coverage mask is determined by performing a bitwise
+AND operation between:</p>
+<ol type="1">
+<li>The hardware-generated coverage mask produced during polygon
+rasterization.</li>
+<li>The values written by the fragment shader to
+<code>gl_SampleMask</code>.</li>
+<li>Other coverage modifiers, such as alpha-to-coverage, if
+enabled.</li>
+</ol>
+<p>Consequently, <code>gl_SampleMask</code> acts as a subtractive
+filter. It can turn covered samples off, but it cannot activate samples
+that were not originally covered by the geometric primitive being
+rasterized.</p>
+<h3 id="usage-in-glsl">Usage in GLSL</h3>
+<p>To use <code>gl_SampleMask</code>, multisample anti-aliasing must be
+enabled in the OpenGL context. Within the fragment shader, values are
+assigned directly to the array elements:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec4</span> fragColor<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    fragColor <span class="op">=</span> <span class="dt">vec4</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Disable sample 0 and sample 2, keep sample 1 and sample 3 active</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Binary: 0000...1010 -&gt; 0x0A</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_SampleMask</span><span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="bn">0x0A</span><span class="op">;</span> </span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>If the shader does not write to <code>gl_SampleMask</code>, the
+default behavior retains all samples determined by the fixed-function
+rasterizer.</p>
+<h3 id="common-use-cases">Common Use Cases</h3>
+<ul>
+<li><strong>Custom Screen-Door and Stippled Transparency:</strong>
+Developers can simulate partial transparency by dynamically assigning
+alternating sample patterns across neighboring pixels, avoiding the need
+for strict back-to-front primitive sorting.</li>
+<li><strong>Custom Alpha-to-Coverage:</strong> While OpenGL provides
+automatic alpha-to-coverage, manual assignment via
+<code>gl_SampleMask</code> gives precise control over which specific
+dither patterns are applied at varying opacity levels.</li>
+<li><strong>Pixel-Art Scaling and Custom Filtering:</strong> When
+rendering low-resolution textures into multisampled framebuffers,
+developers can selectively mask out specific samples to retain crisp
+geometric edges or prevent unwanted blending artifacts.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL Memory Alignment: int16_t vs float Vectors - glsl</title>
+    <meta name="description" content="In GLSL interface blocks, memory alignment dictates how data maps between CPU memory and GPU storage buffers or uniform buffers. While standard 32-bit float vectors adhere to standard 4-, 8-, and 16-byte alignment rules, 16-bit integer (int16t) vectors o">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/glsl-memory-alignment-int-16-t-vs-float-vectors">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GLSL Memory Alignment: int16_t vs float Vectors - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/glsl-memory-alignment-int-16-t-vs-float-vectors" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In GLSL interface blocks, memory alignment dictates how data maps between CPU memory and GPU storage buffers or uniform buffers. While standard 32-bit float vectors adhere to standard 4-, 8-, and 16-byte alignment rules, 16-bit integer (int16t) vectors o" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="glsl-memory-alignment-int16_t-vs-float-vectors">GLSL Memory
+Alignment: int16_t vs float Vectors</h1>
+<p>In GLSL interface blocks, memory alignment dictates how data maps
+between CPU memory and GPU storage buffers or uniform buffers. While
+standard 32-bit <code>float</code> vectors adhere to standard 4-, 8-,
+and 16-byte alignment rules, 16-bit integer (<code>int16_t</code>)
+vectors operate on a base component size of 2 bytes, leading to smaller
+2-, 4-, and 8-byte alignments under compact memory rules. Understanding
+these differences across <code>std140</code>, <code>std430</code>, and
+scalar memory layouts is essential to prevent unintended padding, buffer
+mismatch bugs, and inefficient memory bandwidth usage.</p>
+<h3 id="base-component-sizes-and-alignment-rules">Base Component Sizes
+and Alignment Rules</h3>
+<p>In standard GLSL packing rules, the base alignment of a vector is
+defined by the size of its underlying scalar type multiplied by either 2
+(for 2-component vectors) or 4 (for 3- and 4-component vectors). Because
+a standard <code>float</code> is 4 bytes and an <code>int16_t</code>
+(from extensions such as
+<code>GL_EXT_shader_explicit_arithmetic_types_int16</code>) is 2 bytes,
+the fundamental alignment requirements scale down proportionally.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Type</th>
+<th style="text-align: left;">Size (Bytes)</th>
+<th style="text-align: left;">Base Alignment (Bytes)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>float</code></td>
+<td style="text-align: left;">4</td>
+<td style="text-align: left;">4</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>vec2</code></td>
+<td style="text-align: left;">8</td>
+<td style="text-align: left;">8</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>vec3</code></td>
+<td style="text-align: left;">12</td>
+<td style="text-align: left;">16</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>vec4</code></td>
+<td style="text-align: left;">16</td>
+<td style="text-align: left;">16</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>int16_t</code></td>
+<td style="text-align: left;">2</td>
+<td style="text-align: left;">2</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>i16vec2</code></td>
+<td style="text-align: left;">4</td>
+<td style="text-align: left;">4</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>i16vec3</code></td>
+<td style="text-align: left;">6</td>
+<td style="text-align: left;">8</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>i16vec4</code></td>
+<td style="text-align: left;">8</td>
+<td style="text-align: left;">8</td>
+</tr>
+</tbody>
+</table>
+<p>Both 3-component vectors (<code>vec3</code> and <code>i16vec3</code>)
+round their alignment up to the size of a 4-component vector of that
+type. Consequently, <code>vec3</code> requires 16-byte alignment despite
+using only 12 bytes of data, leaving a 4-byte padding hole. Similarly,
+<code>i16vec3</code> requires 8-byte alignment despite using only 6
+bytes, leaving a 2-byte padding gap before the next aligned member.</p>
+<h3 id="differences-in-std140-layout">Differences in std140 Layout</h3>
+<p>The <code>std140</code> standard, commonly mandated for Uniform
+Buffer Objects (UBOs), enforces aggressive alignment rules that can
+eliminate the memory-saving benefits of 16-bit vectors:</p>
+<ul>
+<li><strong>Array Strides:</strong> Under <code>std140</code>, every
+element in an array is rounded up to the alignment of a 16-byte vector
+(<code>vec4</code>), regardless of the element type. An array of
+<code>float</code> has an element stride of 16 bytes. An array of
+<code>int16_t</code> or <code>i16vec2</code> also gets padded to a
+16-byte stride per element.</li>
+<li><strong>Structure Alignment:</strong> Any structure or nested
+structure within <code>std140</code> has its base alignment rounded up
+to a multiple of 16 bytes.</li>
+<li><strong>Individual Vectors:</strong> Non-arrayed
+<code>i16vec2</code> and <code>i16vec4</code> members can still pack
+tightly at 4-byte and 8-byte offsets respectively, whereas
+<code>vec2</code> requires 8 bytes and <code>vec4</code> requires 16
+bytes.</li>
+</ul>
+<h3 id="differences-in-std430-layout">Differences in std430 Layout</h3>
+<p>The <code>std430</code> layout rule, available in Shader Storage
+Buffer Objects (SSBOs), eliminates the mandatory 16-byte array padding,
+allowing 16-bit types to achieve significant bandwidth and footprint
+reductions:</p>
+<ul>
+<li><strong>Array Strides:</strong> Under <code>std430</code>, array
+stride equals the base alignment of the array element itself. An array
+of <code>vec2</code> has an 8-byte stride, and an array of
+<code>vec4</code> has a 16-byte stride. In contrast, an array of
+<code>i16vec2</code> has a 4-byte stride, and an array of
+<code>i16vec4</code> has an 8-byte stride.</li>
+<li><strong>Three-Component Arrays:</strong> An array of
+<code>vec3</code> has a 16-byte stride (aligned to <code>vec4</code>),
+while an array of <code>i16vec3</code> has an 8-byte stride (aligned to
+<code>i16vec4</code>).</li>
+</ul>
+<h3 id="impact-of-scalar-block-layout">Impact of Scalar Block
+Layout</h3>
+<p>When using extensions like <code>GL_EXT_scalar_block_layout</code>
+(standard in modern Vulkan pipelines), alignment constraints match the
+underlying scalar type rather than vector dimensions:</p>
+<ul>
+<li><strong><code>float</code> vectors:</strong> Alignment drops to 4
+bytes for all vector types (<code>vec2</code>, <code>vec3</code>,
+<code>vec4</code>). A <code>vec3</code> takes exactly 12 bytes with
+4-byte alignment, leaving zero internal padding.</li>
+<li><strong><code>int16_t</code> vectors:</strong> Alignment drops to 2
+bytes for all vector types (<code>i16vec2</code>, <code>i16vec3</code>,
+<code>i16vec4</code>). An <code>i16vec3</code> takes exactly 6 bytes
+with 2-byte alignment.</li>
+</ul>
+<h3 id="host-side-struct-synchronization">Host-Side Struct
+Synchronization</h3>
+<p>To ensure CPU-GPU data parity when uploading data:</p>
+<ul>
+<li>In C++ using standard rules, a <code>vec4</code> maps to a 16-byte
+aligned struct (<code>alignas(16)</code>), while an <code>i16vec4</code>
+maps to an 8-byte aligned struct (<code>alignas(8)</code>).</li>
+<li>A 3-component <code>vec3</code> requires 4 bytes of explicit tail
+padding on the CPU to prevent data misalignment in <code>std140</code>
+and <code>std430</code>. An <code>i16vec3</code> requires 2 bytes of
+tail padding to satisfy its 8-byte alignment footprint.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

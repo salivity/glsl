@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atomic Float Operations with GL_EXT_shader_atomic_float - glsl</title>
+    <meta name="description" content="This article provides an overview of how the GLEXTshaderatomicfloat extension expands GLSL capabilities by enabling native atomic operations on floating-point data types. Traditionally, GLSL restricted atomic operations strictly to integer types, forcing">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/atomic-float-operations-with-gl-ext-shader-atomic-float">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Atomic Float Operations with GL_EXT_shader_atomic_float - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/atomic-float-operations-with-gl-ext-shader-atomic-float" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of how the GLEXTshaderatomicfloat extension expands GLSL capabilities by enabling native atomic operations on floating-point data types. Traditionally, GLSL restricted atomic operations strictly to integer types, forcing" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="atomic-float-operations-with-gl_ext_shader_atomic_float">Atomic
+Float Operations with GL_EXT_shader_atomic_float</h1>
+<p>This article provides an overview of how the
+<code>GL_EXT_shader_atomic_float</code> extension expands GLSL
+capabilities by enabling native atomic operations on floating-point data
+types. Traditionally, GLSL restricted atomic operations strictly to
+integer types, forcing developers to rely on complex compare-and-swap
+loops for floating-point calculations. By integrating
+<code>GL_EXT_shader_atomic_float</code>, developers can directly perform
+atomic read-modify-write operations on scalar <code>float</code> and
+associated vector memory layouts across buffer storage blocks, shared
+memory, and images.</p>
+<h3 id="the-limitation-of-native-glsl-atomics">The Limitation of Native
+GLSL Atomics</h3>
+<p>Standard GLSL restricts built-in atomic functions—such as
+<code>atomicAdd</code>, <code>atomicExchange</code>, and
+<code>atomicCompSwap</code>—to 32-bit unsigned and signed integers
+(<code>uint</code> and <code>int</code>). When algorithms like
+order-independent transparency (OIT), weight accumulation, or physics
+simulations required atomic updates to floating-point buffers,
+developers had to implement workarounds.</p>
+<p>The standard workaround involved casting floating-point values to
+integers using <code>floatBitsToInt</code> and running an
+<code>atomicCompSwap</code> inside a spin loop until the operation
+succeeded. This approach caused severe thread divergence, high memory
+contention, and performance bottlenecks on modern GPU architectures.</p>
+<h3 id="how-gl_ext_shader_atomic_float-modifies-glsl">How
+GL_EXT_shader_atomic_float Modifies GLSL</h3>
+<p>The <code>GL_EXT_shader_atomic_float</code> extension removes these
+software loops by introducing native atomic instructions that hardware
+can execute in a single memory transaction.</p>
+<p>To use these capabilities in a shader, the extension must first be
+declared:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_shader_atomic_float : enable</span></span></code></pre></div>
+<p>Once enabled, the extension overloads standard atomic built-in
+functions to accept 32-bit floating-point (<code>float</code>) types in
+addition to integers:</p>
+<ul>
+<li><strong>Buffer and Shared Memory Operations:</strong> Overloads
+<code>atomicAdd</code> and <code>atomicExchange</code> to accept
+<code>inout float</code> targets stored in shared workgroup memory
+(<code>shared</code>) or Shader Storage Buffer Objects (SSBOs).</li>
+<li><strong>Image Operations:</strong> Introduces
+<code>imageAtomicAdd</code> and <code>imageAtomicExchange</code>
+targeting floating-point image variables with formats like
+<code>r32f</code>.</li>
+</ul>
+<h3 id="handling-float-and-vec-types">Handling <code>float</code> and
+<code>vec</code> Types</h3>
+<p>The primary extension specifically introduces scalar 32-bit
+<code>float</code> operations. In GLSL, operations on vector types
+(<code>vec2</code>, <code>vec3</code>, <code>vec4</code>) are executed
+per-component:</p>
+<ol type="1">
+<li><strong>Component-wise Access on Vector Arrays:</strong> In storage
+buffers containing vector arrays, developers target individual vector
+components directly:
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">buffer</span> DataBuffer <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> data<span class="op">[];</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Atomically adds to the red component of a specific vector</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">atomicAdd</span><span class="op">(</span>data<span class="op">[</span><span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">].</span><span class="fu">r</span><span class="op">,</span> <span class="fl">1.5</span><span class="op">);</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></li>
+<li><strong>Multi-component Images:</strong> For vector images (such as
+multi-channel accumulation buffers), atomic writes target specific
+coordinates and address scalar components within the image binding.</li>
+<li><strong>Relation to GL_EXT_shader_atomic_float2:</strong> While
+<code>GL_EXT_shader_atomic_float</code> establishes fundamental scalar
+<code>float</code> additions and exchanges, its companion extension,
+<code>GL_EXT_shader_atomic_float2</code>, expands this functionality to
+include 16-bit floats (<code>float16_t</code>), minimum/maximum
+operations (<code>atomicMin</code>, <code>atomicMax</code>), and direct
+packed vector arithmetic.</li>
+</ol>
+<h3 id="underlying-compilation-and-spir-v-translation">Underlying
+Compilation and SPIR-V Translation</h3>
+<p>When compiling GLSL to SPIR-V for Vulkan or modern OpenGL drivers,
+<code>GL_EXT_shader_atomic_float</code> maps high-level function calls
+directly to dedicated SPIR-V atomic instructions using the
+<code>AtomicFloat32AddEXT</code> capability.</p>
+<p>Instead of generating conditional branch instructions and comparison
+loops, the compiler emits a single <code>OpAtomicFAddEXT</code>
+instruction. The underlying GPU hardware processes the floating-point
+addition at the memory controller or L2 cache level, guaranteeing thread
+safety, minimizing bandwidth usage, and significantly improving compute
+shader throughput.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

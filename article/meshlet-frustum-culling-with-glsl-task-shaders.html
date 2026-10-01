@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meshlet Frustum Culling with GLSL Task Shaders - glsl</title>
+    <meta name="description" content="Frustum culling on meshlets using task shaders allows the GPU to discard non-visible geometry clusters before reaching the rasterizer, substantially reducing primitive processing overhead. By testing the bounding volume of each meshlet against the camera">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/meshlet-frustum-culling-with-glsl-task-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Meshlet Frustum Culling with GLSL Task Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/meshlet-frustum-culling-with-glsl-task-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Frustum culling on meshlets using task shaders allows the GPU to discard non-visible geometry clusters before reaching the rasterizer, substantially reducing primitive processing overhead. By testing the bounding volume of each meshlet against the camera" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="meshlet-frustum-culling-with-glsl-task-shaders">Meshlet Frustum
+Culling with GLSL Task Shaders</h1>
+<p>Frustum culling on meshlets using task shaders allows the GPU to
+discard non-visible geometry clusters before reaching the rasterizer,
+substantially reducing primitive processing overhead. By testing the
+bounding volume of each meshlet against the camera's view frustum
+directly within the task shader, the graphics pipeline can dynamically
+determine which mesh shaders to spawn. This article details the
+mechanics of meshlet-level culling, how task shaders process geometry
+batches, and the GLSL implementation required to discard culled meshlets
+efficiently using subgroup operations.</p>
+<h3 id="the-role-of-task-shaders-in-meshlet-culling">The Role of Task
+Shaders in Meshlet Culling</h3>
+<p>In the mesh shading pipeline, the task shader acts as an
+amplification and culling stage that runs prior to the mesh shader.
+Geometry is pre-processed into meshlets—small clusters of vertices and
+primitives (typically up to 64 vertices and 128 triangles).</p>
+<p>Rather than sending an entire draw call to the mesh shader, the task
+shader executes over a collection of meshlets. Each invocation or
+workgroup reads the spatial bounds of a meshlet, tests those bounds
+against the camera's view frustum, and determines visibility. If a
+meshlet falls outside the frustum, it is discarded. The task shader then
+allocates mesh shader workgroups only for the surviving meshlets using
+the built-in emission function.</p>
+<h3 id="implementing-the-frustum-test">Implementing the Frustum
+Test</h3>
+<p>Each meshlet contains precomputed bounding geometry, such as an
+Axis-Aligned Bounding Box (AABB) or an oriented bounding sphere. Spheres
+are often preferred for their low computational overhead:</p>
+<ol type="1">
+<li><strong>Frustum Representation:</strong> The view frustum is
+represented as six planes, each defined by an outward- or
+inward-pointing normal and a distance scalar <span
+class="math inline">\((Ax + By + Cz + D = 0)\)</span>.</li>
+<li><strong>Sphere-Plane Distance:</strong> The signed distance from the
+sphere center to each of the six planes is calculated: <span
+class="math display">\[\text{distance} = \mathbf{plane.xyz} \cdot
+\mathbf{sphere.center} + \text{plane.w}\]</span></li>
+<li><strong>Visibility Evaluation:</strong> If the signed distance is
+less than <span class="math inline">\(-\text{radius}\)</span> for any of
+the six planes, the bounding sphere is completely outside the frustum,
+and the meshlet is culled.</li>
+</ol>
+<h3 id="compaction-with-subgroup-operations">Compaction with Subgroup
+Operations</h3>
+<p>Because task shaders can cull a variable number of meshlets across a
+workgroup, sparse outputs must be compacted so that the spawned mesh
+shaders receive contiguous payloads without idle threads. This is done
+using GLSL subgroup operations (warp/wavefront intrinsics):</p>
+<ol type="1">
+<li><strong>Subgroup Ballot:</strong> Threads within a workgroup
+evaluate their assigned meshlet's visibility. The results are gathered
+into a bitmask using <code>subgroupBallot()</code>.</li>
+<li><strong>Prefix Sum (Compaction):</strong> Each visible meshlet
+computes its compact index within the surviving group using
+<code>subgroupBallotExclusiveBitCount()</code>.</li>
+<li><strong>Payload Population:</strong> The visible meshlet indices are
+written into the shared <code>taskPayloadSharedEXT</code> variable at
+their compacted positions.</li>
+<li><strong>Task Emission:</strong> The first thread in the subgroup
+calls <code>EmitMeshTasksEXT()</code> with the count of surviving
+meshlets obtained from <code>subgroupBallotBitCount()</code>.</li>
+</ol>
+<h3 id="glsl-implementation-example">GLSL Implementation Example</h3>
+<p>The following GLSL code demonstrates frustum culling on a 32-meshlet
+workgroup using the <code>GL_EXT_mesh_shader</code> and
+<code>GL_KHR_shader_subgroup_ballot</code> extensions.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 460</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_EXT_mesh_shader : require</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#extension GL_KHR_shader_subgroup_ballot : require</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span>local_size_x <span class="op">=</span> <span class="dv">32</span><span class="op">,</span> local_size_y <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> local_size_z <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="dt">in</span><span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> MeshletBounds <span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> center<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> radius<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">std430</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">readonly</span> <span class="kw">buffer</span> MeshletBoundsBuffer <span class="op">{</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    MeshletBounds bounds<span class="op">[];</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">1</span><span class="op">)</span> <span class="kw">uniform</span> CameraData <span class="op">{</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mat4</span> viewProj<span class="op">;</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec4</span> frustumPlanes<span class="op">[</span><span class="dv">6</span><span class="op">];</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> TaskPayload <span class="op">{</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> meshletIndices<span class="op">[</span><span class="dv">32</span><span class="op">];</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>taskPayloadSharedEXT TaskPayload s_payload<span class="op">;</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> <span class="fu">isSphereInFrustum</span><span class="op">(</span><span class="dt">vec3</span> center<span class="op">,</span> <span class="dt">float</span> radius<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">6</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span><span class="bu">dot</span><span class="op">(</span>frustumPlanes<span class="op">[</span>i<span class="op">].</span><span class="fu">xyz</span><span class="op">,</span> center<span class="op">)</span> <span class="op">+</span> frustumPlanes<span class="op">[</span>i<span class="op">].</span><span class="fu">w</span> <span class="op">&lt;</span> <span class="op">-</span>radius<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>            <span class="kw">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> globalIndex <span class="op">=</span> <span class="bu">gl_GlobalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> localIndex  <span class="op">=</span> <span class="bu">gl_LocalInvocationID</span><span class="op">.</span><span class="fu">x</span><span class="op">;</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Evaluate visibility</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    MeshletBounds b <span class="op">=</span> bounds<span class="op">[</span>globalIndex<span class="op">];</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> visible <span class="op">=</span> <span class="fu">isSphereInFrustum</span><span class="op">(</span>b<span class="op">.</span><span class="fu">center</span><span class="op">,</span> b<span class="op">.</span><span class="fu">radius</span><span class="op">);</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Vote across the subgroup to find surviving meshlets</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uvec4</span> ballot <span class="op">=</span> <span class="fu">subgroupBallot</span><span class="op">(</span>visible<span class="op">);</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> totalVisible <span class="op">=</span> <span class="fu">subgroupBallotBitCount</span><span class="op">(</span>ballot<span class="op">);</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>    <span class="co">// If visible, write into compacted payload array</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>visible<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>        <span class="dt">uint</span> compactIndex <span class="op">=</span> <span class="fu">subgroupBallotExclusiveBitCount</span><span class="op">(</span>ballot<span class="op">);</span></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>        s_payload<span class="op">.</span><span class="fu">meshletIndices</span><span class="op">[</span>compactIndex<span class="op">]</span> <span class="op">=</span> globalIndex<span class="op">;</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Emit mesh shader workgroups only for visible meshlets</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>localIndex <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>        <span class="fu">EmitMeshTasksEXT</span><span class="op">(</span>totalVisible<span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="execution-behavior">Execution Behavior</h3>
+<p>When <code>totalVisible</code> evaluates to zero,
+<code>EmitMeshTasksEXT(0, 1, 1)</code> halts further processing for that
+workgroup, bypassing the mesh shader entirely. Surviving workgroups
+launch the exact number of mesh shaders required, where
+<code>gl_WorkGroupID.x</code> in the mesh shader indexes directly into
+<code>s_payload.meshletIndices</code> to fetch and render the visible
+meshlet data.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

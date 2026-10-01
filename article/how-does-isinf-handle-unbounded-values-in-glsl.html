@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Does isinf Handle Unbounded Values in GLSL? - glsl</title>
+    <meta name="description" content="In modern graphics programming, arithmetic edge cases such as division by zero or exponential growth can produce infinite floating-point values that corrupt rendering pipelines. The built-in GLSL function isinf() detects these unbounded positive and nega">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-does-isinf-handle-unbounded-values-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Does isinf Handle Unbounded Values in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-does-isinf-handle-unbounded-values-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In modern graphics programming, arithmetic edge cases such as division by zero or exponential growth can produce infinite floating-point values that corrupt rendering pipelines. The built-in GLSL function isinf() detects these unbounded positive and nega" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-does-isinf-handle-unbounded-values-in-glsl">How Does isinf
+Handle Unbounded Values in GLSL?</h1>
+<p>In modern graphics programming, arithmetic edge cases such as
+division by zero or exponential growth can produce infinite
+floating-point values that corrupt rendering pipelines. The built-in
+GLSL function <code>isinf()</code> detects these unbounded positive and
+negative values, allowing shaders to implement fallbacks, clamp
+anomalies, and prevent downstream artifacts like black spots or
+cascading invalid calculations.</p>
+<h2
+id="understanding-infinity-in-ieee-754-floating-point-arithmetic">Understanding
+Infinity in IEEE 754 Floating-Point Arithmetic</h2>
+<p>Graphics processing units follow IEEE 754 floating-point standards
+where operations exceeding the maximum representable scalar value
+resolve to positive infinity (<code>+Inf</code>) or negative infinity
+(<code>-Inf</code>).</p>
+<p>Common triggers in shader pipelines include:</p>
+<ul>
+<li>Dividing a non-zero number by zero (e.g.,
+<code>1.0 / 0.0</code>).</li>
+<li>Exponential overflow during lighting or physics calculations (e.g.,
+<code>exp(100.0)</code> with half-precision floats).</li>
+<li>Logarithmic calculations with zero arguments producing negative
+infinity.</li>
+<li>Normalization of zero-length or extremely small vectors.</li>
+</ul>
+<p>When an infinite value is passed into further computations, such as
+matrix multiplications or trigonometric functions, it frequently
+degenerates into <code>NaN</code> (Not a Number), breaking visual output
+across affected fragments.</p>
+<h2 id="how-the-isinf-function-operates">How the isinf Function
+Operates</h2>
+<p>The <code>isinf()</code> function evaluates a floating-point scalar
+or vector and determines whether each component represents positive or
+negative infinity.</p>
+<h3 id="function-signatures">Function Signatures</h3>
+<p>GLSL supports overloaded variants of <code>isinf()</code> for
+standard scalar and vector types:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> <span class="bu">isinf</span><span class="op">(</span><span class="dt">float</span> x<span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">bvec2</span> <span class="bu">isinf</span><span class="op">(</span><span class="dt">vec2</span> x<span class="op">);</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="dt">bvec3</span> <span class="bu">isinf</span><span class="op">(</span><span class="dt">vec3</span> x<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="dt">bvec4</span> <span class="bu">isinf</span><span class="op">(</span><span class="dt">vec4</span> x<span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> <span class="bu">isinf</span><span class="op">(</span><span class="dt">double</span> x<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="dt">bvec2</span> <span class="bu">isinf</span><span class="op">(</span><span class="dt">dvec2</span> x<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="dt">bvec3</span> <span class="bu">isinf</span><span class="op">(</span><span class="dt">dvec3</span> x<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">bvec4</span> <span class="bu">isinf</span><span class="op">(</span><span class="dt">dvec4</span> x<span class="op">);</span></span></code></pre></div>
+<p>For vector types, the evaluation occurs component-wise, returning a
+boolean vector (<code>bvec</code>) with the same dimension as the
+input.</p>
+<h2 id="practical-applications-in-shader-development">Practical
+Applications in Shader Development</h2>
+<h3 id="guarding-against-light-attenuation-explosions">Guarding Against
+Light Attenuation Explosions</h3>
+<p>In physically based rendering (PBR), inverse-square light attenuation
+equations divide luminous intensity by the square of distance. If a
+fragment coordinate coincides exactly with a point light source
+position, distance reaches zero:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> <span class="bu">distance</span> <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>lightPos <span class="op">-</span> fragPos<span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> attenuation <span class="op">=</span> lightIntensity <span class="op">/</span> <span class="op">(</span><span class="bu">distance</span> <span class="op">*</span> <span class="bu">distance</span><span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span><span class="bu">isinf</span><span class="op">(</span>attenuation<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    attenuation <span class="op">=</span> <span class="fl">10000.0</span><span class="op">;</span> <span class="co">// Assign a high, finite threshold</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="sanitizing-raymarching-distance-fields">Sanitizing Raymarching
+Distance Fields</h3>
+<p>Volumetric rendering and signed distance field (SDF) raymarchers
+often calculate reciprocal ray directions for bounding box
+intersections. When a ray is parallel to a coordinate axis, the
+direction component is zero, creating infinite step values:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> invRayDir <span class="op">=</span> <span class="fl">1.0</span> <span class="op">/</span> rayDir<span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Replace infinite step sizes with maximum safe travel distance</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">if</span> <span class="op">(</span><span class="bu">any</span><span class="op">(</span><span class="bu">isinf</span><span class="op">(</span>invRayDir<span class="op">)))</span> <span class="op">{</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    invRayDir <span class="op">=</span> <span class="bu">mix</span><span class="op">(</span>invRayDir<span class="op">,</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1e6</span><span class="op">),</span> <span class="bu">isinf</span><span class="op">(</span>invRayDir<span class="op">));</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="differentiating-isinf-from-isnan">Differentiating isinf from
+isnan</h3>
+<p>While both handle invalid numerical states, their semantics
+differ:</p>
+<ul>
+<li><code>isinf()</code> identifies quantities that have grown beyond
+numeric limits (<span class="math inline">\(+\infty\)</span> or <span
+class="math inline">\(-\infty\)</span>).</li>
+<li><code>isnan()</code> identifies undefined mathematical operations,
+such as <code>0.0 / 0.0</code> or <code>sqrt(-1.0)</code>.</li>
+</ul>
+<p>A robust error-handling routine in mission-critical post-processing
+often evaluates both conditions using
+<code>any(isinf(val)) || any(isnan(val))</code> to sanitize final
+framebuffers before tone mapping.</p>
+<h2 id="best-practices-and-performance-considerations">Best Practices
+and Performance Considerations</h2>
+<p>Modern GPU architectures optimize branchless math. Using conditional
+branching (<code>if (isinf(x))</code>) inside performance-critical
+fragment loops can cause warp divergence. Instead, use built-in vector
+functions like <code>mix()</code> or <code>clamp()</code> alongside
+<code>isinf()</code> to sanitize values branchlessly, ensuring maximum
+execution throughput across all shader execution units.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

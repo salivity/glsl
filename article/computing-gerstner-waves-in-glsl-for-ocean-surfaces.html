@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Computing Gerstner Waves in GLSL for Ocean Surfaces - glsl</title>
+    <meta name="description" content="Simulating realistic, non-linear ocean surfaces in real-time graphics is commonly achieved through analytical Gerstner waves. Unlike simple sine waves that only alter elevation, Gerstner waves displace surface vertices both vertically and horizontally to">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/computing-gerstner-waves-in-glsl-for-ocean-surfaces">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Computing Gerstner Waves in GLSL for Ocean Surfaces - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/computing-gerstner-waves-in-glsl-for-ocean-surfaces" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Simulating realistic, non-linear ocean surfaces in real-time graphics is commonly achieved through analytical Gerstner waves. Unlike simple sine waves that only alter elevation, Gerstner waves displace surface vertices both vertically and horizontally to" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="computing-gerstner-waves-in-glsl-for-ocean-surfaces">Computing
+Gerstner Waves in GLSL for Ocean Surfaces</h1>
+<p>Simulating realistic, non-linear ocean surfaces in real-time graphics
+is commonly achieved through analytical Gerstner waves. Unlike simple
+sine waves that only alter elevation, Gerstner waves displace surface
+vertices both vertically and horizontally toward wave crests, forming
+the sharp peaks and broad troughs characteristic of open water. In a
+GLSL rendering pipeline, this technique is implemented within the vertex
+shader, summing multiple wave equations to procedurally deform a flat
+mesh grid while analytically computing exact normals and tangents for
+lighting.</p>
+<h3 id="mathematical-formulation">Mathematical Formulation</h3>
+<p>A single Gerstner wave displaces an initial flat point <span
+class="math inline">\(\mathbf{P}_0 = (x, 0, z)\)</span> to a new
+position <span class="math inline">\(\mathbf{P} = (x&#39;, y&#39;,
+z&#39;)\)</span>. For a single wave <span
+class="math inline">\(i\)</span>, the displacement is defined as:</p>
+<p><span class="math display">\[x&#39; = x + \sum \left( Q_i A_i D_{i,x}
+\cos(k_i (\mathbf{D}_i \cdot \mathbf{P}_0) + \omega_i t)
+\right)\]</span> <span class="math display">\[z&#39; = z + \sum \left(
+Q_i A_i D_{i,z} \cos(k_i (\mathbf{D}_i \cdot \mathbf{P}_0) + \omega_i t)
+\right)\]</span> <span class="math display">\[y&#39; = \sum \left( A_i
+\sin(k_i (\mathbf{D}_i \cdot \mathbf{P}_0) + \omega_i t)
+\right)\]</span></p>
+<p>Where:</p>
+<ul>
+<li><strong><span class="math inline">\(\mathbf{D}_i = (D_{i,x},
+D_{i,z})\)</span></strong>: The normalized 2D horizontal direction
+vector of the wave.</li>
+<li><strong><span class="math inline">\(A_i\)</span></strong>: The
+amplitude (wave height).</li>
+<li><strong><span class="math inline">\(L_i\)</span></strong>: The
+wavelength, which determines the wave number <span
+class="math inline">\(k_i = \frac{2\pi}{L_i}\)</span>.</li>
+<li><strong><span class="math inline">\(\omega_i\)</span></strong>: The
+angular frequency, derived from the dispersion relation <span
+class="math inline">\(\omega_i = \sqrt{g \cdot k_i}\)</span>, where
+<span class="math inline">\(g\)</span> represents gravity.</li>
+<li><strong><span class="math inline">\(Q_i\)</span></strong>: The
+steepness factor controlling the sharpness of the crest. To prevent the
+surface from self-intersecting and forming unnatural loops, the
+condition <span class="math inline">\(\sum Q_i \le 1\)</span> must be
+maintained across all waves.</li>
+</ul>
+<h3 id="analytical-normals-and-tangents">Analytical Normals and
+Tangents</h3>
+<p>Lighting calculations require accurate surface normals. Rather than
+sampling neighboring vertices using costly finite difference
+approximations, Gerstner waves allow for analytical derivation of the
+tangent (<span class="math inline">\(\mathbf{T}\)</span>), binormal
+(<span class="math inline">\(\mathbf{B}\)</span>), and normal (<span
+class="math inline">\(\mathbf{N}\)</span>) vectors using partial
+derivatives:</p>
+<p><span class="math display">\[\mathbf{T} = \frac{\partial
+\mathbf{P}}{\partial x} = \begin{pmatrix} 1 - \sum Q_i D_{i,x}^2
+\sin(\theta_i) \\ \sum D_{i,x} \cos(\theta_i) \\ -\sum Q_i D_{i,x}
+D_{i,z} \sin(\theta_i) \end{pmatrix}\]</span></p>
+<p><span class="math display">\[\mathbf{B} = \frac{\partial
+\mathbf{P}}{\partial z} = \begin{pmatrix} -\sum Q_i D_{i,x} D_{i,z}
+\sin(\theta_i) \\ \sum D_{i,z} \cos(\theta_i) \\ 1 - \sum Q_i D_{i,z}^2
+\sin(\theta_i) \end{pmatrix}\]</span></p>
+<p>The surface normal is calculated by taking the cross product of the
+binormal and tangent vectors:</p>
+<p><span class="math display">\[\mathbf{N} = \mathbf{B} \times
+\mathbf{T}\]</span></p>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>Below is a GLSL vertex shader implementation demonstrating how to sum
+multiple Gerstner waves to transform an input vertex and output the
+computed position and normal.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 330 core</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">layout</span><span class="op">(</span><span class="dt">location</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="dt">in</span> <span class="dt">vec3</span> aPos<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> model<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> view<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">mat4</span> projection<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> <span class="dt">float</span> uTime<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec3</span> vWorldPos<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="dt">out</span> <span class="dt">vec3</span> vNormal<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> GerstnerWave <span class="op">{</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> direction<span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> amplitude<span class="op">;</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> steepness<span class="op">;</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> wavelength<span class="op">;</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">int</span> NUM_WAVES <span class="op">=</span> <span class="dv">4</span><span class="op">;</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="kw">uniform</span> GerstnerWave uWaves<span class="op">[</span>NUM_WAVES<span class="op">];</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">evaluateGerstnerWave</span><span class="op">(</span>GerstnerWave wave<span class="op">,</span> <span class="dt">vec3</span> gridPos<span class="op">,</span> <span class="dt">inout</span> <span class="dt">vec3</span> displacement<span class="op">,</span> <span class="dt">inout</span> <span class="dt">vec3</span> tangent<span class="op">,</span> <span class="dt">inout</span> <span class="dt">vec3</span> binormal<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> k <span class="op">=</span> <span class="fl">2.0</span> <span class="op">*</span> <span class="fl">3.14159265</span> <span class="op">/</span> wave<span class="op">.</span><span class="fu">wavelength</span><span class="op">;</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> c <span class="op">=</span> <span class="bu">sqrt</span><span class="op">(</span><span class="fl">9.8</span> <span class="op">/</span> k<span class="op">);</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec2</span> d <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>wave<span class="op">.</span><span class="fu">direction</span><span class="op">);</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> f <span class="op">=</span> k <span class="op">*</span> <span class="op">(</span><span class="bu">dot</span><span class="op">(</span>d<span class="op">,</span> gridPos<span class="op">.</span><span class="fu">xz</span><span class="op">)</span> <span class="op">-</span> c <span class="op">*</span> uTime<span class="op">);</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> a <span class="op">=</span> wave<span class="op">.</span><span class="fu">amplitude</span><span class="op">;</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> q <span class="op">=</span> wave<span class="op">.</span><span class="fu">steepness</span> <span class="op">/</span> <span class="op">(</span>k <span class="op">*</span> a <span class="op">*</span> <span class="dt">float</span><span class="op">(</span>NUM_WAVES<span class="op">));</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sinF <span class="op">=</span> <span class="bu">sin</span><span class="op">(</span>f<span class="op">);</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> cosF <span class="op">=</span> <span class="bu">cos</span><span class="op">(</span>f<span class="op">);</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    displacement<span class="op">.</span><span class="fu">x</span> <span class="op">+=</span> q <span class="op">*</span> a <span class="op">*</span> d<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> cosF<span class="op">;</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    displacement<span class="op">.</span><span class="fu">z</span> <span class="op">+=</span> q <span class="op">*</span> a <span class="op">*</span> d<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> cosF<span class="op">;</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    displacement<span class="op">.</span><span class="fu">y</span> <span class="op">+=</span> a <span class="op">*</span> sinF<span class="op">;</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    tangent <span class="op">+=</span> <span class="dt">vec3</span><span class="op">(</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span>q <span class="op">*</span> d<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> d<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> sinF<span class="op">,</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>        d<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> cosF<span class="op">,</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span>q <span class="op">*</span> d<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> d<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> sinF</span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>    binormal <span class="op">+=</span> <span class="dt">vec3</span><span class="op">(</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span>q <span class="op">*</span> d<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> d<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> sinF<span class="op">,</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>        d<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> cosF<span class="op">,</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span>q <span class="op">*</span> d<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> d<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> sinF</span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>    <span class="op">);</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> gridPos <span class="op">=</span> aPos<span class="op">;</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> displacement <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> tangent <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> binormal <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> NUM_WAVES<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>        <span class="fu">evaluateGerstnerWave</span><span class="op">(</span>uWaves<span class="op">[</span>i<span class="op">],</span> gridPos<span class="op">,</span> displacement<span class="op">,</span> tangent<span class="op">,</span> binormal<span class="op">);</span></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> finalPos <span class="op">=</span> gridPos <span class="op">+</span> displacement<span class="op">;</span></span>
+<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> calculatedNormal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="bu">cross</span><span class="op">(</span>binormal<span class="op">,</span> tangent<span class="op">));</span></span>
+<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a>    vWorldPos <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span>model <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>finalPos<span class="op">,</span> <span class="fl">1.0</span><span class="op">));</span></span>
+<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a>    vNormal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="dt">mat3</span><span class="op">(</span><span class="bu">transpose</span><span class="op">(</span><span class="bu">inverse</span><span class="op">(</span>model<span class="op">)))</span> <span class="op">*</span> calculatedNormal<span class="op">);</span></span>
+<span id="cb1-66"><a href="#cb1-66" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-67"><a href="#cb1-67" aria-hidden="true" tabindex="-1"></a>    <span class="bu">gl_Position</span> <span class="op">=</span> projection <span class="op">*</span> view <span class="op">*</span> <span class="dt">vec4</span><span class="op">(</span>vWorldPos<span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-68"><a href="#cb1-68" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="performance-and-precision-considerations">Performance and
+Precision Considerations</h3>
+<p>When computing wave sums in GLSL, evaluating four to eight waves
+yields sufficient visual chaos to break repetitive patterns while
+staying within tight frame budgets. To eliminate high-frequency
+precision jitter caused by large <code>uTime</code> values, time
+parameters should be wrapped modulo the least common multiple of wave
+periods on the CPU before binding uniforms to the shader program.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

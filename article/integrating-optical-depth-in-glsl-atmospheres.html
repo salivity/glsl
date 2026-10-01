@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Integrating Optical Depth in GLSL Atmospheres - glsl</title>
+    <meta name="description" content="Simulating realistic planetary atmospheres in real-time requires calculating how light attenuates as it travels through varying gas and aerosol densities. In GLSL, this attenuation is governed by the Beer-Lambert law and computed by numerically integrati">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/integrating-optical-depth-in-glsl-atmospheres">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Integrating Optical Depth in GLSL Atmospheres - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/integrating-optical-depth-in-glsl-atmospheres" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Simulating realistic planetary atmospheres in real-time requires calculating how light attenuates as it travels through varying gas and aerosol densities. In GLSL, this attenuation is governed by the Beer-Lambert law and computed by numerically integrati" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="integrating-optical-depth-in-glsl-atmospheres">Integrating
+Optical Depth in GLSL Atmospheres</h1>
+<p>Simulating realistic planetary atmospheres in real-time requires
+calculating how light attenuates as it travels through varying gas and
+aerosol densities. In GLSL, this attenuation is governed by the
+Beer-Lambert law and computed by numerically integrating the optical
+depth along a ray passing through concentric spherical shells. This
+article explains the geometric foundations, density functions for
+multiple atmospheric layers, numerical integration via raymarching, and
+the GLSL implementation required to integrate optical depth accurately
+on the GPU.</p>
+<hr />
+<h3 id="mathematical-foundation-of-optical-depth">Mathematical
+Foundation of Optical Depth</h3>
+<p>Optical depth (<span class="math inline">\(\tau\)</span>) measures
+how much radiant power is absorbed or scattered as a ray traverses a
+participating medium between two points, <span
+class="math inline">\(\mathbf{A}\)</span> and <span
+class="math inline">\(\mathbf{B}\)</span>:</p>
+<p><span class="math display">\[\tau(\mathbf{A}, \mathbf{B}) =
+\int_{\mathbf{A}}^{\mathbf{B}} \beta_{ext}(\mathbf{x}) \,
+ds\]</span></p>
+<p>Where <span class="math inline">\(\beta_{ext}(\mathbf{x})\)</span> is
+the extinction coefficient at point <span
+class="math inline">\(\mathbf{x}\)</span>, which is proportional to the
+local atmospheric density <span class="math inline">\(\rho(h)\)</span>
+at altitude <span class="math inline">\(h\)</span>:</p>
+<p><span class="math display">\[\beta_{ext}(\mathbf{x}) = \beta_0 \cdot
+\rho(h)\]</span></p>
+<p>Because real atmospheres are spherical and consist of multiple
+components (such as Rayleigh scattering molecules, Mie scattering
+aerosols, and Ozone absorption), the total optical depth is the sum of
+the individual layer densities integrated over the ray segment:</p>
+<p><span class="math display">\[\tau_{total} = \sum_{k} \beta_{k}
+\int_{\mathbf{A}}^{\mathbf{B}} \rho_k(h(s)) \, ds\]</span></p>
+<h3 id="spherical-shell-geometry-and-ray-sphere-intersection">Spherical
+Shell Geometry and Ray-Sphere Intersection</h3>
+<p>A planetary atmosphere is geometrically bounded by the planet's
+radius <span class="math inline">\(R_{p}\)</span> and the
+top-of-atmosphere (TOA) radius <span
+class="math inline">\(R_{atm}\)</span>. The altitude <span
+class="math inline">\(h\)</span> of any sample point <span
+class="math inline">\(\mathbf{x}\)</span> relative to the planet center
+<span class="math inline">\(\mathbf{C}\)</span> is:</p>
+<p><span class="math display">\[h = \|\mathbf{x} - \mathbf{C}\| -
+R_{p}\]</span></p>
+<p>Before integrating, the ray <span class="math inline">\(\mathbf{r}(t)
+= \mathbf{o} + t\mathbf{d}\)</span> must be clipped against the outer
+sphere (<span class="math inline">\(R_{atm}\)</span>) and checked for
+occlusion against the planetary surface (<span
+class="math inline">\(R_{p}\)</span>).</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Intersect ray with a sphere at origin; returns vec2(t_near, t_far)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec2</span> <span class="fu">raySphereIntersect</span><span class="op">(</span><span class="dt">vec3</span> ro<span class="op">,</span> <span class="dt">vec3</span> rd<span class="op">,</span> <span class="dt">float</span> radius<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> b <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>ro<span class="op">,</span> rd<span class="op">);</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> c <span class="op">=</span> <span class="bu">dot</span><span class="op">(</span>ro<span class="op">,</span> ro<span class="op">)</span> <span class="op">-</span> radius <span class="op">*</span> radius<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> d <span class="op">=</span> b <span class="op">*</span> b <span class="op">-</span> c<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> <span class="op">(</span>d <span class="op">&lt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="kw">return</span> <span class="dt">vec2</span><span class="op">(-</span><span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> sqrtD <span class="op">=</span> <span class="bu">sqrt</span><span class="op">(</span>d<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="dt">vec2</span><span class="op">(-</span>b <span class="op">-</span> sqrtD<span class="op">,</span> <span class="op">-</span>b <span class="op">+</span> sqrtD<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="multi-layer-atmospheric-density-models">Multi-Layer Atmospheric
+Density Models</h3>
+<p>Different atmospheric components drop off at different rates,
+represented by their scale heights (<span
+class="math inline">\(H\)</span>):</p>
+<ol type="1">
+<li><strong>Rayleigh Layer (Air molecules):</strong> Follows barometric
+exponential decay. <span class="math display">\[\rho_R(h) = \exp(-h /
+H_R) \quad (H_R \approx 8.0 \text{ km})\]</span></li>
+<li><strong>Mie Layer (Aerosols/Haze):</strong> Also follows exponential
+decay but with a lower scale height. <span
+class="math display">\[\rho_M(h) = \exp(-h / H_M) \quad (H_M \approx 1.2
+\text{ km})\]</span></li>
+<li><strong>Ozone Absorption Layer:</strong> Typically modeled as a tent
+function peaking at an altitude around 25 km with a finite distribution
+width. <span class="math display">\[\rho_O(h) = \max\left(0.0, 1.0 -
+\frac{|h - h_{peak}|}{w}\right)\]</span></li>
+</ol>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> DensitySample <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> rayleigh<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> mie<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> ozone<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>DensitySample <span class="fu">sampleDensities</span><span class="op">(</span><span class="dt">float</span> altitude<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> H_RAYLEIGH <span class="op">=</span> <span class="fl">8000.0</span><span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> H_MIE      <span class="op">=</span> <span class="fl">1200.0</span><span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> OZONE_PEAK <span class="op">=</span> <span class="fl">25000.0</span><span class="op">;</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">float</span> OZONE_WIDTH <span class="op">=</span> <span class="fl">15000.0</span><span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    DensitySample s<span class="op">;</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    s<span class="op">.</span><span class="fu">rayleigh</span> <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>altitude <span class="op">/</span> H_RAYLEIGH<span class="op">);</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    s<span class="op">.</span><span class="fu">mie</span>      <span class="op">=</span> <span class="bu">exp</span><span class="op">(-</span>altitude <span class="op">/</span> H_MIE<span class="op">);</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    s<span class="op">.</span><span class="fu">ozone</span>    <span class="op">=</span> <span class="bu">max</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span> <span class="op">-</span> <span class="bu">abs</span><span class="op">(</span>altitude <span class="op">-</span> OZONE_PEAK<span class="op">)</span> <span class="op">/</span> OZONE_WIDTH<span class="op">);</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> s<span class="op">;</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="numerical-integration-via-raymarching">Numerical Integration via
+Raymarching</h3>
+<p>Because <span class="math inline">\(h(s)\)</span> varies non-linearly
+with distance <span class="math inline">\(s\)</span> along arbitrary
+spherical paths, the integral is evaluated numerically using mid-point
+Riemann sums. The path from ray entry <span
+class="math inline">\(t_0\)</span> to ray exit <span
+class="math inline">\(t_1\)</span> is divided into <span
+class="math inline">\(N\)</span> segments of step size <span
+class="math inline">\(ds = (t_1 - t_0) / N\)</span>.</p>
+<p>For each step <span class="math inline">\(i\)</span>:</p>
+<ol type="1">
+<li>Calculate the mid-point parameter: <span class="math inline">\(t =
+t_0 + (i + 0.5) \cdot ds\)</span></li>
+<li>Compute the position: <span class="math inline">\(\mathbf{x} =
+\mathbf{o} + t\mathbf{d}\)</span></li>
+<li>Evaluate altitude: <span class="math inline">\(h = \|\mathbf{x} -
+\mathbf{C}\| - R_{p}\)</span></li>
+<li>Accumulate densities multiplied by segment length <span
+class="math inline">\(ds\)</span>.</li>
+</ol>
+<h3 id="glsl-implementation">GLSL Implementation</h3>
+<p>The following function evaluates the integrated optical depth along a
+segment through the atmosphere:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Returns integrated optical depth for Rayleigh, Mie, and Ozone layers</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">integrateOpticalDepth</span><span class="op">(</span><span class="dt">vec3</span> rayOrigin<span class="op">,</span> <span class="dt">vec3</span> rayDir<span class="op">,</span> <span class="dt">float</span> t0<span class="op">,</span> <span class="dt">float</span> t1<span class="op">,</span> <span class="dt">vec3</span> planetCenter<span class="op">,</span> <span class="dt">float</span> planetRadius<span class="op">,</span> <span class="dt">int</span> sampleCount<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> stepSize <span class="op">=</span> <span class="op">(</span>t1 <span class="op">-</span> t0<span class="op">)</span> <span class="op">/</span> <span class="dt">float</span><span class="op">(</span>sampleCount<span class="op">);</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> opticalDepthAccum <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">);</span> <span class="co">// x: Rayleigh, y: Mie, z: Ozone</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> sampleCount<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> t <span class="op">=</span> t0 <span class="op">+</span> <span class="op">(</span><span class="dt">float</span><span class="op">(</span>i<span class="op">)</span> <span class="op">+</span> <span class="fl">0.5</span><span class="op">)</span> <span class="op">*</span> stepSize<span class="op">;</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">vec3</span> samplePos <span class="op">=</span> rayOrigin <span class="op">+</span> rayDir <span class="op">*</span> t<span class="op">;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>        <span class="dt">float</span> altitude <span class="op">=</span> <span class="bu">length</span><span class="op">(</span>samplePos <span class="op">-</span> planetCenter<span class="op">)</span> <span class="op">-</span> planetRadius<span class="op">;</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Skip samples that dip below terrain/sea level</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> <span class="op">(</span>altitude <span class="op">&lt;</span> <span class="fl">0.0</span><span class="op">)</span> <span class="kw">continue</span><span class="op">;</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        DensitySample density <span class="op">=</span> <span class="fu">sampleDensities</span><span class="op">(</span>altitude<span class="op">);</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        opticalDepthAccum<span class="op">.</span><span class="fu">x</span> <span class="op">+=</span> density<span class="op">.</span><span class="fu">rayleigh</span> <span class="op">*</span> stepSize<span class="op">;</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        opticalDepthAccum<span class="op">.</span><span class="fu">y</span> <span class="op">+=</span> density<span class="op">.</span><span class="fu">mie</span> <span class="op">*</span> stepSize<span class="op">;</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        opticalDepthAccum<span class="op">.</span><span class="fu">z</span> <span class="op">+=</span> density<span class="op">.</span><span class="fu">ozone</span> <span class="op">*</span> stepSize<span class="op">;</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> opticalDepthAccum<span class="op">;</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="transmittance-calculation">Transmittance Calculation</h3>
+<p>Once the optical depth vector <span
+class="math inline">\(\boldsymbol{\tau} = (\tau_R, \tau_M,
+\tau_O)\)</span> is integrated, the total transmittance <span
+class="math inline">\(T\)</span> across the path is computed by applying
+the extinction cross-sections:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> <span class="fu">computeTransmittance</span><span class="op">(</span><span class="dt">vec3</span> opticalDepth<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">vec3</span> BETA_RAYLEIGH <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">5.802</span><span class="op">,</span> <span class="fl">13.558</span><span class="op">,</span> <span class="fl">33.100</span><span class="op">)</span> <span class="op">*</span> <span class="fl">1e-6</span><span class="op">;</span> <span class="co">// m^-1</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">vec3</span> BETA_MIE      <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">3.996</span><span class="op">,</span> <span class="fl">3.996</span><span class="op">,</span> <span class="fl">3.996</span><span class="op">)</span> <span class="op">*</span> <span class="fl">1e-6</span><span class="op">;</span>   <span class="co">// m^-1</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">const</span> <span class="dt">vec3</span> BETA_OZONE    <span class="op">=</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.650</span><span class="op">,</span> <span class="fl">1.881</span><span class="op">,</span> <span class="fl">0.085</span><span class="op">)</span> <span class="op">*</span> <span class="fl">1e-6</span><span class="op">;</span>   <span class="co">// m^-1</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">vec3</span> extinction <span class="op">=</span> BETA_RAYLEIGH <span class="op">*</span> opticalDepth<span class="op">.</span><span class="fu">x</span> </span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>                    <span class="op">+</span> BETA_MIE      <span class="op">*</span> opticalDepth<span class="op">.</span><span class="fu">y</span> </span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>                    <span class="op">+</span> BETA_OZONE    <span class="op">*</span> opticalDepth<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="bu">exp</span><span class="op">(-</span>extinction<span class="op">);</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This transmittance term is evaluated along both the primary view ray
+and secondary rays cast toward the directional light source at each step
+during full atmospheric scattering passes, accurately preserving the
+spherical curvature of the planet.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

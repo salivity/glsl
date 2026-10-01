@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How gl_TessLevelInner Controls GLSL Tessellation Density - glsl</title>
+    <meta name="description" content="This article explains how the built-in glTessLevelInner array governs interior mesh subdivision in OpenGL Shading Language (GLSL). It details the array's structure within the Tessellation Control Shader (TCS), how its floating-point values determine the">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-gl-tess-level-inner-controls-glsl-tessellation-density">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How gl_TessLevelInner Controls GLSL Tessellation Density - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-gl-tess-level-inner-controls-glsl-tessellation-density" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the built-in glTessLevelInner array governs interior mesh subdivision in OpenGL Shading Language (GLSL). It details the array's structure within the Tessellation Control Shader (TCS), how its floating-point values determine the" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-gl_tesslevelinner-controls-glsl-tessellation-density">How
+gl_TessLevelInner Controls GLSL Tessellation Density</h1>
+<p>This article explains how the built-in <code>gl_TessLevelInner</code>
+array governs interior mesh subdivision in OpenGL Shading Language
+(GLSL). It details the array's structure within the Tessellation Control
+Shader (TCS), how its floating-point values determine the density of
+internal vertices across quad and triangle patch primitives, and how it
+interacts with different primitive spacing modes in the tessellation
+pipeline.</p>
+<h3 id="the-role-of-gl_tesslevelinner">The Role of
+gl_TessLevelInner</h3>
+<p>In the GLSL Tessellation Control Shader (TCS),
+<code>gl_TessLevelInner</code> is a built-in output array defined
+as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">patch</span> <span class="dt">out</span> <span class="dt">float</span> <span class="bu">gl_TessLevelInner</span><span class="op">[</span><span class="dv">2</span><span class="op">];</span></span></code></pre></div>
+<p>While <code>gl_TessLevelOuter</code> determines how many segments are
+generated along the perimeter edges of an input patch,
+<code>gl_TessLevelInner</code> dictates how the interior region of that
+patch is subdivided. The fixed-function primitive generator uses these
+inner levels to populate vertices inside the patch, bridging the
+internal mesh structure to the outer perimeter edges.</p>
+<h3 id="behavior-across-patch-types">Behavior Across Patch Types</h3>
+<p>The exact interpretation of <code>gl_TessLevelInner</code> depends
+directly on the abstract patch domain declared in the Tessellation
+Evaluation Shader (TES)—specifically <code>quads</code>,
+<code>triangles</code>, or <code>isolines</code>.</p>
+<h4 id="1-quad-domain-quads">1. Quad Domain (<code>quads</code>)</h4>
+<p>For quad patches, the interior is subdivided across a two-dimensional
+grid, utilizing both elements of the array:</p>
+<ul>
+<li><strong><code>gl_TessLevelInner[0]</code></strong>: Determines the
+tessellation density along the horizontal axis (the <span
+class="math inline">\(u\)</span>-direction). It sets how many
+subdivisions exist between the left and right boundary edges.</li>
+<li><strong><code>gl_TessLevelInner[1]</code></strong>: Determines the
+tessellation density along the vertical axis (the <span
+class="math inline">\(v\)</span>-direction). It sets how many
+subdivisions exist between the top and bottom boundary edges.</li>
+</ul>
+<p>The tessellation generator creates an internal rectangular grid based
+on these two values and automatically generates triangle strips
+connecting the inner grid points to the outer boundary vertices defined
+by <code>gl_TessLevelOuter</code>.</p>
+<h4 id="2-triangle-domain-triangles">2. Triangle Domain
+(<code>triangles</code>)</h4>
+<p>For triangular patches, the interior is subdivided using concentric
+triangular rings:</p>
+<ul>
+<li><strong><code>gl_TessLevelInner[0]</code></strong>: Specifies the
+subdivision density for the entire interior. This value controls the
+number of nested concentric triangles generated between the outer
+boundary and the patch's centroid.</li>
+<li><strong><code>gl_TessLevelInner[1]</code></strong>: Completely
+ignored for triangular patches.</li>
+</ul>
+<p>When <code>gl_TessLevelInner[0]</code> is equal to 1, the patch has
+no concentric inner triangles, and the outer edges connect directly to a
+single interior point or form a minimal triangulation. As the value
+increases, more nested triangular rings are formed, creating a higher
+density of internal polygons.</p>
+<h4 id="3-isoline-domain-isolines">3. Isoline Domain
+(<code>isolines</code>)</h4>
+<p>For isoline patches, <code>gl_TessLevelInner</code> is entirely
+unused. The primitive generator only evaluates
+<code>gl_TessLevelOuter[0]</code> (the number of lines) and
+<code>gl_TessLevelOuter[1]</code> (the number of segments per line).
+Setting values in <code>gl_TessLevelInner</code> has no effect on
+isolines.</p>
+<h3 id="culling-and-primitive-spacing">Culling and Primitive
+Spacing</h3>
+<p>The floating-point values assigned to <code>gl_TessLevelInner</code>
+interact directly with edge culling and spacing modes:</p>
+<ul>
+<li><strong>Patch Discarding:</strong> If any value in
+<code>gl_TessLevelInner</code> (or <code>gl_TessLevelOuter</code>)
+evaluates to less than or equal to zero (or NaN), the primitive
+generator discards the patch completely before it reaches the
+Tessellation Evaluation Shader.</li>
+<li><strong>Spacing Qualifiers:</strong> The primitive generator
+processes inner levels according to the spacing mode declared in the
+TES:
+<ul>
+<li><code>equal_spacing</code>: The inner level is clamped to the range
+<span class="math inline">\([1,
+\text{GL\_MAX\_TESS\_GEN\_LEVEL}]\)</span> and rounded up to the nearest
+integer.</li>
+<li><code>fractional_even_spacing</code>: Clamped to <span
+class="math inline">\([2, \text{GL\_MAX\_TESS\_GEN\_LEVEL}]\)</span> and
+rounded up to the next even integer, with segments scaling smoothly as
+the fractional value changes.</li>
+<li><code>fractional_odd_spacing</code>: Clamped to <span
+class="math inline">\([1, \text{GL\_MAX\_TESS\_GEN\_LEVEL} - 1]\)</span>
+and rounded up to the next odd integer, allowing smooth dynamic
+transitions between levels of detail without mesh popping.</li>
+</ul></li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

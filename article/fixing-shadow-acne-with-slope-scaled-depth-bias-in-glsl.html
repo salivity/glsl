@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fixing Shadow Acne with Slope-Scaled Depth Bias in GLSL - glsl</title>
+    <meta name="description" content="Shadow acne is a common visual artifact in shadow mapping caused by depth-buffer quantization and surface orientation, leading to false self-shadowing patterns across surfaces. This article explains the primary causes of shadow acne, why simple constant">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/fixing-shadow-acne-with-slope-scaled-depth-bias-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Fixing Shadow Acne with Slope-Scaled Depth Bias in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/fixing-shadow-acne-with-slope-scaled-depth-bias-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Shadow acne is a common visual artifact in shadow mapping caused by depth-buffer quantization and surface orientation, leading to false self-shadowing patterns across surfaces. This article explains the primary causes of shadow acne, why simple constant" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="fixing-shadow-acne-with-slope-scaled-depth-bias-in-glsl">Fixing
+Shadow Acne with Slope-Scaled Depth Bias in GLSL</h1>
+<p>Shadow acne is a common visual artifact in shadow mapping caused by
+depth-buffer quantization and surface orientation, leading to false
+self-shadowing patterns across surfaces. This article explains the
+primary causes of shadow acne, why simple constant biasing often fails,
+and how to implement slope-scaled depth bias directly within a GLSL
+fragment shader to maintain clean shadows without introducing detachment
+artifacts.</p>
+<h2 id="what-causes-shadow-acne">What Causes Shadow Acne?</h2>
+<p>Shadow acne appears as alternating dark and light bands across
+surfaces that should be smoothly illuminated. It is primarily caused by
+two issues:</p>
+<ol type="1">
+<li><strong>Resolution and Quantization:</strong> A shadow map
+discretizes continuous 3D space into a grid of texels, where each texel
+stores a single scalar depth value. When scene fragments are projected
+into shadow map space, multiple fragments usually map to the same shadow
+map texel.</li>
+<li><strong>Surface Slope:</strong> When a surface is angled relative to
+the light direction, the true depth varies continuously across the area
+represented by a single shadow map texel. Because the shadow map only
+records depth at the center of the texel, fragments closer to the light
+than the texel center pass the depth test, while fragments further away
+fail it. The fragments that fail the test consider themselves occluded
+by their own surface, generating false self-shadowing (acne).</li>
+</ol>
+<h2 id="constant-bias-vs-slope-scaled-bias">Constant Bias vs.
+Slope-Scaled Bias</h2>
+<p>The traditional fix is adding a small depth offset (bias) during the
+shadow depth comparison:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> shadow <span class="op">=</span> currentDepth <span class="op">-</span> bias <span class="op">&gt;</span> sampledDepth <span class="op">?</span> <span class="fl">1.0</span> <span class="op">:</span> <span class="fl">0.0</span><span class="op">;</span></span></code></pre></div>
+<p>A <strong>constant bias</strong> applies the same offset regardless
+of surface orientation. If the constant bias is too small, acne persists
+on steep surfaces. If it is increased enough to fix steep angles, it
+introduces "Peter Panning"—an artifact where shadows detach from the
+caster because the bias pushes the shadow receiver too far back.</p>
+<p>A <strong>slope-scaled bias</strong> solves this trade-off by scaling
+the offset based on the slope of the surface relative to the incoming
+light ray. Surfaces perpendicular to the light require almost no bias,
+while surfaces nearly parallel to the light receive a larger bias.</p>
+<h2 id="implementing-slope-scaled-depth-bias-in-glsl">Implementing
+Slope-Scaled Depth Bias in GLSL</h2>
+<p>Slope can be evaluated geometrically using the dot product between
+the normalized surface normal (<span
+class="math inline">\(\mathbf{N}\)</span>) and the normalized light
+direction (<span class="math inline">\(\mathbf{L}\)</span>).</p>
+<p>When <span class="math inline">\(\mathbf{N} \cdot \mathbf{L} \approx
+1\)</span>, the surface directly faces the light, requiring minimal
+bias. As <span class="math inline">\(\mathbf{N} \cdot
+\mathbf{L}\)</span> approaches 0, the angle between the surface and
+light increases, requiring a larger bias.</p>
+<h3 id="1-simple-dot-product-bias">1. Simple Dot-Product Bias</h3>
+<p>A robust and lightweight approximation scales the bias linearly with
+the inclination:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// In your lighting/shadow calculation pass:</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> normal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>v_Normal<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> lightDir <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>u_LightPos <span class="op">-</span> v_FragPos<span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Calculate bias based on surface slope</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> minBias <span class="op">=</span> <span class="fl">0.0005</span><span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> maxBias <span class="op">=</span> <span class="fl">0.005</span><span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> bias <span class="op">=</span> <span class="bu">max</span><span class="op">(</span>maxBias <span class="op">*</span> <span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> <span class="bu">dot</span><span class="op">(</span>normal<span class="op">,</span> lightDir<span class="op">)),</span> minBias<span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co">// Shadow comparison</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> currentDepth <span class="op">=</span> projCoords<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> shadow <span class="op">=</span> <span class="op">(</span>currentDepth <span class="op">-</span> bias <span class="op">&gt;</span> sampledDepth<span class="op">)</span> <span class="op">?</span> <span class="fl">1.0</span> <span class="op">:</span> <span class="fl">0.0</span><span class="op">;</span></span></code></pre></div>
+<h3 id="2-trigonometric-slope-scaling">2. Trigonometric Slope
+Scaling</h3>
+<p>For a physically accurate representation of the slope, use the
+tangent of the angle between the normal and the light vector (<span
+class="math inline">\(\tan(\theta) =
+\frac{\sin(\theta)}{\cos(\theta)}\)</span>):</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> normal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>v_Normal<span class="op">);</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">vec3</span> lightDir <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span>u_LightPos <span class="op">-</span> v_FragPos<span class="op">);</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> cosTheta <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span><span class="bu">dot</span><span class="op">(</span>normal<span class="op">,</span> lightDir<span class="op">),</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">);</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co">// tan(theta) = sqrt(1 - cos^2(theta)) / cos(theta)</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> sinTheta <span class="op">=</span> <span class="bu">sqrt</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">-</span> cosTheta <span class="op">*</span> cosTheta<span class="op">);</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> tanTheta <span class="op">=</span> sinTheta <span class="op">/</span> <span class="bu">max</span><span class="op">(</span>cosTheta<span class="op">,</span> <span class="fl">0.0001</span><span class="op">);</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Scale a base factor by the tangent of the surface angle</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> baseFactor <span class="op">=</span> <span class="fl">0.0005</span><span class="op">;</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> bias <span class="op">=</span> <span class="bu">clamp</span><span class="op">(</span>baseFactor <span class="op">*</span> tanTheta<span class="op">,</span> <span class="fl">0.0005</span><span class="op">,</span> <span class="fl">0.01</span><span class="op">);</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> currentDepth <span class="op">=</span> projCoords<span class="op">.</span><span class="fu">z</span><span class="op">;</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="dt">float</span> shadow <span class="op">=</span> <span class="op">(</span>currentDepth <span class="op">-</span> bias <span class="op">&gt;</span> sampledDepth<span class="op">)</span> <span class="op">?</span> <span class="fl">1.0</span> <span class="op">:</span> <span class="fl">0.0</span><span class="op">;</span></span></code></pre></div>
+<p>Clamping the maximum bias prevents extreme offsets at grazing angles
+(<span class="math inline">\(\mathbf{N} \cdot \mathbf{L} \to
+0\)</span>), which controls Peter Panning while completely eliminating
+shadow acne on curved and slanted geometry.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

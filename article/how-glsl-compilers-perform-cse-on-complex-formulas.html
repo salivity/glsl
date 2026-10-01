@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GLSL Compilers Perform CSE on Complex Formulas - glsl</title>
+    <meta name="description" content="This article examines how modern GLSL (OpenGL Shading Language) compilers detect and eliminate redundant calculations in complex mathematical expressions. It details the step-by-step optimization pipeline, covering parsing into Intermediate Representatio">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-glsl-compilers-perform-cse-on-complex-formulas">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GLSL Compilers Perform CSE on Complex Formulas - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-glsl-compilers-perform-cse-on-complex-formulas" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article examines how modern GLSL (OpenGL Shading Language) compilers detect and eliminate redundant calculations in complex mathematical expressions. It details the step-by-step optimization pipeline, covering parsing into Intermediate Representatio" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-glsl-compilers-perform-cse-on-complex-formulas">How GLSL
+Compilers Perform CSE on Complex Formulas</h1>
+<p>This article examines how modern GLSL (OpenGL Shading Language)
+compilers detect and eliminate redundant calculations in complex
+mathematical expressions. It details the step-by-step optimization
+pipeline, covering parsing into Intermediate Representation (IR), Static
+Single Assignment (SSA) form, expression hashing via Global Value
+Numbering (GVN), control-flow validation, and the architectural
+trade-offs between register allocation and recomputation on GPU
+hardware.</p>
+<h3 id="1-translation-to-ssa-intermediate-representation">1. Translation
+to SSA Intermediate Representation</h3>
+<p>A GLSL compiler does not execute optimizations directly on raw GLSL
+source text. Instead, the front-end parses the code into an Abstract
+Syntax Tree (AST) and lowers it into a lower-level Intermediate
+Representation (IR), such as SPIR-V or a driver-internal IR (e.g.,
+Mesa's NIR or LLVM-based IRs in proprietary drivers).</p>
+<p>During this lowering, code is converted into Static Single Assignment
+(SSA) form. Under SSA, every variable is assigned exactly once. This
+eliminates variable shadowing and reassignments, turning mutable code
+into a directed acyclic graph (DAG) of pure operations where data
+dependencies become mathematically transparent.</p>
+<h3 id="2-canonicalization-of-complex-math">2. Canonicalization of
+Complex Math</h3>
+<p>Before identical operations can be identified, the compiler
+normalizes expressions into canonical forms. Complex formulas often
+contain mathematically equivalent expressions written in different ways.
+Canonicalization handles:</p>
+<ul>
+<li><strong>Commutativity:</strong> Ensuring <code>a + b</code> and
+<code>b + a</code>, or <code>x * y</code> and <code>y * x</code>, share
+identical operand ordering (typically sorted by unique SSA IDs).</li>
+<li><strong>Associativity and Constant Folding:</strong> Grouping
+constants together so that <code>(x + 2.0) + 3.0</code> simplifies to
+<code>x + 5.0</code>.</li>
+<li><strong>Algebraic Equivalences:</strong> Replacing negations or
+subtractions with standard representations (e.g., converting
+<code>a - b</code> to <code>a + (-b)</code>).</li>
+</ul>
+<h3 id="3-scalarization-and-swizzle-unpacking">3. Scalarization and
+Swizzle Unpacking</h3>
+<p>GLSL heavily relies on vector types (<code>vec2</code>,
+<code>vec3</code>, <code>vec4</code>) and matrix operations.
+Redundancies often hide across vector components—for example, computing
+<code>dot(v.xy, v.xy)</code> alongside a separate calculation of
+<code>v.x * v.x</code>.</p>
+<p>Modern GPU compilers frequently perform
+<strong>scalarization</strong>, breaking vectors into individual scalar
+SSA operations. The compiler tracks individual components and swizzles,
+allowing it to detect common subexpressions embedded within different
+vector operations. Once decomposed, identical scalar sub-components are
+matched even if they originated from different vector lanes.</p>
+<h3 id="4-global-value-numbering-gvn">4. Global Value Numbering
+(GVN)</h3>
+<p>The core engine for Common Subexpression Elimination (CSE) in complex
+formulas is Global Value Numbering (GVN):</p>
+<ol type="1">
+<li><strong>Hash Lookup:</strong> As the compiler traverses the SSA
+graph, it computes a deterministic hash for each instruction based on
+the opcode and the value numbers of its inputs.</li>
+<li><strong>Lookup Table:</strong> The compiler checks a scoped lookup
+table. If a matching hash exists, the current operation is
+redundant.</li>
+<li><strong>Replacement:</strong> The redundant expression is deleted,
+and all subsequent instructions referencing its result are updated to
+point to the previously computed value.</li>
+</ol>
+<p>For transcendental functions (<code>sin</code>, <code>cos</code>,
+<code>pow</code>, <code>sqrt</code>), the compiler matches the operation
+directly provided the fast-math flags allow it (i.e., when strict
+IEEE-754 precision constraints are relaxed, which is standard in
+graphics rendering).</p>
+<h3 id="5-control-flow-and-dominance-trees">5. Control Flow and
+Dominance Trees</h3>
+<p>In complex shaders containing branches and loops, subexpressions can
+only be eliminated if the earlier computation is guaranteed to execute
+before the later one. The compiler builds a <strong>Dominator
+Tree</strong> from the Control Flow Graph (CFG):</p>
+<ul>
+<li>A basic block <span class="math inline">\(A\)</span> dominates block
+<span class="math inline">\(B\)</span> if every execution path to <span
+class="math inline">\(B\)</span> must pass through <span
+class="math inline">\(A\)</span>.</li>
+<li>Local CSE eliminates duplicates within the same basic block.</li>
+<li>Global CSE eliminates duplicates across different blocks only if the
+initial computation dominates all subsequent uses.</li>
+<li>If identical computations occur in parallel branches, the compiler
+may hoist the common subexpression above the branch into an immediate
+dominator block.</li>
+</ul>
+<h3
+id="6-the-hardware-balance-register-pressure-vs-rematerialization">6.
+The Hardware Balance: Register Pressure vs. Rematerialization</h3>
+<p>Eliminating a common subexpression requires storing its result in a
+register until its last use. In GPU architectures, high register usage
+directly limits <strong>occupancy</strong>—the number of active warps or
+wavefronts a Compute Unit can execute simultaneously to hide memory
+latency.</p>
+<p>If an expression is cheap to compute (such as a simple fused
+multiply-add, <code>fma</code>) and keeping its value alive would extend
+its live range across hundreds of instructions, the compiler may perform
+<strong>rematerialization</strong> instead. In these cases, the compiler
+deliberately bypasses CSE or re-evaluates the expression locally to keep
+register pressure low and preserve overall GPU throughput.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

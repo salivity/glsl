@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Is the Difference Between in, out, and inout in GLSL? - glsl</title>
+    <meta name="description" content="In the OpenGL Shading Language (GLSL), function parameters use storage qualifiers—specifically in, out, and inout—to control how data flows between the caller and the function body. Unlike languages like C++ that use pointers or memory references, GL">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/what-is-the-difference-between-in-out-and-inout-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="What Is the Difference Between in, out, and inout in GLSL? - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/what-is-the-difference-between-in-out-and-inout-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In the OpenGL Shading Language (GLSL), function parameters use storage qualifiers—specifically in, out, and inout—to control how data flows between the caller and the function body. Unlike languages like C++ that use pointers or memory references, GL" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="what-is-the-difference-between-in-out-and-inout-in-glsl">What Is
+the Difference Between in, out, and inout in GLSL?</h1>
+<p>In the OpenGL Shading Language (GLSL), function parameters use
+storage qualifiers—specifically <code>in</code>, <code>out</code>, and
+<code>inout</code>—to control how data flows between the caller and the
+function body. Unlike languages like C++ that use pointers or memory
+references, GLSL relies on value-copy semantics to pass data into and
+out of functions. This guide explains the distinct behavior, lifecycle,
+and use cases of each parameter qualifier so you can write predictable,
+high-performance shader routines.</p>
+<h2 id="the-copy-in--copy-out-semantic-model">The Copy-In / Copy-Out
+Semantic Model</h2>
+<p>GLSL executes across highly parallel GPU hardware that typically does
+not support traditional memory address dereferencing or pointer
+arithmetic. To maintain performance and safety, GLSL functions use a
+<strong>copy-in / copy-out</strong> execution model:</p>
+<ul>
+<li><strong>Copy-in:</strong> Values from the caller's arguments are
+copied into local parameter variables when the function begins.</li>
+<li><strong>Copy-out:</strong> Values from the local parameter variables
+are copied back to the caller's arguments right before the function
+returns.</li>
+</ul>
+<p>The qualifiers determine whether a parameter undergoes copy-in,
+copy-out, or both.</p>
+<h2 id="the-in-qualifier-pass-by-value--read-only-input">The
+<code>in</code> Qualifier (Pass by Value / Read-Only Input)</h2>
+<p>The <code>in</code> qualifier signifies that a parameter is strictly
+an input to the function. It is copied into the function scope at
+invocation time.</p>
+<ul>
+<li><strong>Default behavior:</strong> If you omit a qualifier entirely
+(e.g., <code>void compute(float val)</code>), GLSL automatically treats
+it as <code>in</code>.</li>
+<li><strong>Caller safety:</strong> You can modify the variable inside
+the function body, but any changes remain local to that function and
+will not reflect in the caller's original variable.</li>
+<li><strong>Requirements:</strong> The caller must pass an initialized
+value or expression (such as a constant or the result of another
+operation).</li>
+</ul>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">computeBrightness</span><span class="op">(</span><span class="dt">in</span> <span class="dt">vec3</span> color<span class="op">,</span> <span class="dt">in</span> <span class="dt">float</span> factor<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Modifications to &#39;color&#39; or &#39;factor&#39; do not alter the caller&#39;s variables</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    color <span class="op">*=</span> factor<span class="op">;</span> </span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="the-out-qualifier-write-only-output">The <code>out</code>
+Qualifier (Write-Only Output)</h2>
+<p>The <code>out</code> qualifier defines a parameter used to return
+data back to the calling scope. It undergoes only the copy-out step.</p>
+<ul>
+<li><strong>Uninitialized upon entry:</strong> When the function begins,
+the <code>out</code> variable has an undefined/uninitialized value
+within the function. You should not read from an <code>out</code>
+parameter before writing to it.</li>
+<li><strong>Caller modification:</strong> Whatever value is written to
+the parameter during the function execution is written back to the
+caller's variable upon exit.</li>
+<li><strong>Requirements:</strong> The caller must provide a writable
+l-value (e.g., an existing variable), not a literal constant or
+expression.</li>
+</ul>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">getViewportBounds</span><span class="op">(</span><span class="dt">out</span> <span class="dt">vec2</span> minBound<span class="op">,</span> <span class="dt">out</span> <span class="dt">vec2</span> maxBound<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Values are written and copied back to the caller upon return</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    minBound <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    maxBound <span class="op">=</span> <span class="dt">vec2</span><span class="op">(</span><span class="fl">1920.0</span><span class="op">,</span> <span class="fl">1080.0</span><span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="the-inout-qualifier-read-write-input-and-output">The
+<code>inout</code> Qualifier (Read-Write Input and Output)</h2>
+<p>The <code>inout</code> qualifier combines the behavior of both
+<code>in</code> and <code>out</code>. It performs both the copy-in upon
+entry and the copy-out upon exit.</p>
+<ul>
+<li><strong>Read and write access:</strong> The parameter receives the
+initial value from the caller, can be read and mutated during function
+execution, and passes the updated value back to the caller when
+finished.</li>
+<li><strong>Use case:</strong> Ideal for in-place modifications,
+iterative operations, stateful updates, or accumulator routines.</li>
+<li><strong>Requirements:</strong> The caller must provide an
+initialized, writable l-value variable.</li>
+</ul>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">applyVignette</span><span class="op">(</span><span class="dt">inout</span> <span class="dt">vec3</span> color<span class="op">,</span> <span class="dt">in</span> <span class="dt">float</span> radius<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Reads the incoming color value and updates it in-place</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    color <span class="op">*=</span> <span class="bu">smoothstep</span><span class="op">(</span><span class="fl">0.8</span><span class="op">,</span> <span class="fl">0.2</span><span class="op">,</span> radius<span class="op">);</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="qualifier-comparison">Qualifier Comparison</h2>
+<table>
+<thead>
+<tr>
+<th>Qualifier</th>
+<th>Direction</th>
+<th>Initial Value on Entry</th>
+<th>Written Back to Caller</th>
+<th>Default Qualifier</th>
+<th>Allowed Arguments</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>in</code></td>
+<td>Caller <span class="math inline">\(\rightarrow\)</span>
+Function</td>
+<td>Value of caller's argument</td>
+<td>No</td>
+<td>Yes</td>
+<td>Variables, constants, expressions</td>
+</tr>
+<tr>
+<td><code>out</code></td>
+<td>Function <span class="math inline">\(\rightarrow\)</span>
+Caller</td>
+<td>Undefined / Uninitialized</td>
+<td>Yes</td>
+<td>No</td>
+<td>Writable variables (l-values) only</td>
+</tr>
+<tr>
+<td><code>inout</code></td>
+<td>Caller <span class="math inline">\(\leftrightarrow\)</span>
+Function</td>
+<td>Value of caller's argument</td>
+<td>Yes</td>
+<td>No</td>
+<td>Writable variables (l-values) only</td>
+</tr>
+</tbody>
+</table>
+<h2 id="practical-code-example">Practical Code Example</h2>
+<p>The following shader function demonstrates all three qualifiers
+working together to process geometric attributes:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">transformPoint</span><span class="op">(</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">in</span> <span class="dt">mat4</span> modelMatrix<span class="op">,</span>      <span class="co">// Read-only input transformation</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">inout</span> <span class="dt">vec4</span> position<span class="op">,</span>      <span class="co">// Transformed in-place</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">out</span> <span class="dt">vec3</span> surfaceNormal    <span class="co">// Computed and exported to caller</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// position is read (in) and modified (out)</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    position <span class="op">=</span> modelMatrix <span class="op">*</span> position<span class="op">;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// surfaceNormal is purely calculated and exported (out)</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    surfaceNormal <span class="op">=</span> <span class="bu">normalize</span><span class="op">(</span><span class="dt">mat3</span><span class="op">(</span>modelMatrix<span class="op">)</span> <span class="op">*</span> <span class="dt">vec3</span><span class="op">(</span><span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">));</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Understanding these qualifiers ensures correct data propagation
+across shader pipelines while preventing unexpected uninitialized reads
+or lost state updates during GPU execution.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

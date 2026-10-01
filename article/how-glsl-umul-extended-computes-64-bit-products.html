@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GLSL umulExtended Computes 64-Bit Products - glsl</title>
+    <meta name="description" content="The GLSL built-in function umulExtended calculates the full 64-bit result of multiplying two 32-bit unsigned integers without truncation. While standard GLSL multiplication drops the upper bits to return a 32-bit value, umulExtended retains the entire ma">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-glsl-umul-extended-computes-64-bit-products">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GLSL umulExtended Computes 64-Bit Products - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-glsl-umul-extended-computes-64-bit-products" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="The GLSL built-in function umulExtended calculates the full 64-bit result of multiplying two 32-bit unsigned integers without truncation. While standard GLSL multiplication drops the upper bits to return a 32-bit value, umulExtended retains the entire ma" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-glsl-umulextended-computes-64-bit-products">How GLSL
+umulExtended Computes 64-Bit Products</h1>
+<p>The GLSL built-in function <code>umulExtended</code> calculates the
+full 64-bit result of multiplying two 32-bit unsigned integers without
+truncation. While standard GLSL multiplication drops the upper bits to
+return a 32-bit value, <code>umulExtended</code> retains the entire
+mathematical product by splitting it across two separate 32-bit output
+variables. This article covers the mathematical principles, function
+signature, and hardware-level execution that make this
+extended-precision operation possible.</p>
+<h3 id="function-signature-and-parameters">Function Signature and
+Parameters</h3>
+<p>The <code>umulExtended</code> function is defined in the OpenGL
+Shading Language as:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="bu">umulExtended</span><span class="op">(</span>genUType x<span class="op">,</span> genUType y<span class="op">,</span> <span class="dt">out</span> genUType msb<span class="op">,</span> <span class="dt">out</span> genUType lsb<span class="op">);</span></span></code></pre></div>
+<p>The parameters operate as follows:</p>
+<ul>
+<li><strong><code>x</code></strong>: The first 32-bit unsigned integer
+factor (scalar or vector).</li>
+<li><strong><code>y</code></strong>: The second 32-bit unsigned integer
+factor (scalar or vector).</li>
+<li><strong><code>msb</code></strong>: An output variable that receives
+the most significant 32 bits (bits 32 through 63) of the product.</li>
+<li><strong><code>lsb</code></strong>: An output variable that receives
+the least significant 32 bits (bits 0 through 31) of the product.</li>
+</ul>
+<p>Because GLSL types are vectorized, <code>genUType</code> can be a
+scalar <code>uint</code> or any vector type from <code>uvec2</code> to
+<code>uvec4</code>. When vectors are passed, the operation executes
+component-wise.</p>
+<h3 id="mathematical-representation">Mathematical Representation</h3>
+<p>Multiplying two maximum 32-bit unsigned integers (<span
+class="math inline">\(2^{32} - 1\)</span>) yields:</p>
+<p><span class="math display">\[(2^{32} - 1) \times (2^{32} - 1) =
+2^{64} - 2^{33} + 1\]</span></p>
+<p>This product requires up to 64 bits of storage. Standard
+multiplication in GLSL performs modular arithmetic (<span
+class="math inline">\(x \times y \pmod{2^{32}}\)</span>), which discards
+any overflow beyond bit 31.</p>
+<p><code>umulExtended</code> preserves the entire 64-bit product by
+representing the true value through the following identity:</p>
+<p><span class="math display">\[\text{Product} = (\text{msb} \times
+2^{32}) + \text{lsb}\]</span></p>
+<p>The <code>lsb</code> contains the standard lower 32 bits, while
+<code>msb</code> captures the overflow values shifted right by 32
+bits:</p>
+<ul>
+<li><strong><span class="math inline">\(\text{lsb} = (x \times y) \
+\&amp; \ \text{0xFFFFFFFF}\)</span></strong></li>
+<li><strong><span class="math inline">\(\text{msb} = (x \times y) \gg
+32\)</span></strong></li>
+</ul>
+<h3 id="hardware-execution">Hardware Execution</h3>
+<p>Rather than emulating a 64-bit operation through multiple arithmetic
+shifts and additions, modern GPU Arithmetic Logic Units (ALUs) natively
+support 32-bit wide multiplication.</p>
+<p>At the hardware instruction set architecture (ISA) level:</p>
+<ul>
+<li>Many GPU architectures feature instructions that write both the low
+and high 32-bit halves of a product into register pairs in a single or
+dual clock cycle.</li>
+<li>On architectures like NVIDIA (PTX), this maps to
+<code>mul.lo.u32</code> (low 32 bits) and <code>mul.hi.u32</code> (high
+32 bits), or <code>mul.wide.u32</code>, which directly outputs into a
+64-bit register pair.</li>
+<li>AMD architectures use equivalent vector ALU instructions such as
+<code>V_MUL_LO_U32</code> and <code>V_MUL_HI_U32</code>.</li>
+</ul>
+<p>The GLSL compiler recognizes <code>umulExtended</code> and directly
+emits these specialized ISA instructions, avoiding software-emulated
+multi-precision math.</p>
+<h3 id="glsl-usage-example">GLSL Usage Example</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450 core</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> a <span class="op">=</span> <span class="dv">3000000000</span>u<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> b <span class="op">=</span> <span class="dv">2000000000</span>u<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> highBits<span class="op">;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">uint</span> lowBits<span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Compute full 64-bit product: 6,000,000,000,000,000,000</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">umulExtended</span><span class="op">(</span>a<span class="op">,</span> b<span class="op">,</span> highBits<span class="op">,</span> lowBits<span class="op">);</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// highBits contains bits 32-63</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// lowBits contains bits 0-31</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By storing the result across two registers, <code>umulExtended</code>
+provides the necessary building block for implementing
+arbitrary-precision arithmetic, software-emulated 64-bit integer logic,
+and high-precision hashing algorithms directly in shader pipelines.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

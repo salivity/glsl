@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulating Radiative Heat Transfer with GLSL Compute Shaders - glsl</title>
+    <meta name="description" content="This article explores the end-to-end methodology for simulating radiative heat transfer across discretized surface meshes using OpenGL Shading Language (GLSL) compute shaders. It covers the mathematical formulation of radiative exchange based on enclosur">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/simulating-radiative-heat-transfer-with-glsl-compute-shaders">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Simulating Radiative Heat Transfer with GLSL Compute Shaders - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/simulating-radiative-heat-transfer-with-glsl-compute-shaders" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores the end-to-end methodology for simulating radiative heat transfer across discretized surface meshes using OpenGL Shading Language (GLSL) compute shaders. It covers the mathematical formulation of radiative exchange based on enclosur" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="simulating-radiative-heat-transfer-with-glsl-compute-shaders">Simulating
+Radiative Heat Transfer with GLSL Compute Shaders</h1>
+<p>This article explores the end-to-end methodology for simulating
+radiative heat transfer across discretized surface meshes using OpenGL
+Shading Language (GLSL) compute shaders. It covers the mathematical
+formulation of radiative exchange based on enclosure theory, the
+translation of surface mesh data into GPU-friendly buffers, parallel
+view factor calculation using ray-tracing techniques, and the iterative
+numerical solvers used to compute steady-state or transient temperature
+fields entirely on the GPU.</p>
+<h3 id="mathematical-formulation-of-surface-radiation">Mathematical
+Formulation of Surface Radiation</h3>
+<p>Radiative exchange between opaque, diffuse-gray surfaces is governed
+by enclosure theory and the Stefan-Boltzmann law. The surface mesh is
+discretized into <span class="math inline">\(N\)</span> planar elements
+(triangles or quadrilaterals). For each element <span
+class="math inline">\(i\)</span>, the radiosity <span
+class="math inline">\(J_i\)</span> (total radiative energy leaving the
+surface per unit area) is defined as:</p>
+<p><span class="math display">\[J_i = \epsilon_i \sigma T_i^4 + (1 -
+\epsilon_i) \sum_{j=1}^{N} F_{i \to j} J_j\]</span></p>
+<p>where <span class="math inline">\(\epsilon_i\)</span> is the surface
+emissivity, <span class="math inline">\(\sigma\)</span> is the
+Stefan-Boltzmann constant, <span class="math inline">\(T_i\)</span> is
+the absolute temperature, and <span class="math inline">\(F_{i \to
+j}\)</span> is the geometric view factor describing the fraction of
+diffuse radiation leaving element <span class="math inline">\(i\)</span>
+that directly intercepts element <span
+class="math inline">\(j\)</span>.</p>
+<p>The net radiative heat flux <span class="math inline">\(q_i\)</span>
+entering or leaving element <span class="math inline">\(i\)</span> with
+surface area <span class="math inline">\(A_i\)</span> is:</p>
+<p><span class="math display">\[q_i = \frac{\epsilon_i}{1 - \epsilon_i}
+(\sigma T_i^4 - J_i) = \sum_{j=1}^N F_{i \to j}(J_i - J_j)\]</span></p>
+<h3 id="gpu-data-representation">GPU Data Representation</h3>
+<p>Simulating this process in GLSL compute shaders requires organizing
+mesh geometry and thermodynamic properties into Shader Storage Buffer
+Objects (SSBOs).</p>
+<ol type="1">
+<li><strong>Element Geometry SSBO:</strong> Stores element centroids,
+surface normal vectors, and surface areas (<span
+class="math inline">\(A_i\)</span>).</li>
+<li><strong>Thermal State SSBOs:</strong> Two ping-pong buffers
+containing element temperatures (<span
+class="math inline">\(T_i\)</span>), radiosities (<span
+class="math inline">\(J_i\)</span>), and thermophysical properties
+(emissivity <span class="math inline">\(\epsilon_i\)</span>, heat
+capacity <span class="math inline">\(C_i\)</span>).</li>
+<li><strong>Spatial Acceleration SSBO:</strong> A flattened Bounding
+Volume Hierarchy (BVH) or uniform spatial grid used to resolve geometric
+occlusion during view factor computation.</li>
+</ol>
+<h3 id="view-factor-computation-in-glsl">View Factor Computation in
+GLSL</h3>
+<p>The most computationally demanding phase is calculating the view
+factor matrix <span class="math inline">\(F_{ij}\)</span>, which
+requires solving visibility and geometric configuration:</p>
+<p><span class="math display">\[F_{i \to j} = \frac{1}{A_i} \int_{A_i}
+\int_{A_j} \frac{\cos\theta_i \cos\theta_j}{\pi r^2} V_{ij} \, dA_j \,
+dA_i\]</span></p>
+<p>where <span class="math inline">\(r\)</span> is the distance between
+elements, <span class="math inline">\(\theta_i\)</span> and <span
+class="math inline">\(\theta_j\)</span> are the angles between the
+surface normals and the connecting vector, and <span
+class="math inline">\(V_{ij} \in \{0, 1\}\)</span> is a binary
+visibility function.</p>
+<p>Compute shaders evaluate this using one of two primary
+GPU-accelerated approaches:</p>
+<ul>
+<li><strong>Ray-Traced Visibility:</strong> For moderate mesh
+resolutions, each compute shader thread corresponds to a pair <span
+class="math inline">\((i, j)\)</span> or evaluates all <span
+class="math inline">\(j\)</span> elements for a single element <span
+class="math inline">\(i\)</span>. Threads calculate the differential
+view factor based on centroid distances and evaluate <span
+class="math inline">\(V_{ij}\)</span> by traversing the BVH stored in
+the spatial acceleration SSBO to detect intersecting occluders.</li>
+<li><strong>Hemicube Projection:</strong> For complex scenes where
+explicit pair-checking is too costly, each thread maps a virtual
+hemicube over an element's centroid. Surrounding primitives are
+projected onto the hemicube faces to aggregate incoming radiation
+weights without requiring explicit <span class="math inline">\(N \times
+N\)</span> matrix storage.</li>
+</ul>
+<h3 id="numerical-iteration-via-compute-passes">Numerical Iteration via
+Compute Passes</h3>
+<p>Once view factors (or direct radiative exchanges) are resolved, the
+nonlinear radiosity equations must be solved iteratively. This is
+structured as a sequence of compute shader dispatches:</p>
+<ol type="1">
+<li><strong>Radiosity Evaluation Pass:</strong> A compute shader
+calculates new radiosity values <span class="math inline">\(J_i\)</span>
+from current temperatures using a Jacobi iteration method. Because each
+element reads from the current read-state SSBO and writes to the
+write-state SSBO, race conditions are avoided across threads.</li>
+<li><strong>Transient Heat Equation Pass:</strong> If simulating
+time-dependent heat transfer, the net heat flux <span
+class="math inline">\(q_i\)</span> updates the element's temperature
+over a discrete time step <span class="math inline">\(\Delta
+t\)</span>:</li>
+</ol>
+<p><span class="math display">\[T_i^{t+\Delta t} = T_i^t + \frac{q_i
+A_i}{C_i} \Delta t\]</span></p>
+<ol start="3" type="1">
+<li><strong>Ping-Pong Buffer Swap:</strong> The application swaps the
+bindings for the read and write SSBOs, repeating the dispatch loop until
+convergence criteria (residual radiative tolerance) or the target
+simulation time is met.</li>
+</ol>
+<h3 id="performance-optimizations">Performance Optimizations</h3>
+<p>To handle fine surface meshes efficiently, modern GLSL
+implementations utilize:</p>
+<ul>
+<li><strong>Subgroup Intrinsics and Shared Memory:</strong> Groups of
+threads process nearby surface patches cooperatively, loading patch
+properties into <code>shared</code> memory to minimize global memory
+bandwidth saturation.</li>
+<li><strong>Cut-Off Thresholds and Clustering:</strong> Distant surface
+elements are grouped into low-resolution thermal clusters, and element
+pairs where the distance <span class="math inline">\(r\)</span> renders
+<span class="math inline">\(F_{ij} \approx 0\)</span> are culled early
+before executing BVH intersection tests.</li>
+<li><strong>Hardware Ray Tracing:</strong> In modern pipelines
+supporting GLSL ray query extensions (<code>GL_EXT_ray_query</code>),
+compute shaders utilize dedicated RT-cores for occlusion tests (<span
+class="math inline">\(V_{ij}\)</span>), accelerating visibility queries
+compared to software-based BVH traversals.</li>
+</ul></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

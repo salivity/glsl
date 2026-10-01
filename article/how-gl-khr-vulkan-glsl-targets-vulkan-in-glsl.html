@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How GL_KHR_vulkan_glsl Targets Vulkan in GLSL - glsl</title>
+    <meta name="description" content="This article explains how the GLKHRvulkanglsl preprocessor macro functions within the OpenGL Shading Language (GLSL) to target the Vulkan graphics API. When compiling shaders to SPIR-V for Vulkan, compilers automatically define this macro to enable Vulka">
+    <link rel="canonical" href="https://salivity.github.io/glsl/article/how-gl-khr-vulkan-glsl-targets-vulkan-in-glsl">
+    <link rel="search" type="application/opensearchdescription+xml" title="glsl" href="/glsl/opensearch.xml">
+    <link rel="icon" href="/glsl/favicon.ico">
+    <link rel="stylesheet" href="/glsl/css/style.css">
+    <link media="print" rel="stylesheet" href="/glsl/css/print.css">
+    <script src="/glsl/js/fuse.min.js"></script>
+    <script src="/glsl/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How GL_KHR_vulkan_glsl Targets Vulkan in GLSL - glsl" />
+    <meta property="og:url" content="https://salivity.github.io/glsl/article/how-gl-khr-vulkan-glsl-targets-vulkan-in-glsl" />
+    <meta property="og:image" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/glsl/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explains how the GLKHRvulkanglsl preprocessor macro functions within the OpenGL Shading Language (GLSL) to target the Vulkan graphics API. When compiling shaders to SPIR-V for Vulkan, compilers automatically define this macro to enable Vulka" />
+    <link rel="manifest" href="/glsl/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/glsl/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>glsl</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/glsl/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-gl_khr_vulkan_glsl-targets-vulkan-in-glsl">How
+GL_KHR_vulkan_glsl Targets Vulkan in GLSL</h1>
+<p>This article explains how the <code>GL_KHR_vulkan_glsl</code>
+preprocessor macro functions within the OpenGL Shading Language (GLSL)
+to target the Vulkan graphics API. When compiling shaders to SPIR-V for
+Vulkan, compilers automatically define this macro to enable
+Vulkan-specific syntax, semantics, and resource models while disabling
+legacy OpenGL constructs. Understanding this macro allows developers to
+write dual-compatible shader codebases that adapt cleanly between OpenGL
+and Vulkan environments.</p>
+<h3 id="the-role-of-the-preprocessor-macro">The Role of the Preprocessor
+Macro</h3>
+<p>When a shader compiler such as <code>glslangValidator</code> or
+<code>glslc</code> is configured to target Vulkan (typically via the
+<code>-V</code> or <code>--target-env=vulkan</code> flags), it
+implicitly sets the <code>GL_KHR_vulkan_glsl</code> preprocessor macro
+to an integer value of <code>100</code>. In addition to this macro,
+compilers commonly define the standard shorthand macro
+<code>VULKAN</code> with the value <code>100</code>.</p>
+<p>The presence of <code>GL_KHR_vulkan_glsl</code> informs the
+compilation pipeline that the shader must adhere to the rules defined in
+the <code>GL_KHR_vulkan_glsl</code> extension specification rather than
+traditional OpenGL GLSL specifications.</p>
+<h3 id="feature-adjustments-and-vulkan-syntax">Feature Adjustments and
+Vulkan Syntax</h3>
+<p>Defining this macro changes how the compiler parses resources and
+keywords:</p>
+<ul>
+<li><strong>Descriptor Sets:</strong> It enables the <code>set</code>
+layout qualifier, allowing constructs such as
+<code>layout(set = 0, binding = 0) uniform buffer</code>, which are
+fundamental to Vulkan’s descriptor set model but absent in core
+OpenGL.</li>
+<li><strong>Push Constants:</strong> It activates the
+<code>layout(push_constant)</code> layout identifier, enabling memory
+blocks to receive push constant data directly from Vulkan command
+buffers.</li>
+<li><strong>Subpass Inputs:</strong> It provides access to subpass input
+types (such as <code>subpassInput</code> and
+<code>subpassInputMS</code>) alongside their associated fetch functions
+for reading directly from attachments in a render pass.</li>
+<li><strong>Combined vs. Separate Samplers:</strong> It supports
+explicit separation of textures and samplers (<code>texture2D</code> and
+<code>sampler</code>) via Vulkan SPIR-V capabilities, distinct from
+combined image-samplers (<code>sampler2D</code>).</li>
+<li><strong>Removal of Incompatible Features:</strong> The compiler
+disables OpenGL-only conventions, such as default-block uniform
+variables without explicit bindings, atomic counter types, and specific
+fixed-function inputs.</li>
+</ul>
+<h3 id="conditional-compilation-example">Conditional Compilation
+Example</h3>
+<p>Developers leverage the macro to write shaders that compile
+seamlessly for both standard OpenGL and Vulkan targets using conditional
+compilation blocks:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode glsl"><code class="sourceCode glsl"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#version 450</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#if defined(GL_KHR_vulkan_glsl)</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Vulkan-specific resource binding</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">layout</span><span class="op">(</span>set <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> <span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> CameraData <span class="op">{</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        <span class="dt">mat4</span> viewProjection<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> camera<span class="op">;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="pp">#else</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Standard OpenGL resource binding</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">layout</span><span class="op">(</span><span class="dt">binding</span> <span class="op">=</span> <span class="dv">0</span><span class="op">)</span> <span class="kw">uniform</span> CameraData <span class="op">{</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="dt">mat4</span> viewProjection<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> camera<span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="pp">#endif</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">main</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Shared shader logic</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>By querying <code>#if defined(GL_KHR_vulkan_glsl)</code> or
+<code>#if defined(VULKAN)</code>, the preprocessor selectively includes
+API-specific qualifiers before the code is transformed into the final
+intermediate representation or driver-level assembly.</p></article>
+        <div id="comments-container"></div>
+        <script>
+            const utterancesScript = document.createElement('script');
+            utterancesScript.setAttribute('src', 'https://utteranc.es/client.js');
+            utterancesScript.setAttribute('repo', 'salivity/glsl'); 
+            utterancesScript.setAttribute('issue-term', 'pathname'); 
+            utterancesScript.setAttribute('theme', localStorage.getItem('theme') === 'dark' ? 'github-dark' : 'github-light'); 
+            utterancesScript.setAttribute('crossorigin', 'anonymous');
+            utterancesScript.async = true;
+            document.getElementById('comments-container').appendChild(utterancesScript);
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="/glsl/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/glsl/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>
